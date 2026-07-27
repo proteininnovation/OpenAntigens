@@ -1,0 +1,172 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [],
+  "canonical_family": null,
+  "complex_portal_complexes": [],
+  "construct_details": [],
+  "construct_recommendations": [],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "Surfactant-associated protein 3",
+      "end": 94,
+      "metadata": {
+        "feature_id": "PRO_0000339370",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "InterPro/Pfam annotation lookup failed: Expecting value: line 1 column 1 (char 0)",
+      "severity": "warning",
+      "source": "InterPro"
+    },
+    {
+      "message": "Skipping structure-driven analyses because the ectodomain could not be determined.",
+      "severity": "warning",
+      "source": "pipeline"
+    },
+    {
+      "message": "Species homologs loaded from precomputed ortholog reference table.",
+      "severity": "info",
+      "source": "precomputed"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "Surfactant-associated protein 3",
+      "end": 94,
+      "metadata": {
+        "feature_id": "PRO_0000339370",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "SFTA3_HUMAN",
+    "query_type": "entry_name",
+    "resolved_accession": "P0C7M3",
+    "resolved_entry_name": "SFTA3_HUMAN"
+  },
+  "species_name_matches": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [],
+  "target": {
+    "accession": "P0C7M3",
+    "alternative_names": [
+      "Surfactant-associated protein H",
+      "SP-H"
+    ],
+    "canonical_isoform_id": "P0C7M3",
+    "entry_name": "SFTA3_HUMAN",
+    "gene_symbol": "SFTA3",
+    "gene_synonyms": [
+      "SFTPH"
+    ],
+    "organism": "Homo sapiens",
+    "protein_name": "Surfactant-associated protein 3",
+    "sequence": "MRAGFSDFQLIRDQVLFLQDQAQRLTEWLQLSGFENPVSESTTLCLREREKRIPTCVAVCVPSPGTVHTALLHPTTLSQSRSSSEAKMLIIHTA",
+    "taxon_id": 9606
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": null,
+    "membrane_core_region": null,
+    "topology_class": "non_membrane",
+    "transmembrane_regions": []
+  }
+}

@@ -1,0 +1,266 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "C1QBP"
+      ],
+      "rationale": [
+        "Interacts with C1QBP;"
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    }
+  ],
+  "canonical_family": null,
+  "complex_portal_complexes": [],
+  "construct_details": [],
+  "construct_recommendations": [],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "Disordered",
+      "end": 50,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "REGION"
+    },
+    {
+      "description": "POLG alternative reading frame",
+      "end": 260,
+      "metadata": {
+        "feature_id": "PRO_0000454209",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "Low complexity",
+      "end": 48,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 36,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Required for nucleolar localization",
+      "end": 130,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 104,
+      "type": "REGION"
+    },
+    {
+      "description": "Disordered",
+      "end": 219,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 108,
+      "type": "REGION"
+    },
+    {
+      "description": "Low complexity",
+      "end": 154,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 116,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Low complexity",
+      "end": 186,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 164,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Gly residues",
+      "end": 199,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 187,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Gly residues",
+      "end": 219,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 209,
+      "type": "COMPOSITIONAL_BIAS"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "InterPro/Pfam annotation lookup failed: Expecting value: line 1 column 1 (char 0)",
+      "severity": "warning",
+      "source": "InterPro"
+    },
+    {
+      "message": "Skipping structure-driven analyses because the ectodomain could not be determined.",
+      "severity": "warning",
+      "source": "pipeline"
+    },
+    {
+      "message": "Species homologs loaded from precomputed ortholog reference table.",
+      "severity": "info",
+      "source": "precomputed"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "POLG alternative reading frame",
+      "end": 260,
+      "metadata": {
+        "feature_id": "PRO_0000454209",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "PLGRF_HUMAN",
+    "query_type": "entry_name",
+    "resolved_accession": "A0A3B3IS91",
+    "resolved_entry_name": "PLGRF_HUMAN"
+  },
+  "species_name_matches": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [],
+  "target": {
+    "accession": "A0A3B3IS91",
+    "alternative_names": [
+      "ORF-Y",
+      "POLGARF C-terminal fragment",
+      "POLGARFin"
+    ],
+    "canonical_isoform_id": "A0A3B3IS91",
+    "entry_name": "PLGRF_HUMAN",
+    "gene_symbol": "POLGARF",
+    "gene_synonyms": [],
+    "organism": "Homo sapiens",
+    "protein_name": "POLG alternative reading frame",
+    "sequence": "MEPKARCSDSQRGGPCTNHEPPALEEGGRRHRRARAGSSSGALGLQLRPRVRPQRRAAAAAAAAAAAAAAATAASAAASAILGGRAAAAQPIGHPDALERAARANLRARRGDAWRGRGAPQRRAPAEARALGAASRALARRGAAPAAPLRGQPGPALPPPGPEAEPALPGGGQLAVAGPAAPEAPGLGLGGGLDPVRPRGGGRTRGHPRGAGPGVRRGGLLGRGNLPHIGGGHIPLGLVFLVQPAAGGRALLLDQPAVAG",
+    "taxon_id": 9606
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": null,
+    "membrane_core_region": null,
+    "topology_class": "non_membrane",
+    "transmembrane_regions": []
+  }
+}

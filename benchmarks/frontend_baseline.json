@@ -1,0 +1,173 @@
+{
+  "site": "snapshots/openantigen-2026-05-30/public_site",
+  "site_total_bytes": 25255309019,
+  "pages": [
+    {
+      "label": "index",
+      "path": "index.html",
+      "bytes": 8070,
+      "gzip_bytes": 2110,
+      "script_tags": 2,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "index_data_js",
+      "path": "portal-index-data.js",
+      "bytes": 19713417,
+      "gzip_bytes": 2503381,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 0,
+      "img_lazy": 0,
+      "img_eager": 0
+    },
+    {
+      "label": "index_js",
+      "path": "portal-index.js",
+      "bytes": 10347,
+      "gzip_bytes": 2605,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 0,
+      "img_lazy": 0,
+      "img_eager": 0
+    },
+    {
+      "label": "constructs",
+      "path": "constructs.html",
+      "bytes": 24951,
+      "gzip_bytes": 7351,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "calculator",
+      "path": "calculator.html",
+      "bytes": 26806,
+      "gzip_bytes": 5313,
+      "script_tags": 1,
+      "inline_script_blocks": 1,
+      "inline_payload_bytes": 16820,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "methods",
+      "path": "methods.html",
+      "bytes": 29574,
+      "gzip_bytes": 8975,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "help",
+      "path": "help.html",
+      "bytes": 19068,
+      "gzip_bytes": 5797,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "downloads",
+      "path": "downloads.html",
+      "bytes": 8381,
+      "gzip_bytes": 2607,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "builder",
+      "path": "builder.html",
+      "bytes": 11870,
+      "gzip_bytes": 3839,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "report_largest",
+      "path": "pcd23_human.html",
+      "bytes": 9374221,
+      "gzip_bytes": 542243,
+      "script_tags": 64,
+      "inline_script_blocks": 61,
+      "inline_payload_bytes": 369481,
+      "img_tags": 2,
+      "img_lazy": 0,
+      "img_eager": 2
+    },
+    {
+      "label": "report_median",
+      "path": "gp142_human.html",
+      "bytes": 471029,
+      "gzip_bytes": 41727,
+      "script_tags": 5,
+      "inline_script_blocks": 2,
+      "inline_payload_bytes": 8330,
+      "img_tags": 3,
+      "img_lazy": 0,
+      "img_eager": 3
+    },
+    {
+      "label": "report_script_largest",
+      "path": "fat4_human.js",
+      "bytes": 5806452,
+      "gzip_bytes": 965097,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 0,
+      "img_lazy": 0,
+      "img_eager": 0
+    },
+    {
+      "label": "report_script_median",
+      "path": "ccr10_human.js",
+      "bytes": 705437,
+      "gzip_bytes": 107213,
+      "script_tags": 0,
+      "inline_script_blocks": 0,
+      "inline_payload_bytes": 0,
+      "img_tags": 0,
+      "img_lazy": 0,
+      "img_eager": 0
+    }
+  ],
+  "flat_files": [
+    {
+      "path": "open_targets_disease_associations.json",
+      "bytes": 1236763793
+    },
+    {
+      "path": "open_targets_disease_associations.tsv",
+      "bytes": 471932611
+    }
+  ],
+  "notes": "Browser FCP/TTI/DOM-node metrics require a separate browser benchmark."
+}

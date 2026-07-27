@@ -1,0 +1,205 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [],
+  "canonical_family": {
+    "accession": "IPR029407",
+    "coverage_fraction": 98.81,
+    "covered_length": 83,
+    "end": 84,
+    "fragment_count": 1,
+    "name": "Kidney-associated antigen 1",
+    "notes": [
+      "Loaded from precomputed ortholog reference table.",
+      "Coverage across merged family fragments: 83 aa (98.8% of sequence).",
+      "Name similarity to target protein label: 1.00."
+    ],
+    "source_database": "INTERPRO",
+    "start": 2
+  },
+  "complex_portal_complexes": [],
+  "construct_details": [],
+  "construct_recommendations": [],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "Kidney-associated antigen 1",
+      "end": 84,
+      "metadata": {
+        "feature_id": "PRO_0000274669",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "Disordered",
+      "end": 84,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 31,
+      "type": "REGION"
+    },
+    {
+      "description": "Polar residues",
+      "end": 84,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 75,
+      "type": "COMPOSITIONAL_BIAS"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "Skipping structure-driven analyses because the ectodomain could not be determined.",
+      "severity": "warning",
+      "source": "pipeline"
+    },
+    {
+      "message": "Species homologs loaded from precomputed ortholog reference table.",
+      "severity": "info",
+      "source": "precomputed"
+    },
+    {
+      "message": "Skipping live family-context fallback because this target is covered by precomputed reference tables.",
+      "severity": "info",
+      "source": "precomputed"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "Kidney-associated antigen 1",
+      "end": 84,
+      "metadata": {
+        "feature_id": "PRO_0000274669",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "KAAG1_HUMAN",
+    "query_type": "entry_name",
+    "resolved_accession": "Q9UBP8",
+    "resolved_entry_name": "KAAG1_HUMAN"
+  },
+  "species_name_matches": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [],
+  "target": {
+    "accession": "Q9UBP8",
+    "alternative_names": [
+      "RU2 antisense gene protein"
+    ],
+    "canonical_isoform_id": "Q9UBP8",
+    "entry_name": "KAAG1_HUMAN",
+    "gene_symbol": "KAAG1",
+    "gene_synonyms": [
+      "RU2AS"
+    ],
+    "organism": "Homo sapiens",
+    "protein_name": "Kidney-associated antigen 1",
+    "sequence": "MDDDAAPRVEGVPVAVHKHALHDGLRQVAGPGAAAAHLPRWPPPQLAASRREAPPLSQRPHRTQGAGSPPETNEKLTNPQVKEK",
+    "taxon_id": 9606
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": null,
+    "membrane_core_region": null,
+    "topology_class": "non_membrane",
+    "transmembrane_regions": []
+  }
+}

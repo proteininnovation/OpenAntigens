@@ -1,0 +1,273 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [],
+  "canonical_family": {
+    "accession": "IPR029142",
+    "coverage_fraction": 94.44,
+    "covered_length": 68,
+    "end": 69,
+    "fragment_count": 1,
+    "name": "Small proline-rich protein 2",
+    "notes": [
+      "Loaded from precomputed ortholog reference table.",
+      "Coverage across merged family fragments: 68 aa (94.4% of sequence).",
+      "Name similarity to target protein label: 0.98."
+    ],
+    "source_database": "INTERPRO",
+    "start": 2
+  },
+  "complex_portal_complexes": [],
+  "construct_details": [],
+  "construct_recommendations": [],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [
+    {
+      "accession": "NP_035604",
+      "available": true,
+      "coverage": 100.0,
+      "ectodomain_end": 108,
+      "ectodomain_start": 1,
+      "entry_name": "NP_035604",
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": 87.5,
+      "notes": [
+        "Loaded from precomputed ortholog reference table."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "Low complexity",
+      "end": 11,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Disordered",
+      "end": 20,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "REGION"
+    },
+    {
+      "description": "Small proline-rich protein 2A",
+      "end": 72,
+      "metadata": {
+        "feature_id": "PRO_0000150008",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "1",
+      "end": 29,
+      "metadata": {
+        "raw_type": "Repeat"
+      },
+      "source": "UniProt",
+      "start": 21,
+      "type": "REPEAT"
+    },
+    {
+      "description": "3 X 9 AA tandem repeats of P-K-C-P-[EQ]-P-C-P-P",
+      "end": 47,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 21,
+      "type": "REGION"
+    },
+    {
+      "description": "2",
+      "end": 38,
+      "metadata": {
+        "raw_type": "Repeat"
+      },
+      "source": "UniProt",
+      "start": 30,
+      "type": "REPEAT"
+    },
+    {
+      "description": "3",
+      "end": 47,
+      "metadata": {
+        "raw_type": "Repeat"
+      },
+      "source": "UniProt",
+      "start": 39,
+      "type": "REPEAT"
+    },
+    {
+      "description": "Disordered",
+      "end": 72,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 42,
+      "type": "REGION"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [
+    {
+      "alignment_length": 72,
+      "alignment_source": "BLAST",
+      "bitscore": 112.0,
+      "coverage": 100.0,
+      "description": "sp|P35325|SPR2B_HUMAN Small proline-rich protein 2B OS=Homo sapiens OX=9606 GN=SPRR2B PE=2 SV=1",
+      "evalue": 1.13e-34,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 98.611,
+      "query_alignment": "MSYQQQQCKQPCQPPPVCPTPKCPEPCPPPKCPEPCPPPKCPQPCPPQQCQQKYPPVTPSPPCQSKYPPKSK",
+      "query_alignment_annotation": null,
+      "query_end": 72,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "MSYQQQQCKQPCQPPPVCPTPKCPEPCPPPKCPEPCPPPKCPQPCPPQQCQQKYPPVTPSPPCQPKYPPKSK",
+      "subject_end": 72,
+      "subject_id": "sp|P35325|SPR2B_HUMAN",
+      "subject_start": 1
+    }
+  ],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "Skipping structure-driven analyses because the ectodomain could not be determined.",
+      "severity": "warning",
+      "source": "pipeline"
+    },
+    {
+      "message": "Species homologs loaded from precomputed ortholog reference table.",
+      "severity": "info",
+      "source": "precomputed"
+    },
+    {
+      "message": "Skipping live family-context fallback because this target is covered by precomputed reference tables.",
+      "severity": "info",
+      "source": "precomputed"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "Small proline-rich protein 2A",
+      "end": 72,
+      "metadata": {
+        "feature_id": "PRO_0000150008",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "SPR2A_HUMAN",
+    "query_type": "entry_name",
+    "resolved_accession": "P35326",
+    "resolved_entry_name": "SPR2A_HUMAN"
+  },
+  "species_name_matches": [
+    {
+      "accession": "NP_035604",
+      "available": true,
+      "coverage": null,
+      "ectodomain_end": 108,
+      "ectodomain_start": 1,
+      "entry_name": "NP_035604",
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [],
+  "target": {
+    "accession": "P35326",
+    "alternative_names": [
+      "2-1"
+    ],
+    "canonical_isoform_id": "P35326",
+    "entry_name": "SPR2A_HUMAN",
+    "gene_symbol": "SPRR2A",
+    "gene_synonyms": [],
+    "organism": "Homo sapiens",
+    "protein_name": "Small proline-rich protein 2A",
+    "sequence": "MSYQQQQCKQPCQPPPVCPTPKCPEPCPPPKCPEPCPPPKCPQPCPPQQCQQKYPPVTPSPPCQSKYPPKSK",
+    "taxon_id": 9606
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": null,
+    "membrane_core_region": null,
+    "topology_class": "non_membrane",
+    "transmembrane_regions": []
+  }
+}

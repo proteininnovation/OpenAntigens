@@ -1,0 +1,27 @@
+{
+  "version": "2026-05-07",
+  "cassettes": [
+    {
+      "cassette_id": "bril",
+      "name": "BRIL / apocytochrome b562RIL",
+      "sequence": "ADLEDNWETLNDNLKVIEKADNAAQVKDALTKMRAAALDAQKATPPKLEDKSPDSPEMKDFRHGFDILVGQIDDALKLANEGKVKEAQAAAEQLKTTRNAYIQKYL",
+      "source_note": "Apocytochrome b562RIL/BRIL-style GPCR fusion cassette; used as a compact intracellular-loop stabilization fusion in GPCR structural biology.",
+      "version": "openantigen-v1",
+      "checksum_sha256": "99be105dcb059a3e9f86e654c0207fe36331eeab3c750f9d24bc821fbdf4aa51",
+      "default_n_linker": "GGSG",
+      "default_c_linker": "GGSG",
+      "allowed_use_modes": ["loop_fusion"]
+    },
+    {
+      "cassette_id": "t4l",
+      "name": "T4 lysozyme",
+      "sequence": "MNIFEMLRIDERLRLKIYKDTEGYYTIGIGHLLTKSPSLNAAKSELDKAIGRNCNGVITKDEAEKLFNQDVDAAVRGILRNAKLKPVYDSLDAVRRCALINMVFQMGETGVAGFTNSLRMLQQKRWDEAAVNLAKSIWYNQTPNRAKRVITTFRTGTWDAYKNL",
+      "source_note": "Bacteriophage T4 lysozyme/endolysin sequence corresponding to UniProt P00720.",
+      "version": "uniprot-p00720",
+      "checksum_sha256": "ea7f51ffbb3c5f6893fd01d8ad34ef1a6ce5ee2641b16c83904296a7f22d6e9f",
+      "default_n_linker": "GGSG",
+      "default_c_linker": "GGSG",
+      "allowed_use_modes": ["loop_fusion"]
+    }
+  ]
+}

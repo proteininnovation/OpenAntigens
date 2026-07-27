@@ -1,0 +1,95 @@
+{
+  "timings": [
+    {
+      "step": "build-target-tsv",
+      "status": "ok",
+      "started_utc": "2026-05-30T18:56:31.597941+00:00",
+      "duration_seconds": 0.052,
+      "finished_utc": "2026-05-30T18:56:31.650008+00:00"
+    },
+    {
+      "step": "prefetch-uniprot",
+      "status": "ok",
+      "started_utc": "2026-05-30T18:56:31.650906+00:00",
+      "duration_seconds": 33.601,
+      "finished_utc": "2026-05-30T18:57:05.252084+00:00"
+    },
+    {
+      "step": "setup-blast",
+      "status": "ok",
+      "started_utc": "2026-05-30T18:57:05.252660+00:00",
+      "duration_seconds": 35.468,
+      "finished_utc": "2026-05-30T18:57:40.720264+00:00"
+    },
+    {
+      "step": "build-ortholog-table",
+      "status": "ok",
+      "started_utc": "2026-05-30T18:57:40.720544+00:00",
+      "duration_seconds": 38778.619,
+      "finished_utc": "2026-05-31T05:43:59.339936+00:00"
+    },
+    {
+      "step": "build-family-alignments",
+      "status": "ok",
+      "started_utc": "2026-05-31T05:43:59.342865+00:00",
+      "duration_seconds": 21.084,
+      "finished_utc": "2026-05-31T05:44:20.426447+00:00"
+    },
+    {
+      "step": "build-paralog-reference",
+      "status": "ok",
+      "started_utc": "2026-05-31T05:44:20.426779+00:00",
+      "duration_seconds": 4105.257,
+      "finished_utc": "2026-05-31T06:52:45.683746+00:00"
+    },
+    {
+      "step": "analyze-targets",
+      "status": "ok",
+      "started_utc": "2026-05-31T06:52:45.685175+00:00",
+      "duration_seconds": 4261.307,
+      "finished_utc": "2026-05-31T08:03:46.991858+00:00"
+    },
+    {
+      "step": "generate-assets",
+      "status": "ok",
+      "started_utc": "2026-05-31T08:03:46.995048+00:00",
+      "duration_seconds": 1068.189,
+      "finished_utc": "2026-05-31T08:21:35.184310+00:00"
+    },
+    {
+      "step": "build-open-targets",
+      "status": "ok",
+      "started_utc": "2026-05-31T08:21:35.185865+00:00",
+      "duration_seconds": 64.277,
+      "finished_utc": "2026-05-31T08:22:39.463248+00:00"
+    },
+    {
+      "step": "refresh-cross-reactivity",
+      "status": "ok",
+      "started_utc": "2026-05-31T08:22:40.193737+00:00",
+      "duration_seconds": 7557.113,
+      "finished_utc": "2026-05-31T10:28:37.307242+00:00"
+    },
+    {
+      "step": "build-portal",
+      "status": "ok",
+      "started_utc": "2026-05-31T10:28:37.310839+00:00",
+      "duration_seconds": 2281.771,
+      "finished_utc": "2026-05-31T11:06:39.081545+00:00"
+    },
+    {
+      "step": "package-public-site",
+      "status": "ok",
+      "started_utc": "2026-05-31T11:06:39.091173+00:00",
+      "duration_seconds": 14.762,
+      "finished_utc": "2026-05-31T11:06:53.853428+00:00"
+    },
+    {
+      "step": "build-mouse-portal",
+      "status": "ok",
+      "started_utc": "2026-05-31T11:06:53.853668+00:00",
+      "duration_seconds": 5332.841,
+      "finished_utc": "2026-05-31T12:35:46.694961+00:00"
+    }
+  ]
+}

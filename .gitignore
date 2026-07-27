@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Local environments
+.venv/
+.venv*/
+.env
+.env.*
+
+# macOS / editor files
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime caches and downloaded biological data
+.agdesign2/
+
+# Generated reports, portals, BLAST outputs, and batch state
+outputs/
+snapshots/
+releases/
+*.log
+nohup.out
+
+# AF3 catalogues are generated locally from AlphaFold Server output.
+data/af3_catalog/*
+!data/af3_catalog/README.md
+
+# Office temp/lock files
+~$*
+
+# Generated accessible-target working files
+accessible_secreted_gpi_singlepass.tsv
+accessible_secreted_gpi_singlepass_missing.tsv
+tmp_*.tsv
+
+# Notebook execution noise
+.ipynb_checkpoints/
+notebooks/.agdesign2/

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="oa-title oa-desc">
+  <title id="oa-title">OpenAntigens</title>
+  <desc id="oa-desc">Structure-aware antigen construct design for human cell-surface and secreted proteins, from the Institute for Protein Innovation.</desc>
+
+  <defs>
+    <radialGradient id="oa-glow" cx="88%" cy="14%" r="70%">
+      <stop offset="0%" stop-color="#4ec3dc" stop-opacity="0.18"/>
+      <stop offset="55%" stop-color="#007fa3" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#0d1f3c" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- field -->
+  <rect width="1200" height="300" fill="#0d1f3c"/>
+  <rect width="1200" height="300" fill="url(#oa-glow)"/>
+  <circle cx="1128" cy="44" r="150" fill="none" stroke="#4ec3dc" stroke-opacity="0.06" stroke-width="28"/>
+
+  <!-- logo tile: OpenAntigens epitope ring -->
+  <rect x="56" y="54" width="192" height="192" rx="30" fill="#11244a" stroke="#4ec3dc" stroke-opacity="0.35" stroke-width="2"/>
+  <g transform="translate(49 46)">
+    <circle cx="103" cy="104" r="41" fill="#16315c"/>
+    <path d="M42 104c0-38 29-67 68-67 22 0 41 9 53 24" fill="none" stroke="#4ec3dc" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M164 104c0 38-29 67-68 67-22 0-41-9-53-24" fill="none" stroke="#4ec3dc" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="42" cy="104" r="16" fill="#007fa3"/>
+    <circle cx="110" cy="37" r="16" fill="#e8684a"/>
+    <circle cx="164" cy="104" r="16" fill="#92efe5"/>
+    <circle cx="96" cy="171" r="16" fill="#82a0b9"/>
+  </g>
+
+  <!-- wordmark + tagline -->
+  <text x="292" y="126" font-family="Arial, Helvetica, sans-serif" font-size="78" font-weight="800" letter-spacing="-1"><tspan fill="#ffffff">Open</tspan><tspan fill="#4ec3dc">Antigens</tspan></text>
+  <text x="294" y="170" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="600" fill="#d4e6ee">Structure-aware antigen construct design</text>
+  <text x="294" y="200" font-family="Arial, Helvetica, sans-serif" font-size="21" font-weight="500" fill="#8aa6bd">for human cell-surface and secreted proteins</text>
+  <text x="295" y="241" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="700" letter-spacing="3" fill="#5e7e98">INSTITUTE FOR PROTEIN INNOVATION</text>
+</svg>

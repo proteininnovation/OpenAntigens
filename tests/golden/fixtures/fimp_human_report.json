@@ -1,0 +1,247 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [],
+  "canonical_family": {
+    "accession": "IPR038813",
+    "coverage_fraction": 100.0,
+    "covered_length": 132,
+    "end": 132,
+    "fragment_count": 1,
+    "name": "Fertilization-influencing membrane protein",
+    "notes": [
+      "Loaded from precomputed ortholog reference table.",
+      "Coverage across merged family fragments: 132 aa (100.0% of sequence).",
+      "Name similarity to target protein label: 1.00."
+    ],
+    "source_database": "INTERPRO",
+    "start": 1
+  },
+  "complex_portal_complexes": [],
+  "construct_details": [],
+  "construct_recommendations": [],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "in isoform 2",
+      "end": 43,
+      "metadata": {
+        "feature_id": "VSP_031783",
+        "raw_type": "Alternative sequence"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "ALTERNATIVE_SEQUENCE"
+    },
+    {
+      "description": "Fertilization-influencing membrane protein",
+      "end": 132,
+      "metadata": {
+        "feature_id": "PRO_0000321511",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "Helical",
+      "end": 120,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 100,
+      "type": "TRANSMEM"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [
+    {
+      "alignment_length": 89,
+      "alignment_source": "BLAST",
+      "bitscore": 91.7,
+      "coverage": 67.42424242424242,
+      "description": "sp|E9Q9R3|FIMP_MOUSE Fertilization-influencing membrane protein OS=Mus musculus OX=10090 GN=Fimp PE=2 SV=1",
+      "evalue": 3.18e-25,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 65.169,
+      "query_alignment": "APRPKRATASALGTESPRFLDRPDFFDYPDSDQARLLAVAQFIGEKPIVFINSGSSPGLFHHILVGLLVVAFFFLLFQFCTHINFQKGA",
+      "query_alignment_annotation": null,
+      "query_end": 132,
+      "query_start": 44,
+      "species": "Mus musculus",
+      "subject_alignment": "APRRDGTRPSVSGARPQQVVNRL-FFDYPDSDRASLLAVARFIGEKPITFVKTDSSPGLFQNILVGTLVVAFFFLLFQFCLHVNFQKGA",
+      "subject_end": 111,
+      "subject_id": "sp|E9Q9R3|FIMP_MOUSE",
+      "subject_start": 24
+    }
+  ],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "Unable to determine which side of the transmembrane helix is extracellular.",
+      "severity": "warning",
+      "source": "topology"
+    },
+    {
+      "message": "Skipping structure-driven analyses because the ectodomain could not be determined.",
+      "severity": "warning",
+      "source": "pipeline"
+    },
+    {
+      "message": "Species homologs loaded from precomputed ortholog reference table.",
+      "severity": "info",
+      "source": "precomputed"
+    },
+    {
+      "message": "Skipping live family-context fallback because this target is covered by precomputed reference tables.",
+      "severity": "info",
+      "source": "precomputed"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "Fertilization-influencing membrane protein",
+      "end": 132,
+      "metadata": {
+        "feature_id": "PRO_0000321511",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "FIMP_HUMAN",
+    "query_type": "entry_name",
+    "resolved_accession": "Q96LL3",
+    "resolved_entry_name": "FIMP_HUMAN"
+  },
+  "species_name_matches": [
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "mouse"
+    },
+    {
+      "accession": null,
+      "available": false,
+      "coverage": null,
+      "ectodomain_end": null,
+      "ectodomain_start": null,
+      "entry_name": null,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Loaded from precomputed ortholog reference table.",
+        "No precomputed sequence available for this species."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [],
+  "target": {
+    "accession": "Q96LL3",
+    "alternative_names": [],
+    "canonical_isoform_id": "Q96LL3-1",
+    "entry_name": "FIMP_HUMAN",
+    "gene_symbol": "FIMP",
+    "gene_synonyms": [
+      "C16orf92"
+    ],
+    "organism": "Homo sapiens",
+    "protein_name": "Fertilization-influencing membrane protein",
+    "sequence": "MGAGVGVAGCTRGHRNWVPSQLPPREIKAGVSLAVVTEFAWVLAPRPKRATASALGTESPRFLDRPDFFDYPDSDQARLLAVAQFIGEKPIVFINSGSSPGLFHHILVGLLVVAFFFLLFQFCTHINFQKGA",
+    "taxon_id": 9606
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": null,
+    "membrane_core_region": {
+      "confidence": 0.8,
+      "end": 120,
+      "label": "Membrane core",
+      "metadata": {},
+      "source": "topology",
+      "start": 100
+    },
+    "topology_class": "single_pass",
+    "transmembrane_regions": [
+      {
+        "confidence": 0.8,
+        "end": 120,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 100
+      }
+    ]
+  }
+}
