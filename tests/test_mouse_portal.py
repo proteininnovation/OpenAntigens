@@ -260,6 +260,9 @@ class MousePortalTests(unittest.TestCase):
             self.assertEqual(mouse_report["metadata"]["source_database"], "mouse_openantigens_structure_analysis")
             self.assertEqual(mouse_report["family_context"]["identity_matrix_labels"], ["EGFR_MOUSE", "ERBB2_MOUSE"])
             self.assertIn("mouse_ortholog_matrix_caveat", mouse_report["family_context"]["metadata"])
+            for context in ("family_context", "full_length_family_context"):
+                self.assertNotIn("target_extracellular_accessible_identity", mouse_report[context]["metadata"])
+                self.assertNotIn("pairwise_alignments", mouse_report[context]["metadata"])
             self.assertEqual(mouse_report["construct_details"][0]["sequence"], "MOUSESEQ")
             self.assertEqual(mouse_report["construct_details"][0]["structural_metrics"]["mean_plddt"], 91.2)
             self.assertEqual(mouse_report["metadata"]["construct_identity_label"], "Identity to mouse source")
@@ -417,7 +420,10 @@ def _human_report(entry_name: str = "EGFR_HUMAN", accession: str = "P00533", gen
             ],
             "identity_matrix_labels": ["EGFR_HUMAN", "ERBB2_HUMAN"],
             "identity_matrix": [[100.0, 50.0], [60.0, 100.0]],
-            "metadata": {},
+            "metadata": {
+                "target_extracellular_accessible_identity": [{"target_label": "EGFR_HUMAN", "member_label": "ERBB2_HUMAN", "identity": 50.0}],
+                "pairwise_alignments": [{"query_label": "EGFR_HUMAN", "subject_label": "ERBB2_HUMAN", "aligned_query": "HUMAN", "aligned_subject": "HUMAN"}],
+            },
         },
     }
 

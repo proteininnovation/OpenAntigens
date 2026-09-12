@@ -323,7 +323,7 @@ Precomputed analysis data:
 - `outputs/surfy_batch/open_targets_disease_associations.tsv`
 - `outputs/surfy_batch/open_targets_disease_associations.json`
 
-Mouse portal builds copy the ortholog reference table into `mouse_data/` so reciprocal human construct sequences do not depend on incidental cache coverage.
+Mouse portal builds copy the ortholog reference table into `mouse_data/` so reciprocal human construct sequences do not depend on incidental cache coverage. Mouse family matrices use mouse sequences. Human surface-identity values and pairwise alignments are excluded from mouse family metadata.
 
 Static portal:
 

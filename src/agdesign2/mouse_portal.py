@@ -538,7 +538,12 @@ def _mouse_family_context_from_human_context(
         "coverage_matrix_labels": labels,
         "coverage_matrix": coverage,
         "metadata": {
-            **(human_context.get("metadata") if isinstance(human_context.get("metadata"), dict) else {}),
+            # Human residue comparisons do not describe the mouse sequences.
+            **{
+                key: value
+                for key, value in (human_context.get("metadata") if isinstance(human_context.get("metadata"), dict) else {}).items()
+                if key not in {"target_extracellular_accessible_identity", "pairwise_alignments"}
+            },
             "matrix_scope": matrix_scope,
             "identity_denominator": f"row mouse {matrix_scope.replace('_', '-')} sequence length",
             "coverage_denominator": f"row mouse {matrix_scope.replace('_', '-')} sequence length",
