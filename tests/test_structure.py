@@ -139,7 +139,7 @@ class StructureTests(unittest.TestCase):
         self.assertEqual(metrics.max_intra_pae, 18.0)
         self.assertEqual([(item.parent_start, item.boundary_after, item.parent_end) for item in diagnostics], [(1, 2, 4)])
 
-    def test_construct_quality_gracefully_handles_regions_outside_pae_bounds(self) -> None:
+    def test_construct_quality_rejects_regions_outside_pae_bounds(self) -> None:
         config = AnalysisConfig(min_domain_size=2, pae_domain_threshold=10.0, pae_separation_threshold=5.0)
         matrix = [
             [1, 1, 18, 18],
@@ -149,16 +149,14 @@ class StructureTests(unittest.TestCase):
         ]
         stats = build_pae_stats(matrix)
         plddt = {4: 88.0, 5: 90.0, 6: 87.0}
-        metrics = summarize_construct_quality(4, 6, plddt, stats, config)
+        with self.assertRaisesRegex(ValueError, "boundaries exceed"):
+            summarize_construct_quality(4, 6, plddt, stats, config)
         diagnostics = collect_region_split_diagnostics(
             Region(start=4, end=6, label="construct", source="Construct"),
             stats,
             config,
             residue_plddt=plddt,
         )
-        self.assertEqual(metrics.mean_plddt, 88.33)
-        self.assertEqual(metrics.mean_intra_pae, 0.0)
-        self.assertEqual(metrics.max_intra_pae, 1.0)
         self.assertEqual(diagnostics, [])
 
     def test_sasa_increases_when_uncertain_neighboring_block_is_removed(self) -> None:

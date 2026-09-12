@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
@@ -8,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .batch import BatchRow, _load_input_records
+from .http import _atomic_write
 from .ortholog_proteomes import OrthologProteomeResolver
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align
@@ -56,6 +58,10 @@ def build_ortholog_table_from_tsv(
     output_tsv = Path(output_path)
     output_tsv.parent.mkdir(parents=True, exist_ok=True)
     output_json = output_tsv.with_suffix(".json")
+    if not resume:
+        _atomic_write(output_json, b"[]\n")
+        for checkpoint in output_json.with_suffix(".checkpoints").glob("*.json"):
+            checkpoint.unlink()
     existing_rows = _load_existing_rows(output_json=output_json, batch_rows=batch_rows) if resume else {}
     # Build (download + index) the mouse UniProt and macaque RefSeq proteomes once,
     # serially, so worker threads only do lock-free local lookups — no per-target
@@ -106,7 +112,6 @@ def _build_ortholog_table_sequential(
         existing_row = existing_rows.get(index)
         if existing_row is not None:
             table_rows.append(existing_row)
-            _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=table_rows)
             if verbose:
                 print(
                     f"[agdesign2-orthologs] {index}/{total} {batch_row.query} (resume {existing_row.status})",
@@ -116,7 +121,8 @@ def _build_ortholog_table_sequential(
         if verbose:
             print(f"[agdesign2-orthologs] {index}/{total} {batch_row.query}", flush=True)
         table_rows.append(_build_table_row(analyzer=analyzer, resolver=resolver, batch_row=batch_row, input_index=index))
-        _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=table_rows)
+        _write_row_checkpoint(output_json, table_rows[-1])
+    _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=table_rows)
     return output_tsv, output_json, table_rows
 
 
@@ -145,7 +151,6 @@ def _build_ortholog_table_parallel(
         else:
             pending.append((index, batch_row))
 
-    _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=[r for r in results if r is not None])
     if pending:
         with ThreadPoolExecutor(max_workers=min(jobs, len(pending))) as executor:
             futures = {
@@ -157,7 +162,7 @@ def _build_ortholog_table_parallel(
                 results[index - 1] = future.result()
                 if verbose:
                     print(f"[agdesign2-orthologs] {index}/{total} {batch_row.query}", flush=True)
-                _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=[r for r in results if r is not None])
+                _write_row_checkpoint(output_json, results[index - 1])
 
     table_rows = [r for r in results if r is not None]
     _write_outputs(output_tsv=output_tsv, output_json=output_json, rows=table_rows)
@@ -299,14 +304,23 @@ def _sequence_identity(query_sequence: str | None, subject_sequence: str | None)
     return round(global_align(query_sequence, subject_sequence).identity, 2)
 
 
+def _write_row_checkpoint(output_json: Path, row: OrthologTableRow) -> None:
+    path = output_json.with_suffix(".checkpoints") / f"{row.input_index}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write(path, (json.dumps(asdict(row)) + "\n").encode("utf-8"))
+
+
 def _write_outputs(*, output_tsv: Path, output_json: Path, rows: list[OrthologTableRow]) -> None:
     row_dicts = [asdict(row) for row in rows]
-    fieldnames = list(row_dicts[0].keys()) if row_dicts else list(OrthologTableRow.__dataclass_fields__.keys())
-    with output_tsv.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
-        writer.writeheader()
-        writer.writerows(row_dicts)
-    output_json.write_text(json.dumps(row_dicts, indent=2) + "\n", encoding="utf-8")
+    fieldnames = list(OrthologTableRow.__dataclass_fields__)
+    handle = io.StringIO(newline="")
+    writer = csv.DictWriter(handle, fieldnames=fieldnames, delimiter="\t")
+    writer.writeheader()
+    writer.writerows(row_dicts)
+    _atomic_write(output_tsv, handle.getvalue().encode("utf-8"))
+    _atomic_write(output_json, (json.dumps(row_dicts, indent=2) + "\n").encode("utf-8"))
+    for checkpoint in output_json.with_suffix(".checkpoints").glob("*.json"):
+        checkpoint.unlink()
 
 
 def _load_existing_rows(
@@ -314,14 +328,11 @@ def _load_existing_rows(
     output_json: Path,
     batch_rows: list[BatchRow],
 ) -> dict[int, OrthologTableRow]:
-    if not output_json.exists():
-        return {}
-    try:
-        payload = json.loads(output_json.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    payload = json.loads(output_json.read_text(encoding="utf-8")) if output_json.exists() else []
     if not isinstance(payload, list):
-        return {}
+        raise ValueError(f"Expected an ortholog row list in {output_json}")
+    for checkpoint in sorted(output_json.with_suffix(".checkpoints").glob("*.json")):
+        payload.append(json.loads(checkpoint.read_text(encoding="utf-8")))
     existing_rows: dict[int, OrthologTableRow] = {}
     for fallback_index, item in enumerate(payload, start=1):
         if not isinstance(item, dict):

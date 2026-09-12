@@ -19,6 +19,7 @@ from .portal import (
     _render_disease_index_js,
     _render_index_data_js,
     _resolve_alphafold_artifact,
+    _available_disease_downloads,
     _resolve_existing_path,
     _safe_filename,
     _structure_source_label,
@@ -128,6 +129,7 @@ def create_app(
         return results
 
     def load_entries() -> list[dict[str, Any]]:
+        results = load_results()
         disease_path = batch_dir / "open_targets_disease_associations.json"
         current_disease_mtime = disease_path.stat().st_mtime_ns if disease_path.exists() else None
         if cache["disease_mtime_ns"] != current_disease_mtime:
@@ -137,7 +139,6 @@ def create_app(
         cached_entries = cache["entries"]
         if cached_entries is not None:
             return cached_entries
-        results = load_results()
         entries: list[dict[str, Any]] = []
         index_by_detail: dict[str, dict[str, Any]] = {}
         for item in results:
@@ -238,7 +239,7 @@ def create_app(
 
     @app.get("/downloads.html", response_class=HTMLResponse, include_in_schema=False)
     def downloads_page():
-        return HTMLResponse(render_downloads_page(load_entries()))
+        return HTMLResponse(render_downloads_page(load_entries(), disease_downloads=_available_disease_downloads(batch_dir)))
 
     @app.get("/calculator.html", response_class=HTMLResponse, include_in_schema=False)
     def calculator_page():
@@ -334,7 +335,7 @@ def create_app(
 
     @app.get("/downloads/download_manifest.json", response_class=PlainTextResponse, include_in_schema=False)
     def download_manifest():
-        return PlainTextResponse(portal_download_manifest(load_entries()), media_type="application/json")
+        return PlainTextResponse(portal_download_manifest(load_entries(), disease_downloads=_available_disease_downloads(batch_dir)), media_type="application/json")
 
     @app.get("/open_targets_disease_associations.tsv", include_in_schema=False)
     def open_targets_tsv():

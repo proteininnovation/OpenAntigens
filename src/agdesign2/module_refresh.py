@@ -280,11 +280,14 @@ def _normalize_module_name(name: str) -> str:
 
 def _module_refresh_config(*, batch_dir: Path, verbose: bool, enable_complex_portal: bool) -> AnalysisConfig:
     snapshot_root = batch_dir.parent.parent if batch_dir.name == "surfy_batch" and batch_dir.parent.name == "outputs" else None
-    cache_dir = snapshot_root / "cache" if snapshot_root is not None and (snapshot_root / "cache").exists() else Path(".agdesign2/cache")
-    data_dir = snapshot_root / "data" if snapshot_root is not None and (snapshot_root / "data").exists() else Path(".agdesign2/data")
+    cache_dir = snapshot_root / "cache" if snapshot_root is not None else Path(".agdesign2/cache")
+    data_dir = snapshot_root / "data" if snapshot_root is not None else Path(".agdesign2/data")
     return AnalysisConfig(
         cache_dir=cache_dir,
         data_dir=data_dir,
+        blast_db_dir=data_dir / "blastdb",
+        ortholog_fasta_dir=data_dir / "proteomes",
+        ortholog_blast_db_dir=data_dir / "ortholog_blastdb",
         precomputed_ortholog_table_path=batch_dir / "ortholog_reference_table.tsv",
         precomputed_family_alignment_index_path=batch_dir / "family_alignments" / "family_alignment_index.tsv",
         precomputed_paralog_index_path=batch_dir / "paralogs" / "paralog_index.tsv",

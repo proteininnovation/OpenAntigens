@@ -289,6 +289,9 @@ class FakeHGNCClient:
 
 
 class FakeAnalyzer:
+    def _apply_secreted_universe_fallback(self, **kwargs):
+        return None
+
     def __init__(self) -> None:
         self.config = AnalysisConfig(max_paralog_context_members=10)
         self.uniprot_client = FakeUniProtClient()

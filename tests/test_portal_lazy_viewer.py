@@ -56,7 +56,7 @@ class LazyStructureViewerTests(unittest.TestCase):
     def test_all_viewer_calls_remain_guarded(self) -> None:
         # Defensive invariant: deferral is only safe because viewer.* is never
         # called without a null check. Every JS function that uses `viewer.`
-        # must contain an `if (!viewer` guard.
+        # must contain a viewer null guard.
         with TemporaryDirectory() as tmp:
             html = _render_widget(Path(tmp))
         # Split on function declarations and check each body that uses viewer.*
@@ -67,7 +67,7 @@ class LazyStructureViewerTests(unittest.TestCase):
             # Only consider the body up to the next top-level function (already
             # split) — guard appears within the first lines if present.
             if "viewer." in body and name not in {"initStructureViewer", "attemptStructureViewerInit"}:
-                self.assertIn("if (!viewer", body, f"{name} uses viewer.* without a null guard")
+                self.assertRegex(body, r"if \(!?viewer\b", f"{name} uses viewer.* without a null guard")
                 checked += 1
         self.assertGreater(checked, 0, "expected to find guarded viewer functions")
 

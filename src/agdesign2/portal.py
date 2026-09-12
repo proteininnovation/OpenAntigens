@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import csv
 from collections import Counter
-from difflib import SequenceMatcher
 from datetime import datetime, timezone
 import hashlib
 import importlib.metadata
@@ -23,24 +22,23 @@ from .cache import FileCache
 from .blast import extract_accession, extract_entry_name
 from .af3 import is_af3_artifact
 from .config import AnalysisConfig
-from .http import HttpClient
+from .http import HttpClient, _atomic_write
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align, slice_sequence
 from .structure_utils import load_pae_matrix, pae_matches_sequence_length, parse_alphafold_pdb
 
 
-_PORTAL_SEQUENCE_CACHE: dict[str, dict[str, Any] | None] = {}
 # accession -> refseq target dict (or None) per ortholog table, keyed by
 # (path, mtime_ns) so the multi-MB sequence-bearing TSV is parsed once per build
 # instead of re-scanned on every homolog cache miss.
 _ORTHOLOG_REFSEQ_INDEX_CACHE: dict[tuple[str, int], dict[str, dict[str, Any] | None]] = {}
-_PUBTATOR_COUNT_CACHE: dict[str, dict[str, Any] | None] = {}
-_PORTAL_ALIGNMENT_CACHE: dict[tuple[str, str], dict[str, str]] = {}
+_PUBTATOR_COUNT_CACHE: dict[tuple[str, str], dict[str, Any] | None] = {}
 _ALPHAFOLD_SEQUENCE_MATCH_CACHE: dict[tuple[str, int, int, str], bool] = {}
 _PORTAL_PROCESS_STARTED_UTC = datetime.now(timezone.utc).replace(microsecond=0)
 _PORTAL_VERSION_CACHE: str | None = None
-_PORTAL_CSS_VERSION = "20260725-workbench"
-_PORTAL_JS_VERSION = "20260725-workbench"
+_PORTAL_CSS_VERSION = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:16]
+_PORTAL_JS_VERSION = _PORTAL_CSS_VERSION
+
 _PLAUSIBLE_SCRIPT_URL = "https://plausible.io/js/pa-Mda6DF7h4_8b17ZUlD_9E.js"
 _ANALYTICS_EVENT_NAMES = (
     "Download PDB Full",
@@ -253,13 +251,52 @@ def build_portal(
             report_entries,
             include_disease_context=include_disease_context,
             portal_title=portal_title,
+            disease_downloads=_available_disease_downloads(portal_dir),
         ),
     )
     _write_text_atomic(portal_dir / "calculator.html", render_calculator_page(portal_title=portal_title))
     _write_text_atomic(portal_dir / "terms.html", render_terms_page(portal_title=portal_title))
     _write_text_atomic(portal_dir / "privacy.html", render_privacy_page(portal_title=portal_title))
     _write_text_atomic(portal_dir / "portal_metadata.json", portal_build_metadata(report_entries, portal_title=portal_title))
+    _prune_generated_target_files(portal_dir, report_entries)
+    _version_portal_assets(portal_dir)
     return portal_dir / "index.html"
+
+
+def _version_portal_assets(portal_dir: Path) -> None:
+    """Version local CSS/JS references by the bytes actually served."""
+    from urllib.parse import urlsplit
+
+    versions: dict[Path, str] = {}
+    for page in [*portal_dir.glob("*.html"), *(portal_dir / "reports").glob("*.html")]:
+        def replace(match: re.Match) -> str:
+            url = urlsplit(match.group("url"))
+            if url.scheme or url.netloc or not url.path.endswith((".js", ".css")):
+                return match.group(0)
+            asset = (page.parent / url.path).resolve()
+            if not asset.is_relative_to(portal_dir.resolve()) or not asset.is_file():
+                return match.group(0)
+            if asset not in versions:
+                versions[asset] = hashlib.sha256(asset.read_bytes()).hexdigest()[:16]
+            return f'{match.group("attribute")}="{url.path}?v={versions[asset]}"'
+
+        html = re.sub(r'(?P<attribute>src|href)="(?P<url>[^"]+)"', replace, page.read_text())
+        _write_text_atomic(page, html)
+
+
+def _prune_generated_target_files(portal_dir: Path, entries: list[dict[str, Any]]) -> None:
+    reports = {Path(str(entry["detail_page"])).name for entry in entries}
+    scripts = {Path(name).with_suffix(".js").name for name in reports}
+    structures = {Path(str(entry["portal_structure_path"])).stem for entry in entries if entry.get("portal_structure_path")}
+    for directory, suffix, keep in (("reports", ".html", reports), ("report_scripts", ".js", scripts)):
+        for path in (portal_dir / directory).glob("*" + suffix):
+            if path.name not in keep:
+                path.unlink()
+    for path in (portal_dir / "structures").glob("*"):
+        if path.name.endswith((".pdb", ".meta.json")):
+            stem = path.name.removesuffix(".meta.json").removesuffix(".pdb")
+            if stem not in structures:
+                path.unlink()
 
 
 def _externalize_inline_script(html: str, *, script_src: str) -> tuple[str, str]:
@@ -457,10 +494,9 @@ def _refresh_reports_if_needed(
     if not refresh_reports and not refresh_stale_reports:
         return results
 
-    config = AnalysisConfig(
-        verbose_progress=verbose,
-        enable_complex_portal=enable_complex_portal,
-    )
+    from .module_refresh import _module_refresh_config
+
+    config = _module_refresh_config(batch_dir=batch_dir, verbose=verbose, enable_complex_portal=enable_complex_portal)
     dependencies = _portal_refresh_dependencies(config)
     analyzer: AntigenAnalyzer | None = None
     refreshed = False
@@ -539,17 +575,16 @@ def _should_refresh_report(
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
-    temp_path = path.with_suffix(path.suffix + ".tmp")
-    temp_path.write_text(text, encoding="utf-8")
-    temp_path.replace(path)
+    _atomic_write(path, text.encode("utf-8"))
 
 
-def _get_pubtator_literature_info(gene_symbol: str | None) -> dict[str, Any] | None:
+def _get_pubtator_literature_info(gene_symbol: str | None, *, cache_dir: Path) -> dict[str, Any] | None:
     symbol = str(gene_symbol or "").strip().upper()
     if not symbol:
         return None
-    if symbol in _PUBTATOR_COUNT_CACHE:
-        return _PUBTATOR_COUNT_CACHE[symbol]
+    cache_key = (str(cache_dir.resolve()), symbol)
+    if cache_key in _PUBTATOR_COUNT_CACHE:
+        return _PUBTATOR_COUNT_CACHE[cache_key]
     query_text = f"@GENE_{symbol}"
     query_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3/docsum?text={quote(query_text)}"
     api_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/?text={quote(query_text)}"
@@ -559,7 +594,7 @@ def _get_pubtator_literature_info(gene_symbol: str | None) -> dict[str, Any] | N
         "query_url": query_url,
         "count": None,
     }
-    cache = FileCache((Path.cwd() / ".agdesign2" / "cache").resolve())
+    cache = FileCache(cache_dir.resolve())
     cache_path = cache.path_for("pubtator_search", api_url, ".json")
     http = HttpClient(cache=cache, timeout=20)
     for attempt in range(2):
@@ -580,7 +615,7 @@ def _get_pubtator_literature_info(gene_symbol: str | None) -> dict[str, Any] | N
                     pass
                 continue
             break
-    _PUBTATOR_COUNT_CACHE[symbol] = info
+    _PUBTATOR_COUNT_CACHE[cache_key] = info
     return info
 
 
@@ -615,67 +650,55 @@ def _pubtator_count_or_existing(pubtator_info: dict[str, Any] | None, item: dict
     return _coerce_pubtator_count(item.get("pubtator_count"))
 
 
-_PORTAL_HTACCESS = """\
-# OpenAntigens static portal — Apache hosting hints.
-# Directives are <IfModule>-guarded so an unsupported module no-ops instead of
-# erroring. Two compression strategies coexist:
-#   * Precompressed .gz on disk for the large browser-fetched assets (JS/CSS/SVG).
-#     The build stores e.g. report_scripts/foo.js as foo.js.gz to cut host disk
-#     usage several-fold; the rewrite below serves it transparently to any
-#     gzip-capable client. The rewrite preserves the content type and supports
-#     cache-busting query strings.
-#   * On-the-fly mod_deflate for everything else — notably HTML, which is left
-#     uncompressed on disk so non-gzip crawlers/monitors still get a valid page.
-<IfModule mod_rewrite.c>
-  RewriteEngine On
-  # Serve foo.EXT.gz for a request to foo.EXT when the client accepts gzip and
-  # the precompressed file exists. ?v= is not part of REQUEST_FILENAME, so
-  # cache-busted asset URLs still match.
-  RewriteCond %{HTTP:Accept-Encoding} gzip
-  RewriteCond %{REQUEST_FILENAME}.gz -f
-  RewriteRule ^(.+\\.(?:js|css|svg))$ $1.gz [L]
-</IfModule>
-<IfModule mod_headers.c>
-  # Precompressed files carry the real MIME type plus a gzip Content-Encoding so
-  # the browser transparently inflates them.
-  <FilesMatch "\\.js\\.gz$">
-    ForceType text/javascript
-    Header set Content-Encoding gzip
-    Header append Vary Accept-Encoding
-  </FilesMatch>
-  <FilesMatch "\\.css\\.gz$">
-    ForceType text/css
-    Header set Content-Encoding gzip
-    Header append Vary Accept-Encoding
-  </FilesMatch>
-  <FilesMatch "\\.svg\\.gz$">
-    ForceType image/svg+xml
-    Header set Content-Encoding gzip
-    Header append Vary Accept-Encoding
-  </FilesMatch>
-</IfModule>
-# Never let mod_deflate re-compress an already-gzipped file (avoids a double
-# gzip Content-Encoding / corrupt response). SetEnv is core, so left unguarded.
-<FilesMatch "\\.gz$">
-  SetEnv no-gzip 1
-</FilesMatch>
+_PORTAL_HTACCESS_COMMON = """\
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript image/svg+xml
 </IfModule>
 <IfModule mod_expires.c>
   ExpiresActive On
-  # Versioned JS/CSS (cache-busted via ?v=) and immutable images cache long.
   ExpiresByType application/javascript "access plus 7 days"
   ExpiresByType text/javascript "access plus 7 days"
   ExpiresByType text/css "access plus 7 days"
   ExpiresByType image/png "access plus 30 days"
-  # HTML always revalidated so report/index updates appear immediately.
   ExpiresByType text/html "access plus 0 seconds"
 </IfModule>
 """
 
 
-def _write_portal_htaccess(portal_dir: Path) -> None:
+_PORTAL_HTACCESS = """\
+# OpenAntigens static portal — Apache hosting hints for plain assets.
+""" + _PORTAL_HTACCESS_COMMON
+
+
+_PRECOMPRESSED_PORTAL_HTACCESS = """\
+# OpenAntigens static portal — Apache hosting hints for precompressed assets.
+# JS/CSS/SVG retain their public filenames but contain gzip bytes, avoiding any
+# dependency on mod_rewrite while keeping the deployment within its disk quota.
+<IfModule mod_headers.c>
+  <FilesMatch "\\.js$">
+    ForceType text/javascript
+    Header set Content-Encoding gzip
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+  <FilesMatch "\\.css$">
+    ForceType text/css
+    Header set Content-Encoding gzip
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+  <FilesMatch "\\.svg$">
+    ForceType image/svg+xml
+    Header set Content-Encoding gzip
+    Header append Vary Accept-Encoding
+  </FilesMatch>
+</IfModule>
+# The files already contain gzip bytes; never let mod_deflate encode them again.
+<FilesMatch "\\.(?:js|css|svg)$">
+  SetEnv no-gzip 1
+</FilesMatch>
+""" + _PORTAL_HTACCESS_COMMON
+
+
+def _write_portal_htaccess(portal_dir: Path, *, precompressed: bool = False) -> None:
     """Write a conservative Apache .htaccess enabling gzip for text assets.
 
     The published portal is large (the index data blob alone is ~19 MB; gzip
@@ -683,7 +706,8 @@ def _write_portal_htaccess(portal_dir: Path) -> None:
     module is a no-op rather than a server error. Verify on the target server
     because AllowOverride may restrict .htaccess.
     """
-    (portal_dir / ".htaccess").write_text(_PORTAL_HTACCESS, encoding="utf-8")
+    content = _PRECOMPRESSED_PORTAL_HTACCESS if precompressed else _PORTAL_HTACCESS
+    (portal_dir / ".htaccess").write_text(content, encoding="utf-8")
 
 
 def _copy_brand_assets(portal_dir: Path) -> None:
@@ -823,7 +847,7 @@ def _portal_brand_header(
     portal_title: str = "OpenAntigens",
     sibling_link: tuple[str, str] | None = None,
 ) -> str:
-    chip = chip_html or '<div class="hero-chip">Structure-aware antigen database</div>'
+    chip = chip_html or '<div class="hero-chip">Antigen constructs and supporting evidence</div>'
     species_switch = _portal_species_switch(portal_title, sibling_link)
     return f"""
       <div class="brand-bar">
@@ -859,7 +883,7 @@ def _portal_footer(*, prefix: str = "") -> str:
           </a>
           <div>
             <strong>OpenAntigens</strong>
-            <p>Structure-guided antigen construct design for cell-surface and secreted proteins.</p>
+            <p>Antigen construct design for cell-surface and secreted proteins.</p>
           </div>
         </div>
         <nav class="footer-links" aria-label="Footer navigation">
@@ -955,11 +979,11 @@ def render_index_page(
     alphafold_missing = total - alphafold_count
     topology_counts = _topology_counts(ready_entries)
 
-    subtitle = portal_subtitle or "Antigen construct design for the human surfaceome and secretome."
-    intro = portal_intro or "For completed targets, OpenAntigens reports design regions, reproducible construct candidates, structure evidence, and sequence similarity context on one page."
+    subtitle = portal_subtitle or "Antigen constructs for human cell-surface and secreted proteins."
+    intro = portal_intro or "Open a protein report to compare proposed construct boundaries and inspect sequence and structural evidence. Export selected sequences as FASTA or TSV."
     disease_controls = (
         """
-      <input id="diseaseSearchBox" type="search" list="diseaseSuggestions" placeholder="Disease-focused filter">
+      <input id="diseaseSearchBox" type="search" list="diseaseSuggestions" placeholder="Filter by disease" aria-label="Filter by disease">
       <datalist id="diseaseSuggestions"></datalist>"""
         if include_disease_context
         else ""
@@ -1009,7 +1033,7 @@ def render_index_page(
     </header>
 
     <section class="controls">
-      <input id="searchBox" type="search" placeholder="Search gene, entry, protein, alias, family, or topology">
+      <input id="searchBox" type="search" placeholder="Search gene, protein, or UniProt entry" aria-label="Search gene, entry, protein, alias, family, or topology">
       {disease_controls}
       <span id="sortSummary" class="sort-summary">Sorted by PubTator hits ↓</span>
       <button id="resetFilters" type="button">Reset</button>
@@ -1347,7 +1371,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         else "human construct name, boundaries, sequence, and equivalent mouse and cynomolgus monkey regions"
     )
     disease_row = (
-        "<tr><td>Open Targets Disease Associations</td><td>Indirect and direct disease associations and scores from Open Targets.</td><td>Treat scores as disease-association context; therapeutic validation requires separate evidence.</td></tr>"
+        "<tr><td>Open Targets Disease Associations</td><td>Indirect and direct disease associations and scores from Open Targets.</td><td>Review the underlying evidence before drawing conclusions about a target's therapeutic value.</td></tr>"
         if include_disease_context
         else ""
     )
@@ -1375,8 +1399,8 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         eyebrow="First-time user guide",
         heading="How to use OpenAntigens reports",
         intro=(
-            f"OpenAntigens builds structure-aware antigen-design reports for {target_scope}. "
-            "Use this guide to search the portal, interpret report sections, prioritize constructs, and export sequences for cloning or expression planning."
+            f"OpenAntigens assembles sequence, annotation, and structure evidence for {target_scope}. "
+            "Search for a target, review its proposed construct boundaries, and copy the sequences you choose to test."
         ),
         portal_title=portal_title,
         body_html=f"""
@@ -1385,8 +1409,8 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       <ol class="doc-list">
         <li>Search for a gene, UniProt entry, protein name, alias, family, topology track{quick_search_scope} on the <a class="inline-link" href="index.html">Browse</a> page.</li>
         <li>Scan the {evidence_columns} columns to identify reports with the evidence needed for review.</li>
-        <li>Open a target report by clicking the UniProt entry name. Public release snapshots are static and read-only; pending or failed rows show release-state metadata in the browser.</li>
-        <li>Start with the <strong>Interactive Construct Builder</strong> to inspect sequence, cysteine warnings, furin warnings, ortholog-equivalent regions, and structure/pLDDT/PAE panels when compatible local structure assets exist.</li>
+        <li>Open a target report by clicking the UniProt entry name. Public snapshots show the results of a completed build. Pending or failed rows retain their recorded status and error details.</li>
+        <li>Use the <strong>Interactive Construct Builder</strong> to adjust boundaries and inspect linked sequences, warnings, and available structure panels. You can also export sequences from the precomputed construct cards.</li>
         <li>Review the ordered construct sections, copy TSV or FASTA outputs, and download the release index or manifest for downstream analysis.</li>
       </ol>
     </section>
@@ -1401,7 +1425,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         <h2>Filter and sort</h2>
         <p>The Browse page defaults to all rows sorted by PubTator hits from highest to lowest. Search terms narrow the table; <strong>Reset</strong> clears both search boxes and restores PubTator-hit sorting.</p>
         <p>Click table headers to sort by {sort_fields}.</p>
-        <p>The rows-per-page selector controls table density. Use 10 or 25 for detailed review and 50 or 100 for broad triage.</p>
+        <p>Choose how many rows to show, then use the page controls to browse the remaining results.</p>
       </article>
       <article class="card doc-card">
         <h2>Understand topology tracks</h2>
@@ -1410,8 +1434,8 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       </article>
       <article class="card doc-card">
         <h2>Static release snapshots</h2>
-        <p>Public OpenAntigens releases are static HTML snapshots. They can be browsed locally or hosted as ordinary static files, and the visible pages represent the data available at the recorded release date.</p>
-        <p>Browser-based refresh controls are not part of the public release interface. Updated annotations are incorporated in a future release.</p>
+        <p>Public releases contain the results recorded during their build. The pages can be browsed locally or on the website.</p>
+        <p>Opening a page does not update its annotations.</p>
       </article>
     </section>
 
@@ -1437,18 +1461,10 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
 
     <section class="card doc-card">
       <h2>Recommended construct-review order</h2>
-      <p>Reports list constructs in a fixed priority order, and reviewing them in that order works well: <strong>full design region</strong>, then <strong>PDB-backed</strong>, <strong>domain annotated</strong>, <strong>strict calculated</strong>, and <strong>lenient calculated</strong> constructs. For multipass proteins, review <strong>membrane-expression constructs</strong> separately from soluble extracellular-region constructs. The <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a> explains why each class sits where it does and how to choose between them.</p>
+      <p>The summary and builder list soluble constructs in this order: <strong>full design region</strong>, <strong>PDB-backed</strong>, <strong>strict calculated</strong>, <strong>lenient calculated</strong>, then <strong>domain annotated</strong> constructs. For multipass proteins, review <strong>membrane-expression constructs</strong> separately from soluble extracellular-region constructs. The <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a> explains how their boundaries are generated. Display order is not a validated ranking of expression performance.</p>
     </section>
 
     <section class="doc-grid">
-      <article class="card doc-card">
-        <h2>Good antigen-design signals</h2>
-        <p>Favorable soluble constructs usually have strong pLDDT across the region, low internal PAE, boundaries near curated domain edges or PDB precedent, no transmembrane or cytoplasmic contamination, no unexpected unpaired cysteines, and reviewed BLAST similarity to paralogs.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Warning signs</h2>
-        <p>Be cautious with constructs dominated by low pLDDT, high internal PAE, long disordered linkers, unresolved topology, dense basic furin-like motifs, unpaired cysteines, very high similarity to unwanted paralogs, or missing ortholog mappings for planned animal work.</p>
-      </article>
       <article class="card doc-card">
         <h2>pLDDT in one sentence</h2>
         <p>pLDDT tells you whether AlphaFold is locally confident at each residue. High pLDDT supports local fold confidence, but it does not prove that two domains have a fixed relative orientation.</p>
@@ -1468,9 +1484,9 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
             <tr><td>Find antibody-discovery antigen candidates</td><td>{search_goal}, filter for structure availability, inspect full design-region and PDB-backed constructs, then review BLAST similarity and homolog-equivalent sequences.</td></tr>
             <tr><td>Design a compact domain antigen</td><td>Open the report, start with domain annotated and strict calculated constructs, inspect pLDDT/PAE boundaries, and export TSV/FASTA from the builder.</td></tr>
             <tr><td>Prioritize cross-species screening constructs</td><td>{cross_species_workflow} Prioritize mapped constructs with high identity and conserved boundaries.</td></tr>
-            <tr><td>Review paralog cross-reactivity risk</td><td>Use Family Context and BLAST similarity together. The family matrix gives paralog-level context; BLAST alignments show local high-similarity regions.</td></tr>
+            <tr><td>Review paralog cross-reactivity risk</td><td>Use Family Context and BLAST similarity together. The family matrix compares paralogs across their sequence regions; BLAST alignments locate similar stretches.</td></tr>
             <tr><td>Handle a multipass protein</td><td>Look for a large extracellular region if present, then separately review membrane-expression constructs, full-length AlphaFold context, full-length BLAST, and GPCR/membrane engineering suggestions.</td></tr>
-            <tr><td>Review release-state gaps</td><td>If a report is pending, failed, or missing a structure, treat that as a property of the current release snapshot and check future releases for updates.</td></tr>
+            <tr><td>Review release-state gaps</td><td>Check the index status and error details. Public pages do not rerun an analysis when opened.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1502,10 +1518,10 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
           <thead><tr><th>Problem</th><th>Likely reason</th><th>What to do</th></tr></thead>
           <tbody>
             <tr><td>Report is pending or failed</td><td>The target could not be completed for the current release because of source-data limitations, structure mismatch, or processing failure.</td><td>Inspect the release index error field. The target may be resolved in a future release.</td></tr>
-            <tr><td>AlphaFold is missing</td><td>No canonical AlphaFold model was found or the available model did not match the canonical UniProt sequence.</td><td>Use PDB/domain evidence if available, or refresh the target after source-reference updates.</td></tr>
-            <tr><td>Homolog sequence is missing</td><td>The ortholog reference table lacks a usable canonical sequence or mapping for that species.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually.</td></tr>
+            <tr><td>AlphaFold is missing</td><td>No canonical AlphaFold model was found or the available model did not match the canonical UniProt sequence.</td><td>Review available PDB and domain evidence. A new analysis or release is needed to incorporate a later structure.</td></tr>
+            <tr><td>Homolog sequence is missing</td><td>A usable reference sequence or alignment was unavailable when the report was built.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually.</td></tr>
             <tr><td>Family matrix is absent</td><td>No canonical family was identified, the family exceeded the configured size limit, or precomputed paralog data are unavailable.</td><td>Review BLAST local similarity and InterPro domain annotations for specificity context.</td></tr>
-            <tr><td>BLAST hit list is long</td><td>The query region is highly conserved, contains common domains, or the full-length track captured broad family similarity.</td><td>Sort by bit score, inspect alignments, and focus on high-identity hits overlapping the selected construct.</td></tr>
+            <tr><td>BLAST hit list is long</td><td>The query region is highly conserved, contains common domains, or the full-length track captured broad family similarity.</td><td>Inspect the list, which is ranked by bit score, and check which alignments overlap the selected construct.</td></tr>
             <tr><td>Construct looks biologically wrong</td><td>Automated heuristics can miss ligand sites, partner requirements, topology edge cases, or literature-specific constraints.</td><td>Use the builder to adjust boundaries and check Methods for the exact evidence sources and limitations.</td></tr>
           </tbody>
         </table>
@@ -1523,7 +1539,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       </article>
       <article class="card doc-card">
         <h2>Construct methodology</h2>
-        <p>Use the <a class="inline-link" href="constructs.html">Constructs page</a> for the dedicated explanation of pre-generated construct classes, structural diagnostics, homolog transfer, PTM-aware review, and limitations.</p>
+        <p>Use the <a class="inline-link" href="constructs.html">Constructs page</a> for the dedicated explanation of pre-generated construct classes, structural diagnostics, homolog transfer, PTM and processing review, and limitations.</p>
       </article>
       <article class="card doc-card">
         <h2>Downloads</h2>
@@ -1557,29 +1573,29 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
         heading="How to use the Interactive Construct Builder",
         intro=(
             "Use the builder to inspect and adjust antigen boundaries from each protein report. "
-            "Reports with structure assets connect sequence, AlphaFold confidence, PAE, ortholog mappings, cysteine warnings, furin-site warnings, and export-ready sequence records."
+            "Select a construct or enter start and end positions, inspect the available evidence, then copy its sequence."
         ),
         portal_title=portal_title,
         body_html=f"""
     <section class="doc-grid">
       <article class="card doc-card">
         <h2>What the builder shows</h2>
-        <p>Each protein report page includes the target sequence and a Live Selected Region table. Reports with a local AlphaFold model also include the structure, an interactive pLDDT trace, and an interactive PAE matrix.</p>
+        <p>Reports with a compatible local AlphaFold model include the interactive builder and Live Selected Region table. The pLDDT trace and PAE matrix appear when their data are available. Reports without a compatible model retain precomputed construct cards and their sequence exports.</p>
         <p>Selections stay synchronized across the panels present in the report. Selecting residues in the sequence or plots highlights the same residue window in the structure and updates the TSV/FASTA outputs.</p>
       </article>
       <article class="card doc-card">
         <h2>Basic workflow</h2>
         <ol class="doc-list">
-          <li>Start from the construct classes present in the report: full design region, PDB-backed constructs, annotated domains, strict calculated regions, then lenient calculated regions.</li>
-          <li>Select or adjust a residue window in the sequence, pLDDT plot, or PAE plot.</li>
-          <li>Evaluate compactness, model confidence, and biological context for the selected region.</li>
+          <li>Start from the construct classes present in the report: full design region, PDB-backed constructs, strict calculated regions, lenient calculated regions, then annotated domains.</li>
+          <li>Choose a construct, enter start and end positions and click Apply boundaries, or select residues in the sequence or available plots.</li>
+          <li>Inspect the model and annotations at both boundaries.</li>
           <li>Review warnings for unpaired cysteines and furin-like cleavage sites.</li>
           <li>Copy the TSV or FASTA output for cloning, ordering, or downstream analysis.</li>
         </ol>
       </article>
       <article class="card doc-card">
         <h2>Live Selected Region</h2>
-        <p>The table reports export-ready sequence records for the current selection: {selected_region_scope} where ortholog mappings exist.</p>
+        <p>The table reports sequences for the current selection: {selected_region_scope} where ortholog mappings exist.</p>
         <p>The construct name follows the format <code>GENE_SPECIES_start-end</code>. Selecting optional Cys-to-Ser mutations adds mutation suffixes to the name and updates the sequence immediately.</p>
       </article>
       <article class="card doc-card">
@@ -1596,7 +1612,7 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
         <table>
           <thead><tr><th>pLDDT range</th><th>Practical interpretation</th><th>Construct-design value</th></tr></thead>
           <tbody>
-            <tr><td>90-100</td><td>Very high local confidence.</td><td>Strong support for including this residue in a structured construct, assuming topology and biology also make sense.</td></tr>
+            <tr><td>90-100</td><td>Very high local confidence.</td><td>Check these residues against domain and topology annotations when choosing boundaries.</td></tr>
             <tr><td>70-90</td><td>Generally confident local structure.</td><td>Often acceptable for domain cores and boundary-adjacent residues.</td></tr>
             <tr><td>50-70</td><td>Low confidence or flexible geometry.</td><td>Review manually. This range often marks flexible linkers, uncertain loops, or boundary regions.</td></tr>
             <tr><td>Below 50</td><td>Very low confidence, often disordered.</td><td>Consider trimming unless the region has a required biological role.</td></tr>
@@ -1613,29 +1629,29 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
         <table>
           <thead><tr><th>PAE pattern</th><th>What it suggests</th><th>Construct-design value</th></tr></thead>
           <tbody>
-            <tr><td>Low PAE block within a region</td><td>The selected residues likely form a coherent structural unit.</td><td>Good support for a single-domain or stable multi-domain construct.</td></tr>
-            <tr><td>High PAE between two neighboring blocks</td><td>The blocks have uncertain relative placement or a flexible linker between them.</td><td>Consider splitting constructs at or near the linker.</td></tr>
+            <tr><td>Low PAE block within a region</td><td>Low predicted error within the region.</td><td>Compare the block with annotated domains before choosing a construct.</td></tr>
+            <tr><td>High PAE between two neighboring blocks</td><td>Uncertain relative placement of the blocks.</td><td>Consider splitting constructs at or near the linker.</td></tr>
             <tr><td>Low pLDDT and high boundary PAE</td><td>This is a candidate boundary between regions.</td><td>Review as a possible trimming or domain-separation point.</td></tr>
             <tr><td>High pLDDT but high inter-domain PAE</td><td>Each domain has local fold support, with uncertain domain orientation.</td><td>Expression and relative domain orientation require experimental testing.</td></tr>
           </tbody>
         </table>
       </div>
-      <p>PAE matrices are asymmetric model-derived estimates. Use them to evaluate whether a selected region behaves like one cohesive unit or contains an internal flexible boundary.</p>
+      <p>PAE can differ when the aligned and evaluated residues are reversed. It describes model uncertainty; it does not measure the stability of an expressed construct.</p>
     </section>
 
     <section class="doc-grid">
       <article class="card doc-card">
         <h2>Choosing boundaries</h2>
-        <p>Place boundaries outside transmembrane helices, cytoplasmic tails, signal peptides, low-confidence disordered tails, processing sites, and obvious flexible linkers, except when the construct intentionally includes those regions.</p>
-        <p>Prefer boundaries that align with curated domains, PDB construct precedent, low local disorder, PTM-aware sequence context, and a clean PAE separation between domains.</p>
+        <p>Inspect both termini and avoid cutting through a helix, strand, or required domain. A flexible linker may provide a suitable boundary. For soluble constructs, review whether signal peptides, transmembrane segments, cytoplasmic tails, or disordered extensions should be excluded, and account for annotated processing sites.</p>
+        <p>Compare candidate boundaries with domain annotations, PDB coverage, and processing sites. Use pLDDT and PAE to inspect the model near each cut.</p>
       </article>
       <article class="card doc-card">
         <h2>Strict versus lenient constructs</h2>
-        <p>Strict calculated constructs favor compact single-domain units with stronger confidence and cleaner boundaries. Lenient constructs retain larger coherent regions for multi-domain surfaces and larger conformational epitopes.</p>
+        <p>Strict constructs start from pLDDT segments and may be split further using PAE. Lenient constructs use a lower pLDDT threshold and allow longer gaps. See Constructs for the thresholds and filters.</p>
       </article>
       <article class="card doc-card">
         <h2>Warnings</h2>
-        <p>Unpaired cysteine warnings flag cysteines associated with unwanted disulfides, aggregation, or expression heterogeneity. PTM warnings flag curated processing or cleavage annotations. Furin-site warnings flag basic motifs with cleavage risk in some producer cells or biological contexts.</p>
+        <p>Cysteine warnings report missing or ambiguous partners in the model. PTM annotations identify recorded modifications and processing sites. Furin warnings mark sequence motifs for review; a motif match does not establish cleavage in your expression system.</p>
       </article>
       <article class="card doc-card">
         <h2>Manual overrides</h2>
@@ -1646,12 +1662,12 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card">
       <h2>Practical checklist</h2>
       <ol class="doc-list">
-        <li>Is the region extracellular or intentionally membrane-associated?</li>
-        <li>Does the region have acceptable pLDDT across most residues?</li>
-        <li>Does the PAE matrix support the region as one coherent unit?</li>
-        <li>Do boundaries avoid low-confidence tails and flexible linkers?</li>
-        <li>Are unpaired cysteines, furin motifs, and key ligand-binding regions accounted for?</li>
-        <li>Do boundaries preserve curated PTMs or processing sites that matter for the target?</li>
+        <li>Confirm the intended topology: soluble extracellular region or membrane protein.</li>
+        <li>Inspect pLDDT across the selected sequence.</li>
+        <li>Check PAE within the region and across its boundaries.</li>
+        <li>Review terminal residues and any linker retained in the construct.</li>
+        <li>Check cysteine partners, furin motifs, and annotated binding sites.</li>
+        <li>Check the selected sequence against PTM and processing annotations.</li>
         <li>{equivalent_sequence_check}</li>
       </ol>
       <p>For the full methodology behind the pre-generated construct list, see the <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a>.</p>
@@ -1681,22 +1697,56 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         eyebrow="Construct methodology",
         heading="Pre-generated antigen constructs and design heuristics",
         intro=(
-            "OpenAntigens generates construct candidates from resolved design scope, domain annotations, structure-derived confidence, PDB chain coverage, "
+            "OpenAntigens proposes boundaries using the target sequence and topology, domain annotations, AlphaFold confidence, PDB chain coverage, "
             "and ortholog mappings when those inputs are available."
         ),
         portal_title=portal_title,
         body_html=f"""
+    <section class="card doc-card" id="choose-constructs">
+      <h2>How to choose among pre-generated constructs</h2>
+      <p>Start with the protein region your experiment requires, then compare the evidence supporting its boundaries. The categories describe how boundaries were chosen; they do not rank expected expression success.</p>
+      <ol class="construct-choice-workflow" role="list" aria-label="Construct selection workflow">
+        <li><strong>1. Define your region</strong><span>Decide whether you need the complete soluble region, a specific domain, or a membrane protein.</span></li>
+        <li><strong>2. Check experimental precedent</strong><span>Look for a relevant PDB structure and review the construct described in the associated study.</span></li>
+        <li><strong>3. Compare candidates</strong><span>If the best boundaries are unclear, compare a larger region with a smaller candidate.</span></li>
+        <li><strong>4. Inspect and export</strong><span>Use the builder to inspect the boundaries and warnings before exporting your sequence.</span></li>
+      </ol>
+      <p>A relevant PDB structure can guide your first candidate. Check the original study for fusion proteins, affinity tags, mutations, and required partners that may be absent from the mapped target sequence.</p>
+      <table class="construct-choice-table">
+        <thead><tr><th scope="col">Your goal</th><th scope="col">Where to start</th></tr></thead>
+        <tbody>
+          <tr><td>Complete soluble region</td><td><strong>Full ectodomain / Full secreted region</strong></td></tr>
+          <tr><td>Specific domain or repeat</td><td><strong>Annotated domains / repeats</strong>; compare <strong>Strict</strong> boundaries</td></tr>
+          <tr><td>Neighboring domains together</td><td><strong>Lenient</strong> or the full soluble region</td></tr>
+          <tr><td>Membrane protein</td><td><strong>Full-length multipass</strong>; compare <strong>Trimmed multipass</strong> and membrane <strong>PDB</strong> candidates</td></tr>
+        </tbody>
+      </table>
+      <h3>Before export</h3>
+      <ul class="doc-list">
+        <li>Inspect both ends of the construct and retain any required domains or partners. Predicted boundaries may cut through helices or strands and do not establish that the isolated region will fold independently.</li>
+        <li>Check whether truncation removed a cysteine's disulfide partner. Surface exposure alone does not justify mutating a cysteine, and burial does not establish that a substitution is safe.</li>
+        <li>Review PTMs, processing sites, and relevant ortholog mappings. Use warnings to identify features that need closer inspection before deciding whether to keep or change the construct.</li>
+      </ul>
+      <p class="construct-choice-more">More detail: <a class="inline-link" href="#construct-classes">construct categories</a> · <a class="inline-link" href="builder.html">using the builder</a> · <a class="inline-link" href="#construct-feature-review">cysteines and processing</a>.</p>
+    </section>
+
+    <section class="card doc-card" id="after-export">
+      <h2>After export</h2>
+      <p>The exported sequence contains your selected target region and chosen edits. Choose a vector and host appropriate for your experiment, adding a secretion leader or tags where needed. Check whether native signal or processing sequences are already included.</p>
+      <p>Practical resources: <a class="inline-link" href="https://blog.addgene.org/plasmids-101-protein-tags">Addgene&rsquo;s protein-tag guide</a> · <a class="inline-link" href="https://doi.org/10.1016/j.nbt.2020.05.002">Tegel et al.: mammalian protein production</a></p>
+    </section>
+
     <section class="card doc-card">
-      <h2>Why pre-generate constructs?</h2>
-      <p>The construct list keeps boundary generation and evidence fields consistent across reports. When enough information is available, protein reports contain candidate boundaries derived from topology, curated annotations, AlphaFold confidence, PDB evidence, PTM/processing features, cysteine context, and ortholog mappings.</p>
-      <p>Use the list to inspect candidate boundaries alongside the evidence behind them. Before ordering, review target biology, literature, partner requirements, assay goals, and expression constraints.</p>
+      <h2>What the construct list contains</h2>
+      <p>Each report lists proposed constructs with their sequences and the evidence used to choose the boundaries. The available classes depend on the annotations and structures found for that target.</p>
+      <p>Before ordering a sequence, check the target literature, required partners, and the assay you plan to run.</p>
     </section>
 
     <section class="card doc-card">
       <h2>Strict and lenient construct algorithm</h2>
-      <p>This section summarizes the AlphaFold-derived portion of the construct generator, which runs when a compatible AlphaFold model and PAE matrix are available. Strict constructs use conservative pLDDT seeds followed by recursive PAE boundary scoring; lenient constructs use a lower pLDDT threshold to preserve larger structured regions.</p>
-      <p>The two AlphaFold confidence signals are used for different decisions. pLDDT is a one-dimensional per-residue signal, so it first defines candidate structured intervals. The lenient track stops after this step and keeps larger intervals using a lower pLDDT threshold. The strict track takes only higher-confidence pLDDT seed intervals and then uses the two-dimensional PAE matrix to decide whether each seed should be split into smaller domain-like units.</p>
-      <p>For strict splitting, every possible boundary is tested if both resulting fragments remain at least 40 amino acids. A boundary is eligible when the predicted error between the two sides is high relative to the predicted error within each side. Low linker pLDDT near the boundary adds support for a split because it suggests a flexible connector between structured blocks.</p>
+      <p>Calculated constructs use a compatible AlphaFold model and PAE matrix. Strict constructs use conservative pLDDT seeds followed by recursive PAE boundary scoring; lenient constructs use a lower pLDDT threshold to preserve larger structured regions.</p>
+      <p>Both tracks begin with intervals selected by pLDDT. The lenient track keeps these intervals; the strict track can split them further using PAE.</p>
+      <p>The steps below use the default configuration. A release built with different settings can produce different boundaries.</p>
     </section>
 
     <section class="card doc-card">
@@ -1707,31 +1757,32 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         <li><strong>Generate lenient pLDDT regions.</strong> The lenient track marks residues with pLDDT at least 60, allows low-confidence gaps up to 12 residues, and discards resulting regions shorter than 25 residues. This track preserves larger structured units and can include more than one domain when the intervening linker is short or only moderately uncertain.</li>
         <li><strong>Generate strict pLDDT seed regions.</strong> The strict track marks residues with pLDDT at least 70, allows low-confidence gaps up to 8 residues, and discards seed regions shorter than 25 residues. These high-confidence intervals then feed PAE-based domain splitting.</li>
         <li><strong>Evaluate PAE split candidates inside each strict seed.</strong> For every possible cut, both resulting sides must remain at least 40 amino acids. The pipeline computes intrablock PAE within each side, interblock PAE between the two sides, and separation, defined as interblock PAE minus mean intrablock PAE.</li>
-        <li><strong>Accept only convincing PAE boundaries.</strong> A cut is eligible only when interblock PAE is at least 12 angstroms and separation is at least 4 angstroms. This means the two sides are internally more coherent than they are with respect to each other, making the cut a candidate domain boundary.</li>
+        <li><strong>Apply the PAE thresholds.</strong> A cut is eligible only when interblock PAE is at least 12 angstroms and separation is at least 4 angstroms. These thresholds select cuts where the model is less certain about placement between the blocks than within them.</li>
         <li><strong>Score eligible strict split boundaries.</strong> Candidate boundaries are ranked using <code>split score = separation + 0.35 x max(0, boundary PAE - intrablock PAE) + linker bonus</code>. The linker bonus increases when local pLDDT near the cut is low, because low-confidence linker residues support splitting adjacent structured blocks.</li>
         <li><strong>Recursively split strict regions.</strong> The highest-scoring eligible cut is applied, then the same PAE split search is repeated on the left and right child regions. Recursion stops when no valid cut remains, child regions would become too small, or the configured maximum recursion depth is reached.</li>
-        <li><strong>Apply final construct filters.</strong> Calculated soluble constructs must stay inside the design region and must be at least 50 amino acids. Exact duplicate boundaries from different calculated or annotated sources are collapsed to keep reports concise; PDB-backed constructs are kept individually so no experimental structure is dropped.</li>
+        <li><strong>Apply final construct filters.</strong> Calculated soluble constructs must stay inside the design region and must be at least 50 amino acids. Exact duplicate boundaries from different calculated or annotated sources are collapsed to keep reports concise; PDB-backed constructs are exempt from deduplication but still pass the scope and length filters.</li>
         <li><strong>Annotate each construct for review.</strong> Construct cards list sequence, boundaries, exports, included UniProt/InterPro annotations, PTMs, furin-like motifs, cysteine warnings, homolog-equivalent regions, and construct-specific conservation. Structural metrics, PAE split diagnostics, ligand-interaction annotations, and images appear when available.</li>
       </ol>
     </section>
 
-    <section class="card doc-card">
+    <section class="card doc-card" id="construct-classes">
       <h2>Construct classes</h2>
-      <p>Constructs are displayed in a fixed order so reports can be compared target-to-target. The order starts with broad biological context, then moves toward narrower or more computationally inferred regions.</p>
+      <p>Constructs are grouped by how their boundaries were chosen. The table follows the Construct Details tab order.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Display order</th><th>Construct class</th><th>How boundaries are generated</th><th>Review focus</th></tr></thead>
           <tbody>
-            <tr><td>1</td><td>Full design region</td><td>Uses the inferred mature secreted or extracellular design scope from topology, signal peptide, propeptide, chain, and transmembrane annotations.</td><td>Preserving complete soluble context and conformational epitopes.</td></tr>
-            <tr><td>2</td><td>PDB-backed constructs</td><td>Uses PDB chain coverage mapped to UniProt numbering. Every deposited structure is listed individually, even when its boundaries duplicate another construct, so each deposited structure record remains traceable. The construct name links to its RCSB entry.</td><td>Reviewing deposited structure boundaries.</td></tr>
-            <tr><td>3</td><td>Domain annotated constructs</td><td>Uses UniProt and InterPro domain-like annotations that lie fully inside the design scope.</td><td>Designing named biological domains or domain modules.</td></tr>
-            <tr><td>4</td><td>Strict calculated constructs</td><td>Uses more conservative AlphaFold pLDDT/PAE segmentation to isolate compact, cohesive structural regions.</td><td>Single-domain-like antigens and cleaner soluble expression candidates.</td></tr>
-            <tr><td>5</td><td>Lenient calculated constructs</td><td>Uses more permissive structural thresholds to retain larger coherent or partially coherent regions.</td><td>Multi-domain surfaces and larger conformational epitopes.</td></tr>
-            <tr><td>6</td><td>Membrane-expression constructs</td><td>For multipass proteins, retains membrane-spanning context while trimming obvious disordered cytoplasmic tails when appropriate.</td><td>Whole membrane protein expression, GPCR-like targets, transporters, channels, and mixed soluble/membrane cases.</td></tr>
+            <tr><td>1</td><td>Full ectodomain / Full secreted region (Full design region when neither label applies)</td><td>Uses the inferred mature secreted or extracellular design scope from topology, signal peptide, propeptide, chain, and transmembrane annotations.</td><td>Comparing the complete inferred soluble region with shorter constructs.</td></tr>
+            <tr><td>2</td><td>PDB</td><td>Uses PDB chain coverage mapped to UniProt numbering. Eligible PDB chains are kept individually even when their boundaries duplicate another construct. Soluble and membrane candidates appear separately within the PDB tab. The construct name links to its RCSB entry.</td><td>Reviewing deposited structure boundaries.</td></tr>
+            <tr><td>3</td><td>Annotated domains / repeats</td><td>Uses UniProt and InterPro domain-like annotations that lie fully inside the design scope.</td><td>Designing named biological domains or domain modules.</td></tr>
+            <tr><td>4</td><td>Strict</td><td>Uses more conservative AlphaFold pLDDT/PAE segmentation to isolate compact, cohesive structural regions.</td><td>Smaller regions for experimental testing.</td></tr>
+            <tr><td>5</td><td>Lenient</td><td>Uses more permissive structural thresholds to retain larger coherent or partially coherent regions.</td><td>Multi-domain surfaces and larger conformational epitopes.</td></tr>
+            <tr><td>6</td><td>Full-length multipass</td><td>Retains the full target sequence, including transmembrane regions.</td><td>Reviewing the complete membrane-protein context.</td></tr>
+            <tr><td>7</td><td>Trimmed multipass</td><td>Retains transmembrane regions with N-terminal, C-terminal, both-terminal, or GPCR C-terminal tail-series trims.</td><td>Comparing terminal variants with the full-length candidate; review each variant's warnings.</td></tr>
           </tbody>
         </table>
       </div>
-      <p>The default minimum construct length is 50 amino acids; shorter candidates are filtered from the recommendation set.</p>
+      <p>The default minimum construct length is 50 amino acids, including PDB-derived suggestions. Experimental PDB records also appear separately in the report.</p>
     </section>
 
     <section class="doc-grid">
@@ -1743,26 +1794,13 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Boundary filtering</h2>
         <p>Recommended soluble constructs must fit inside the design scope. InterPro or UniProt annotations that extend outside the mature secreted or extracellular region remain descriptive context.</p>
-        <p>PDB-derived boundaries that are fully outside the relevant scope are ignored. PDB entries that overlap the scope are each retained as a separate construct, even when their boundaries duplicate another construct, so every experimental structure is captured as evidence.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Strict versus lenient</h2>
-        <p>Strict calculated constructs favor smaller regions with stronger local confidence and cleaner structural cohesion. They are useful when the goal is a compact antigen domain with fewer flexible residues.</p>
-        <p>Lenient calculated constructs tolerate broader regions and can preserve multi-domain surfaces. They are useful when the antibody-discovery goal may require a larger conformational epitope or when domains are structurally adjacent.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Interpretable evidence</h2>
-        <p>Construct cards emphasize interpretable evidence: boundaries, sequence, class, structural metrics, PTMs, cysteines, homolog equivalents, PDB evidence, and warnings.</p>
-        <p>These fields keep each boundary traceable. A lower-confidence construct may still be appropriate if it preserves an important ligand interface or known epitope.</p>
+        <p>Soluble PDB-derived suggestions must lie fully inside the design region and pass the minimum-length filter. Multipass targets can also retain PDB chains as membrane-expression suggestions. The experimental-structure section provides the broader record of overlapping PDB evidence.</p>
       </article>
     </section>
 
     <section class="card doc-card">
       <h2>AlphaFold-derived structural heuristics</h2>
-      <p>When a compatible AlphaFold model and PAE matrix are available, OpenAntigens uses AlphaFold confidence in two complementary ways: pLDDT estimates local residue confidence, and PAE estimates confidence in relative placement between residue pairs or regions. The construct generator uses both signals to identify coherent structural blocks and plausible split points.</p>
-      <p>The strict workflow is designed to find compact, domain-like units. It starts with residues whose pLDDT is at least 70, merges short low-confidence gaps up to 8 residues, discards structured seeds shorter than 25 residues, and then evaluates PAE-based split points. A split is considered only if each side would remain at least 40 residues. The split must have interblock PAE at least 12 and PAE separation of at least 4, where separation is the difference between interblock PAE and the average intrablock PAE of the two sides.</p>
-      <p>Accepted split candidates are scored by combining PAE separation, local boundary PAE enrichment, and linker pLDDT. Boundaries are favored when the candidate blocks are internally coherent, the two sides have uncertain relative placement, and the linker around the boundary has lower confidence. The splitter recurses up to the configured maximum depth, producing strict calculated constructs.</p>
-      <p>The lenient workflow is intentionally less conservative. It uses a pLDDT threshold of 60 and merges gaps up to 12 residues, which often preserves larger structured regions that strict splitting would divide. Lenient constructs are therefore useful when preserving a multi-domain surface may be more important than isolating a compact single domain.</p>
+      <p>Construct cards report the following metrics when the required structure data are available.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Diagnostic</th><th>What it measures</th><th>How to interpret it</th></tr></thead>
@@ -1797,66 +1835,51 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>What each construct card includes</h2>
-      <p>Each construct card lists the primary {primary_species} sequence, boundaries, export-ready TSV/FASTA, homolog-equivalent rows when available, and construct-specific evidence, diagnostics, and warnings when available.</p>
+      <p>Each card contains the primary {primary_species} sequence and boundaries, with TSV/FASTA exports. Mapped homologs, annotations, and structural metrics appear when available.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Field</th><th>Meaning</th><th>Why it matters</th></tr></thead>
           <tbody>
-            <tr><td>Name</td><td><code>GENE_SPECIES_start-end</code>, with optional mutation suffixes when edits are applied in the builder.</td><td>Provides traceable construct identity for cloning, ordering, and analysis.</td></tr>
+            <tr><td>Name</td><td><code>GENE_SPECIES_start-end</code>, with optional mutation suffixes when edits are applied in the builder.</td><td>Identifies the sequence and any selected edits.</td></tr>
             <tr><td>Boundary</td><td>Amino-acid start/end in the source protein sequence.</td><td>Defines the exact construct region.</td></tr>
             <tr><td>Sequence</td><td>Construct amino-acid sequence.</td><td>Can be copied directly into cloning or ordering workflows.</td></tr>
             <tr><td>Homologs</td><td>{homolog_species} equivalent regions when mapping is available.</td><td>Supports cross-species reagent and screening strategy.</td></tr>
             <tr><td>{identity_label}</td><td>{identity_description}</td><td>Helps triage conservation and cross-species reagent risk; antibody behavior still depends on epitope, structure, glycans, and assay context.</td></tr>
             <tr><td>PTMs included</td><td>Curated UniProt PTM or processing annotations overlapping the construct.</td><td>Flags glycosylation, cleavage, chain, propeptide, lipidation, or other features that may affect design.</td></tr>
             <tr><td>Cysteines</td><td>Construct-specific paired/unpaired cysteine analysis.</td><td>Flags potential disulfide, aggregation, or expression liabilities.</td></tr>
-            <tr><td>Furin motifs</td><td>Basic furin-like motifs inside the construct.</td><td>Raises cleavage-risk review items.</td></tr>
+            <tr><td>Furin motifs</td><td>Basic furin-like motifs inside the construct.</td><td>Identifies motifs to check before choosing an expression system.</td></tr>
             <tr><td>Images/plots</td><td>Static structure PNGs when generated, plus pLDDT/PAE quality plots when available.</td><td>Provides a quick check of model confidence and boundary placement.</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <section class="doc-grid">
+    <section class="doc-grid" id="construct-feature-review">
       <article class="card doc-card">
         <h2>Homolog transfer</h2>
         <p>{transfer_description} Residue numbers can differ across species.</p>
-        <p>Unreliable or missing ortholog alignments are marked unavailable.</p>
+        <p>Missing mappings are marked unavailable. An available mapping still needs review, especially near gaps or repeated domains.</p>
       </article>
       <article class="card doc-card">
         <h2>Cysteine edits</h2>
         <p>Pre-generated construct cards report unpaired cysteine warnings. In the Interactive Construct Builder, checkboxes can apply Cys-to-Ser edits to selected unpaired cysteines; names, TSV, and FASTA update immediately.</p>
-        <p>Cys-to-Ser edits are optional substitutions for flagged unpaired cysteines. Review known disulfides, structure, and functional biology before ordering.</p>
+        <p>The builder excludes ambiguous cysteine contacts from its suggested edits. Check the model and curated disulfide annotations before applying a substitution.</p>
       </article>
       <article class="card doc-card">
-        <h2>PTM-aware review</h2>
+        <h2>PTM and processing review</h2>
         <p>Construct cards list overlapping PTMs and processing features for boundary review.</p>
         <p>Cleavage, propeptide, signal peptide, and chain annotations deserve special attention because they can define mature protein boundaries.</p>
       </article>
       <article class="card doc-card">
         <h2>Multipass proteins</h2>
         <p>Large extracellular regions on multipass proteins are handled as mixed cases with soluble extracellular-region constructs and full-length membrane-protein context. Proteins with only short extracellular loops are treated primarily as membrane-expression targets.</p>
-        <p>Membrane-expression suggestions are intentionally separate from soluble extracellular-region constructs because they answer a different experimental question.</p>
+        <p>Review membrane-expression suggestions separately; they retain transmembrane sequence.</p>
       </article>
     </section>
 
     <section class="card doc-card">
-      <h2>How to choose among pre-generated constructs</h2>
-      <ol class="doc-list">
-        <li>Start with the full design region to understand the complete mature secreted or extracellular context.</li>
-        <li>Check PDB-backed constructs for experimentally observed boundary precedent.</li>
-        <li>Use domain annotated constructs when the goal is a named biological domain.</li>
-        <li>Use strict calculated constructs when compact soluble expression is the priority.</li>
-        <li>Use lenient calculated constructs when a larger conformational epitope or multi-domain surface may matter.</li>
-        <li>Review PTMs, cysteines, furin motifs, ligand regions, and assembly/partner requirements before finalizing.</li>
-        <li>Inspect homolog-equivalent sequences if mouse or cynomolgus monkey screening, immunization, or reagent validation is planned.</li>
-        <li>Open the Interactive Construct Builder to refine boundaries and export the exact final sequence.</li>
-      </ol>
-    </section>
-
-    <section class="card doc-card">
       <h2>Limitations</h2>
-      <p>Pre-generated constructs are computational recommendations. They can miss literature-specific constructs, expression-system constraints, epitope-specific requirements, glycan-dependent biology, partner-dependent folding, and context-dependent cleavage or processing. AlphaFold confidence supports structural reasoning; expression, secretion, folding, and antibody accessibility require experimental validation.</p>
-      <p>Use these constructs as a reproducible starting set. Final designs should be reviewed by a scientist familiar with the target biology and validated experimentally.</p>
+      <p>The generator proposes sequence boundaries; it does not predict expression yield, folding, or antibody binding. Review the target literature and test the selected constructs.</p>
     </section>
 """,
     )
@@ -1920,15 +1943,15 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         eyebrow="Data generation",
         heading="How OpenAntigens generates portal annotations",
         intro=(
-            "The portal combines curated target metadata, UniProt feature annotations, AlphaFold confidence data, structural evidence, "
-            "ortholog/paralog references, and local BLAST searches for antigen construct review."
+            "OpenAntigens combines UniProt annotations, AlphaFold models, PDB mappings, "
+            "ortholog and paralog references, and local BLAST searches to annotate proposed constructs."
         ),
         portal_title=portal_title,
         body_html=f"""
     <section class="card doc-card">
       <h2>Overview</h2>
-      <p>OpenAntigens is generated as a local, versioned computational snapshot. Completed reports combine target identity, topology, extracellular or membrane-protein design scope, structure confidence, experimental structure precedent, domain/family context, ortholog mappings, BLAST searches, disease associations when enabled, and precomputed construct candidates.</p>
-      <p>Reports provide computational evidence for antigen construct design and antibody-discovery planning. Final construct choice still requires biological review, expression testing, and experimental validation.</p>
+      <p>Each release records the results of a local analysis. Reports link proposed construct boundaries to the sequence, annotations, and structural evidence used in that analysis.</p>
+      <p>The methods below describe the current pipeline. Previously generated releases retain the results of the software and reference data used for their build.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Evidence class</th><th>Primary source</th><th>Used for</th></tr></thead>
@@ -1959,7 +1982,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Topology and construct scope</h2>
         <p>Topology controls which design track is used. Secreted proteins use the mature extracellular protein as the soluble design scope. GPI-anchored proteins and single-pass proteins emphasize extracellular regions, with boundaries inferred from curated topology, signal peptide, propeptide, and transmembrane annotations.</p>
-        <p>Multipass proteins are treated separately. When the largest extracellular region exceeds 80 amino acids, OpenAntigens treats the protein as a mixed case with both soluble extracellular-region constructs and full-length membrane-expression context. With shorter extracellular loops, the report emphasizes membrane-protein expression and full-length context.</p>
+        <p>Multipass proteins are treated separately. When an eligible extracellular region has at least 80 amino acids by default, OpenAntigens includes a mixed track with both soluble extracellular-region constructs and full-length membrane-expression context. With shorter extracellular loops, the report emphasizes membrane-protein expression and full-length context.</p>
       </article>
       <article class="card doc-card">
         <h2>Sequence canonicality</h2>
@@ -1981,7 +2004,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>Extracellular accessible residues</h2>
-      <p>Antibody recognition depends most directly on residues that are both extracellular and accessible. OpenAntigens therefore tracks an extracellular accessible residue set and uses it in ortholog identity, paralog/family identity, BLAST summaries, and alignment highlighting.</p>
+      <p>OpenAntigens combines topology and model accessibility to select extracellular residues for comparison. This set is used in ortholog and family identity calculations, BLAST summaries, and alignment highlighting.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Accessibility class</th><th>How it is assigned</th><th>Design interpretation</th></tr></thead>
@@ -1993,20 +2016,20 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
           </tbody>
         </table>
       </div>
-      <p>PAE-block SASA is used because AlphaFold sometimes packs flexible domains or disordered segments against each other even when PAE indicates their relative placement is uncertain. Recomputing accessibility inside the PAE-coherent block reduces false buried calls for residues that may be exposed in solution or on cells.</p>
+      <p>The pipeline also calculates SASA within PAE blocks to inspect residues that may be hidden by uncertain packing between blocks. Recomputing SASA within a block shows how its calculated accessibility changes when other blocks are removed; it does not establish accessibility in solution or on cells.</p>
+      <p>SASA calculations use the target-chain model and selected structural blocks, without partner chains. The pipeline does not reconstruct biological homo-oligomeric assemblies or incorporate their interfaces into boundary selection. A residue exposed in the model may be buried against another subunit, including an identical copy, in the biological assembly.</p>
       <p>The extracellular accessible identity reported in homolog, family, and BLAST sections is calculated only over aligned primary-target residues that are both extracellular and classified as exposed or conditional.</p>
     </section>
 
     <section class="card doc-card">
       <h2>Construct generation</h2>
       <p>The analysis engine scores construct candidates, removes exact duplicate boundaries across calculated and annotated candidate sources (PDB-backed constructs are kept individually as evidence), filters soluble candidates outside the inferred design scope or below the minimum length, and the portal displays the surviving classes in a fixed review order.</p>
-      <p>The dedicated <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a> expands this section with construct classes, diagnostics, card fields, homolog transfer, PTM-aware review, and practical selection guidance.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Construct class</th><th>How it is generated</th><th>Primary use</th></tr></thead>
           <tbody>
-            <tr><td>Full design region</td><td>Uses the inferred mature secreted or extracellular design region after signal peptide/propeptide/topology processing.</td><td>Preserves conformational epitopes and complete soluble context.</td></tr>
-            <tr><td>PDB-backed</td><td>Uses experimental construct boundaries mapped to UniProt numbering, excluding structures fully outside the design scope. Every overlapping structure is retained, even when its boundaries match another construct, and links to its RCSB entry.</td><td>Captures experimentally observed boundaries.</td></tr>
+            <tr><td>Full design region</td><td>Uses the inferred mature secreted or extracellular design region after signal peptide/propeptide/topology processing.</td><td>Provides the full inferred soluble region for comparison with shorter constructs.</td></tr>
+            <tr><td>PDB-backed</td><td>Uses PDB chain coverage mapped to UniProt numbering. Soluble suggestions must fit inside the design region; membrane suggestions are handled separately. Eligible chains retain their PDB links even when boundaries repeat.</td><td>Captures experimentally observed boundaries.</td></tr>
             <tr><td>Domain annotated</td><td>Uses curated UniProt/InterPro domain boundaries that lie fully inside the design scope.</td><td>Captures biologically named domain units.</td></tr>
             <tr><td>Strict calculated</td><td>Uses more conservative pLDDT/PAE segmentation to favor compact single-domain-like units.</td><td>Emphasizes smaller constructs with stronger cohesive-domain support.</td></tr>
             <tr><td>Lenient calculated</td><td>Uses more permissive segmentation to retain larger structured units and multi-domain regions when support is acceptable.</td><td>Captures bigger surfaces and possible conformational epitopes.</td></tr>
@@ -2014,20 +2037,20 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
           </tbody>
         </table>
       </div>
-      <p>The minimum construct size defaults to 50 amino acids. Soluble constructs outside the inferred design scope are excluded. Exact duplicate boundaries from different calculated or annotated sources are collapsed during construct deduplication; PDB-backed constructs are exempt, so every deposited structure is retained as evidence.</p>
-      <p>Strict and lenient calculated constructs come from two AlphaFold segmentation passes: a conservative strict pass that isolates compact, domain-like units, and a permissive lenient pass that preserves larger, sometimes multi-domain regions. Lenient constructs are often larger and more epitope-preserving; strict constructs are smaller and more single-domain-like. The exact pLDDT thresholds, PAE split criteria, and boundary scoring are documented on the <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a>.</p>
+      <p>The minimum construct size defaults to 50 amino acids. Soluble constructs outside the inferred design scope are excluded. Exact duplicate boundaries from different calculated or annotated sources are collapsed during construct deduplication; PDB-backed constructs are exempt from deduplication, but still pass the scope and length filters.</p>
+      <p>The <a class="inline-link" href="constructs.html">Constructs page</a> gives the default pLDDT thresholds, PAE split criteria, and boundary score. These classes describe the algorithm used, not measured expression or binding.</p>
     </section>
 
     <section class="doc-grid">
       <article class="card doc-card">
         <h2>Domain annotations</h2>
         <p>UniProt feature annotations and InterPro records are merged into the residue annotation map. Domain annotations must lie inside the relevant design scope to be used as construct recommendations. Large whole-protein signatures that extend beyond the mature secreted or extracellular region are retained as descriptive context when appropriate. They are excluded from soluble construct recommendations.</p>
-        <p>InterPro is treated as a higher-level curated domain/family source. Pfam entries support domain annotation. Pfam-only family IDs are excluded as canonical family identifiers for precomputed family matrices.</p>
+        <p>InterPro provides integrated domain and family annotations. Pfam entries support domain annotation. Pfam-only family IDs are excluded as canonical family identifiers for precomputed family matrices.</p>
       </article>
       <article class="card doc-card">
         <h2>Family and paralog context</h2>
         <p>Canonical family assignment prefers InterPro family annotations when they are specific and informative. HGNC and Ensembl-derived paralog references are used to recover biologically relevant families when InterPro is incomplete or too broad. If multiple families are available, smaller and more specific families are preferred over large generic families.</p>
-        <p>Large families can be skipped from detailed matrix rendering to keep pages readable. Directional identity matrices are used because X-to-Y identity and Y-to-X identity can differ when one protein is a subregion or short paralog relative to another.</p>
+        <p>Large families can be skipped from detailed matrix rendering to keep pages readable. For each globally aligned pair, directional identity divides the number of identical residues by the length of the row protein's sequence region. Reversing the comparison changes the denominator when the lengths differ.</p>
       </article>
       <article class="card doc-card">
         <h2>Orthologs and homology</h2>
@@ -2037,7 +2060,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Experimental structures</h2>
         <p>PDB/RCSB evidence is mapped back to UniProt residue numbering where possible. Experimental construct boundaries that overlap the design scope are summarized and can become PDB-backed construct suggestions. PDB entries fully outside the mature secreted, extracellular, or relevant membrane-protein scope are ignored for construct recommendation.</p>
-        <p>PDB evidence is treated as design precedent. Exact construct choice still depends on the current antibody-discovery context.</p>
+        <p>Use the linked PDB record to review the mapped chain and original experiment.</p>
       </article>
     </section>
 
@@ -2063,20 +2086,20 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>PTMs and processing features</h2>
         <p>OpenAntigens extracts curated UniProt PTM-like features including glycosylation, modified residues, lipidation, disulfide bonds, cross-links, initiator methionine processing, signal peptides, propeptides, mature chains, peptides, and cleavage-related site annotations.</p>
-        <p>Every target page lists these annotations in a dedicated PTM section. Construct cards list which PTMs overlap each construct, and the Interactive Construct Builder updates the included PTMs in real time as the selected residue window changes. Processing and cleavage annotations raise boundary-review warnings because cutting through or including these sites unintentionally can affect expression and antigen quality.</p>
+        <p>Target pages list available annotations in a PTM section. Construct cards list which PTMs overlap each construct, and the Interactive Construct Builder updates the included PTMs in real time as the selected residue window changes. Processing annotations are included in boundary warnings.</p>
       </article>
       <article class="card doc-card">
         <h2>Cysteine analysis</h2>
-        <p>Cysteines are reported as paired or unpaired when curated disulfide evidence or inferred pairing context is available. Unpaired cysteines inside a construct trigger warnings, especially when they appear accessible or are associated with unwanted disulfides, aggregation, or expression heterogeneity.</p>
+        <p>Model pairing uses cysteine sulfur atoms within 2.4 angstroms. A pair is assigned only when each cysteine has exactly one candidate partner and the choices are reciprocal. Competing contacts are marked ambiguous. Curated UniProt disulfides are shown separately as annotations.</p>
         <p>The Interactive Construct Builder can optionally apply Cys-to-Ser edits to selected unpaired cysteines and updates copied TSV/FASTA sequences in real time.</p>
       </article>
       <article class="card doc-card">
         <h2>Furin-site scanning</h2>
-        <p>Basic furin-like cleavage motifs are scanned across the design region and constructs. The pipeline reports suggested edits as annotations and leaves application to manual review because cleavage risk is context-dependent and some basic motifs may be biologically important.</p>
+        <p>The default scan finds R-X-[K/R]-R motifs, including overlapping matches, in the design region and constructs. The pipeline reports suggested edits as annotations and leaves application to manual review because cleavage risk is context-dependent and some basic motifs may be biologically important.</p>
       </article>
       <article class="card doc-card">
         <h2>Ligand and interaction regions</h2>
-        <p>Curated UniProt features, PDB mappings, and annotation text are used to report ligand-binding or interaction-related regions when available. These annotations help users avoid trimming known functional surfaces that may be needed for conformational antibody discovery.</p>
+        <p>Curated UniProt features, PDB mappings, and annotation text are used to report ligand-binding or interaction-related regions when available. Check these annotations before trimming the sequence.</p>
       </article>
       <article class="card doc-card">
         <h2>Assembly and partner requirements</h2>
@@ -2094,20 +2117,20 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
             </tbody>
           </table>
         </div>
-        <p>This conservative behavior avoids false mandatory-partner calls that would incorrectly discourage soluble antigen designs. Reports can list many known interactions without an obligatory requirement when curated evidence falls short of the stronger mandatory-partner criteria.</p>
+        <p>A listed interaction alone does not produce an obligatory-partner warning. Check the evidence class and source record before deciding whether to include a partner.</p>
       </article>
     </section>
 
     <section class="card doc-card">
       <h2>Disease, literature, and antibody-resource context</h2>
       <p>{disease_methods}</p>
-      <p>PubTator3 is queried for approximate gene-linked PubMed hit counts. These counts support triage and literature awareness. Target validity requires separate curation. CiteAb links are provided as external antibody-resource shortcuts; CiteAb catalog content remains external.</p>
+      <p>PubTator3 is queried for approximate gene-linked PubMed hit counts. The counts help locate literature; they do not grade its quality or validate a target. CiteAb links are provided as external antibody-resource shortcuts; CiteAb catalog content remains external.</p>
     </section>
 
     <section class="card doc-card">
       <h2>Static assets and visualization</h2>
       <p>When assets are generated, each construct can include structure images, pLDDT plots, and PAE plots with the construct region highlighted. Structure renderings use AlphaFold models colored by pLDDT and emphasize cysteines when possible. The portal also includes an Interactive Construct Builder that links sequence selection, structure highlighting, pLDDT, PAE, warnings, and copy-ready sequence outputs.</p>
-      <p>Static image assets support report review. Interactive widgets support boundary tuning and exploratory design.</p>
+      <p>If the interactive builder is unavailable, the precomputed cards still provide sequences and any saved plots.</p>
     </section>
 
     <section class="card doc-card">
@@ -2136,18 +2159,16 @@ def render_downloads_page(
     entries: list[dict[str, Any]],
     *,
     include_disease_context: bool = True,
+    disease_downloads: tuple[str, ...] = (),
     portal_title: str = "OpenAntigens",
 ) -> str:
     total = len(entries)
     ok = sum(1 for item in entries if item.get("status") == "ok")
     errors = sum(1 for item in entries if item.get("status") == "error")
     is_mouse = portal_title == "OpenAntigens Mouse"
-    open_targets_buttons = (
-        """
-          <a class="button" href="open_targets_disease_associations.tsv">Open Targets TSV</a>
-          <a class="button" href="open_targets_disease_associations.json">Open Targets JSON</a>"""
-        if include_disease_context
-        else ""
+    open_targets_buttons = "".join(
+        f'<a class="button" href="open_targets_disease_associations.{suffix}">Open Targets {suffix.upper()}</a>'
+        for suffix in ("tsv", "json") if include_disease_context and suffix in disease_downloads
     )
     disease_schema_row = (
         '<tr><td><code>top_disease_name</code>, <code>top_disease_score</code>, <code>disease_count</code></td><td>Top Open Targets indirect disease association in the index and number of downloaded associations for the target. Per-target report pages also list direct overall scores.</td></tr>'
@@ -2192,7 +2213,7 @@ def render_downloads_page(
 
     <section class="card doc-card">
       <h2>Download contents</h2>
-      <p>Downloads are generated files from the current release snapshot. They can be opened directly from static hosting or local disk.</p>
+      <p>These files contain the current portal index and available release data. Open Targets links appear only when those files are included.</p>
         <ul class="doc-list">
           <li><code>agdesign2_portal_index.tsv</code> is the compact index for spreadsheet and scripting workflows.</li>
           <li><code>agdesign2_portal_index.json</code> contains the same compact index as JSON objects.</li>
@@ -2243,11 +2264,11 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
         <div class="hero-copy">
           <p class="eyebrow">Bench calculator</p>
           <h1>Protein concentration calculator</h1>
-          <p class="hero-text">Convert protein concentration, total quantity, and volume from a required molecular weight. Molecular weight is the only mandatory field; equivalent concentration and quantity values are inferred as soon as one value is provided.</p>
+          <p class="hero-text">Enter the protein's molecular weight, then a concentration or amount to convert between mass and moles. Add a value from a second category, such as volume, to calculate the remaining quantities.</p>
         </div>
         <div class="hero-panel calculator-hero-panel">
           <span>Molecular weight is required.</span>
-          <span>All optional fields update locally in the browser.</span>
+          <span>Calculations run in your browser.</span>
         </div>
       </div>
     </header>
@@ -2263,7 +2284,7 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
           <div class="calculator-row">
             <label for="molecularWeight">
               Molecular weight <span class="required-tag">required</span>
-              <span>The only mandatory input. Enter protein molecular weight; kDa is selected by default.</span>
+              <span>Enter a positive value and check the unit. The default is kDa.</span>
             </label>
             <input id="molecularWeight" data-kind="mw" type="number" min="0" step="any" inputmode="decimal" placeholder="e.g. 50">
             <select id="molecularWeightUnit" aria-label="Molecular weight unit">
@@ -2360,10 +2381,10 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
           <dt>Total volume</dt><dd id="factVolume">-</dd>
         </dl>
         <ul class="doc-list calculator-notes">
-          <li>Molecular weight is the only required field. All other fields are optional source values or calculated values.</li>
+          <li>Enter molecular weight first. Use any two categories to solve the full calculation: concentration, amount, or volume.</li>
           <li>Fields you type into are source values. Automatically filled fields use a pale background.</li>
           <li>Changing a unit converts the displayed value so the underlying amount stays constant.</li>
-          <li>When duplicate source fields are filled, the most recently edited field in each category is used.</li>
+          <li>If you enter both mass and molar values in one category, the latest edit is used. If you supply concentration, amount, and volume, they must agree.</li>
         </ul>
       </aside>
     </section>
@@ -2604,6 +2625,12 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
       resetFacts();
       markUserFields();
 
+      if (Object.values(fields).some((input) => input.validity.badInput || (input.value !== "" && parsePositiveNumber(input) === null))) {
+        updateMessage("<strong>Invalid input.</strong> Enter positive numbers or clear the invalid field.", "error");
+        isProgrammatic = false;
+        return;
+      }
+
       if (mw === null) {
         updateMessage("<strong>Molecular weight is required.</strong> Enter a positive molecular weight before calculating.", "idle");
         isProgrammatic = false;
@@ -2656,6 +2683,15 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
         return;
       }
 
+      if (presentGroups.size === 3) {
+        const expectedMass = base.massConcentration * base.volume / 1000;
+        if (Math.abs(expectedMass - base.massQuantity) > 1e-6 * Math.max(expectedMass, base.massQuantity)) {
+          updateMessage("<strong>Inputs are inconsistent.</strong> Concentration multiplied by volume must equal mass. Correct or clear one of the three source categories.", "error");
+          isProgrammatic = false;
+          return;
+        }
+      }
+
       if (valueIsPresent(base.massConcentration) && valueIsPresent(base.volume) && !valueIsPresent(base.massQuantity)) {
         base.massQuantity = base.massConcentration * base.volume / 1000;
         base.moleQuantity = base.massQuantity / mw;
@@ -2706,14 +2742,13 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
 
       markUserFields();
       updateFacts(base);
-      updateMessage("<strong>Values calculated.</strong> The most recently edited value in each category is used when duplicate source fields are filled.", "ready");
+      updateMessage("<strong>Values calculated.</strong> The latest input in each category is used.", "ready");
       isProgrammatic = false;
     }
 
     function rememberSource(kind) {
       if (!sourceKinds.includes(kind)) return;
-      const value = parsePositiveNumber(fields[kind]);
-      if (value === null) {
+      if (fields[kind].value === "" && !fields[kind].validity.badInput) {
         userSources.delete(kind);
         lastEdited = lastEdited.filter((item) => item !== kind);
       } else {
@@ -2791,8 +2826,8 @@ def render_terms_page(*, portal_title: str = "OpenAntigens") -> str:
         eyebrow="Use conditions",
         heading="Terms for OpenAntigens data and software",
         intro=(
-            "OpenAntigens is a research database and construct-design portal built from public biological resources plus "
-            "OpenAntigens-generated computational annotations. These terms separate the OpenAntigens software, generated "
+            "OpenAntigens combines public biological data with "
+            "OpenAntigens-generated computational annotations. Separate licenses apply to the software, generated "
             "annotations, and third-party source data."
         ),
         portal_title=portal_title,
@@ -2884,12 +2919,12 @@ def render_terms_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card">
       <h2>Limitations and user responsibility</h2>
       <p>Construct recommendations, BLAST sequence similarity rankings, paralog/family matrices, disease associations, pLDDT/PAE interpretation, and cysteine/furin warnings are computational annotations. Independent review, experimental validation, biosafety review, intellectual-property review, and compliance with institutional, funder, journal, clinical, regulatory, and commercial requirements remain the responsibility of the person or organization using the data.</p>
-      <p>OpenAntigens data may be incomplete, stale, or affected by source-database updates, sequence-version changes, isoform differences, species-specific annotation gaps, alignment errors, structure-model uncertainty, and BLAST database composition.</p>
+      <p>Results depend on the source versions, sequence mappings, structural models, and search databases used for the release. Check those records when interpreting an unexpected result.</p>
     </section>
 
     <section class="card doc-card">
       <h2>Corrections, licensing questions, and takedown requests</h2>
-      <p>Responsible creator and contact: Andre A. R. Teixeira, Institute for Protein Innovation, <a class="inline-link" href="mailto:andre.teixeira@proteininnovation.org">andre.teixeira@proteininnovation.org</a>.</p>
+      <p>Contact: Andre A. R. Teixeira, Institute for Protein Innovation, <a class="inline-link" href="mailto:andre.teixeira@proteininnovation.org">andre.teixeira@proteininnovation.org</a>.</p>
       <p>Contact us to report incorrect attribution, problematic redistribution of source data, stale or incorrect annotations, broken links, or data requiring correction or removal.</p>
     </section>
 """,
@@ -3083,7 +3118,7 @@ def portal_index_json(entries: list[dict[str, Any]], *, include_disease_context:
     return json.dumps(_portal_download_rows(entries, include_disease_context=include_disease_context), indent=2) + "\n"
 
 
-def portal_download_manifest(entries: list[dict[str, Any]], *, include_disease_context: bool = True) -> str:
+def portal_download_manifest(entries: list[dict[str, Any]], *, include_disease_context: bool = True, disease_downloads: tuple[str, ...] = ()) -> str:
     statuses: dict[str, int] = {}
     for item in entries:
         status = str(item.get("status") or "unknown")
@@ -3113,18 +3148,12 @@ def portal_download_manifest(entries: list[dict[str, Any]], *, include_disease_c
     }
     if include_disease_context:
         manifest["files"].extend(
-            [
-                {
-                    "path": "open_targets_disease_associations.tsv",
-                    "format": "TSV",
-                    "description": "Flat Open Targets indirect and direct target-disease association scores when precomputed.",
-                },
-                {
-                    "path": "open_targets_disease_associations.json",
-                    "format": "JSON",
-                    "description": "Open Targets target summaries and disease association rows when precomputed.",
-                },
-            ]
+            {
+                "path": f"open_targets_disease_associations.{suffix}",
+                "format": suffix.upper(),
+                "description": "Open Targets target-disease association scores.",
+            }
+            for suffix in ("tsv", "json") if suffix in disease_downloads
         )
     return json.dumps(manifest, indent=2) + "\n"
 
@@ -3168,12 +3197,21 @@ def _write_portal_download_files(
         downloads_dir / "agdesign2_portal_index.json",
         portal_index_json(entries, include_disease_context=include_disease_context),
     )
-    _write_text_atomic(downloads_dir / "download_manifest.json", portal_download_manifest(entries, include_disease_context=include_disease_context))
-    if batch_dir is not None and include_disease_context:
-        for suffix in ("tsv", "json"):
-            source = batch_dir / f"open_targets_disease_associations.{suffix}"
-            if source.exists():
-                shutil.copy2(source, portal_dir / source.name)
+    for suffix in ("tsv", "json"):
+        destination = portal_dir / f"open_targets_disease_associations.{suffix}"
+        source = batch_dir / destination.name if batch_dir is not None else None
+        if include_disease_context and source is not None and source.is_file():
+            shutil.copy2(source, destination)
+        else:
+            destination.unlink(missing_ok=True)
+    _write_text_atomic(downloads_dir / "download_manifest.json", portal_download_manifest(
+        entries, include_disease_context=include_disease_context,
+        disease_downloads=_available_disease_downloads(portal_dir),
+    ))
+
+
+def _available_disease_downloads(root: Path) -> tuple[str, ...]:
+    return tuple(suffix for suffix in ("tsv", "json") if (root / f"open_targets_disease_associations.{suffix}").is_file())
 
 
 def _load_open_targets_index(batch_dir: Path) -> dict[str, dict[str, Any]]:
@@ -3310,7 +3348,7 @@ def _render_obligatory_partner_warning(requirements: list[dict[str, Any]]) -> st
     if summaries:
         evidence_text = f'<p style="max-width:100ch;margin:0;color:#153f48;line-height:1.55;"><strong>Evidence summary:</strong> {escape(summaries[0])}</p>'
     return f"""
-    <section class="partner-warning-card" aria-label="Obligatory protein-complex context" style="margin:0 0 18px;padding:20px 22px;border-radius:22px;border:1px solid rgba(20,120,130,0.28);background:linear-gradient(135deg,rgba(231,249,247,0.96),rgba(240,249,255,0.92)),#eefaf8;box-shadow:0 18px 42px rgba(12,84,94,0.1);">
+    <section class="partner-warning-card" id="obligatory-complex-context" data-report-section="Obligatory complex context" aria-label="Obligatory protein-complex context" style="margin:0 0 18px;padding:20px 22px;border-radius:22px;border:1px solid rgba(20,120,130,0.28);background:linear-gradient(135deg,rgba(231,249,247,0.96),rgba(240,249,255,0.92)),#eefaf8;box-shadow:0 18px 42px rgba(12,84,94,0.1);">
       <div>
         <p class="warning-kicker" style="margin:0 0 10px;color:#0f7a7f;font-size:0.78rem;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;">Complex-aware design note</p>
         <h2 style="margin:0 0 8px;color:#0b4f5a;">Obligatory protein-complex context</h2>
@@ -3662,14 +3700,16 @@ def render_detail_page(
         if membrane_constructs
         else ""
     )
-    membrane_construct_details_html = (
-        f"""
-      <h3>Native Membrane-Expression Constructs</h3>
-      <div class="construct-list">
-        {''.join(_render_construct_card(construct, target=target, batch_dir=batch_dir, page_dir=page_dir, furin_sites=report.get("furin_sites") or [], ptms=ptms, allow_structure_assets=has_matching_alphafold, identity_label=_identity_label(report)) for construct in membrane_constructs)}
-      </div>"""
-        if membrane_constructs
-        else ""
+    construct_details_html = _render_construct_tabs(
+        constructs,
+        design_region_label=design_region_label,
+        target=target,
+        batch_dir=batch_dir,
+        page_dir=page_dir,
+        furin_sites=report.get("furin_sites") or [],
+        ptms=ptms,
+        allow_structure_assets=has_matching_alphafold,
+        identity_label=_identity_label(report),
     )
 
     interpro_rows = "".join(
@@ -3712,7 +3752,7 @@ def render_detail_page(
     advanced_membrane_html = _render_advanced_membrane_suggestions_section(advanced_membrane_suggestions)
     advanced_membrane_section_html = (
         f"""
-    <section class="card">
+    <section class="card" id="membrane-engineering" data-report-section="Membrane Engineering">
       <h2>Membrane Engineering Test Variants</h2>
       {advanced_membrane_html}
     </section>
@@ -3763,7 +3803,7 @@ def render_detail_page(
     disease_rows = _render_open_targets_disease_rows(entry.get("open_targets_diseases") or [])
     disease_section = (
         f"""
-    <section class="card">
+    <section class="card" id="disease-associations" data-report-section="Disease Associations">
       <h2>Open Targets Disease Associations</h2>
       <p class="section-note">Disease associations from Open Targets. The portal index is ranked and searched using the broader indirect score; direct overall scores are shown here for comparison.</p>
       <div class="table-scroll cross-reactivity-scroll">
@@ -3779,7 +3819,7 @@ def render_detail_page(
     )
 
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="report-page">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -3801,7 +3841,7 @@ def render_detail_page(
       </div>
     </header>
 
-    <section class="grid two">
+    <section class="grid two" id="overview" data-report-section="Overview">
       <article class="card">
         <h2>Target</h2>
         <dl class="meta">
@@ -3810,12 +3850,14 @@ def render_detail_page(
           <dt>Organism</dt><dd>{escape(str(target.get('organism') or ''))}</dd>
           <dt>Sequence length</dt><dd>{len(target.get('sequence') or '')} aa</dd>
           {human_source_html}
+          <dt>Sequence analyzed</dt><dd>UniProt canonical{(' (' + escape(str(target['canonical_isoform_id'])) + ')') if target.get('canonical_isoform_id') else ''}</dd>
           {_render_entry_track(entry)}
           {target_aliases_html}
           <dt>Status</dt><dd>{escape(str(entry.get('status') or ''))}</dd>
           <dt>Links</dt><dd>{target_links_html}</dd>
           <dt>PubTator hits</dt><dd>{pubtator_html}</dd>
         </dl>
+        <p class="section-note">Alternative isoforms are not analyzed separately; the coordinates and annotations shown refer to this sequence.</p>
       </article>
       <article class="card">
         <h2>{escape(design_region_label)}</h2>
@@ -3831,12 +3873,13 @@ def render_detail_page(
 
     {obligatory_partner_warning_html}
 
-    <section class="card" id="interactive-construct-builder" tabindex="-1">
+    <section class="card" id="interactive-construct-builder" data-report-section="Construct Builder" tabindex="-1">
       <h2>Construct Builder</h2>
+      <p class="section-note construct-choice-help"><a class="inline-link" href="../constructs.html#choose-constructs" target="_blank" rel="noopener">Don&rsquo;t know how to pick your construct?</a> <span class="muted">(opens in new tab)</span></p>
       {structure_widget}
     </section>
 
-    <section class="card">
+    <section class="card" id="construct-summary" data-report-section="Construct Summary">
       <h2>Precomputed Construct Summary</h2>
       <p class="section-note">These are algorithm-generated starting points. {construct_summary_note}Detailed construct evidence, warnings, ortholog sequences, copy-ready exports, and images are provided in the <a class="inline-link" href="#construct-details">Construct Details</a> section at the end of this page.</p>
       <h3>{escape(soluble_construct_label)}</h3>
@@ -3851,7 +3894,7 @@ def render_detail_page(
 
     {disease_section}
 
-    <section class="card">
+    <section class="card" id="homology" data-report-section="Homology">
       <h2>Homology</h2>
       <table>
         <thead><tr><th>Species</th><th>Entry</th><th>Identity</th><th>Extracellular accessible identity</th><th>Coverage</th><th>Links</th></tr></thead>
@@ -3859,21 +3902,22 @@ def render_detail_page(
       </table>
     </section>
 
-    <section class="card">
+    <section class="card" id="cross-reactivity" data-report-section="Cross-reactivity">
       <h2>Sequence similarity and cross-reactivity context</h2>
       {design_region_cross_html}
       {full_length_cross_html}
     </section>
 
     <section class="stack">
-      <article class="card">
+      <article class="card" id="cysteines" data-report-section="Cysteines">
         <h2>Cysteines</h2>
+        <p class="section-note">Exposure is calculated from the target-chain model and selected structural blocks, without partner chains. A residue exposed here may be buried against another subunit, including an identical copy. Review <a class="inline-link" href="#interactions-assembly">Interactions / Assembly</a> when interpreting exposure.</p>
         <table>
           <thead><tr><th>Residue</th><th>Paired with</th><th>Surface exposed</th><th>Closest unpaired cysteine</th><th>Warning</th></tr></thead>
           <tbody>{cysteine_rows}</tbody>
         </table>
       </article>
-      <article class="card">
+      <article class="card" id="furin-cleavage-sites" data-report-section="Furin Cleavage Sites">
         <h2>Candidate Furin-like Motifs</h2>
         <table>
           <thead><tr><th>Boundary</th><th>Motif</th><th>Suggested edits</th></tr></thead>
@@ -3882,7 +3926,7 @@ def render_detail_page(
       </article>
     </section>
 
-    <section class="card">
+    <section class="card" id="post-translational-modifications" data-report-section="Post-translational Modifications">
       <h2>Post-translational Modifications</h2>
       <p class="section-note">Curated UniProt PTM and molecule-processing annotations. Processing and cleavage annotations should be reviewed before finalizing construct boundaries.</p>
       <div class="table-scroll">
@@ -3894,12 +3938,12 @@ def render_detail_page(
     </section>
 
     <section class="stack">
-      <article class="card">
+      <article class="card" id="family-context" data-report-section="Family Context">
         <h2>Family Context</h2>
         {family_html}
         {full_length_family_html}
       </article>
-      <article class="card">
+      <article class="card" id="interactions-assembly" data-report-section="Interactions / Assembly">
         <h2>Interactions / Assembly</h2>
         {interaction_assembly_html}
       </article>
@@ -3909,7 +3953,7 @@ def render_detail_page(
 
     {gpcr_annotation_html}
 
-    <section class="card">
+    <section class="card" id="interpro-pfam" data-report-section="InterPro / Pfam">
       <h2>InterPro / Pfam</h2>
       <table>
         <thead><tr><th>Start</th><th>End</th><th>Source</th><th>Accession</th><th>Type</th><th>Name</th></tr></thead>
@@ -3917,22 +3961,19 @@ def render_detail_page(
       </table>
     </section>
 
-    <section class="card" id="construct-details">
+    <section class="card" id="construct-details" data-report-section="Construct Details">
       <h2>Construct Details</h2>
-      <h3>{escape(soluble_construct_label)}</h3>
-      <div class="construct-list">
-        {''.join(_render_construct_card(construct, target=target, batch_dir=batch_dir, page_dir=page_dir, furin_sites=report.get("furin_sites") or [], ptms=ptms, allow_structure_assets=has_matching_alphafold, identity_label=_identity_label(report)) for construct in soluble_constructs) if soluble_constructs else f'<p>No soluble {escape(design_region_lower)} constructs available.</p>'}
-      </div>
-      {membrane_construct_details_html}
+      {construct_details_html}
     </section>
 
-    <section class="card">
+    <section class="card" id="notes" data-report-section="Notes">
       <h2>Notes</h2>
       <ul>{note_items}</ul>
     </section>
     {_portal_footer(prefix="../")}
   </main>
   {construct_mutation_script}
+  {_report_section_navigation()}
 </body>
 </html>
 """
@@ -3975,6 +4016,165 @@ def _render_complex_portal_context(complexes: list[dict[str, Any]], lookup: Any)
           <tbody>{rows}</tbody>
         </table>
       </div>"""
+
+
+def _report_section_navigation() -> str:
+    return """
+    <button type="button" class="report-sections-button" popovertarget="report-sections-menu">Sections</button>
+    <div id="report-sections-menu" popover>
+      <nav aria-label="Report sections"></nav>
+    </div>
+    <script type="module">
+    const menu = document.getElementById('report-sections-menu');
+    const sections = Array.from(document.querySelectorAll('[data-report-section]'));
+    function focusHeading(section) {
+      requestAnimationFrame(() => {
+        const heading = section.querySelector('h2');
+        heading.tabIndex = -1;
+        heading.focus({ preventScroll: true });
+      });
+    }
+    function focusHashHeading() {
+      const section = sections.find(section => '#' + section.id === window.location.hash);
+      if (section) focusHeading(section);
+    }
+    const links = sections.map((section) => {
+      const link = document.createElement('a');
+      link.href = '#' + section.id;
+      link.textContent = section.dataset.reportSection;
+      link.addEventListener('click', (event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        menu.hidePopover();
+        focusHeading(section);
+      });
+      menu.querySelector('nav').append(link);
+      return link;
+    });
+    let scheduled = false;
+    function markCurrentSection() {
+      scheduled = false;
+      let current = 0;
+      sections.forEach((section, index) => {
+        if (section.getBoundingClientRect().top <= 32) current = index;
+      });
+      if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2) current = sections.length - 1;
+      links.forEach((link, index) => {
+        if (index === current) link.setAttribute('aria-current', 'location');
+        else link.removeAttribute('aria-current');
+      });
+    }
+    function scheduleCurrentSection() {
+      if (!scheduled) {
+        scheduled = true;
+        requestAnimationFrame(markCurrentSection);
+      }
+    }
+    window.addEventListener('scroll', scheduleCurrentSection, { passive: true });
+    window.addEventListener('resize', scheduleCurrentSection);
+    window.addEventListener('load', scheduleCurrentSection, { once: true });
+    window.addEventListener('load', focusHashHeading, { once: true });
+    window.addEventListener('hashchange', focusHashHeading);
+    menu.addEventListener('toggle', scheduleCurrentSection);
+    scheduleCurrentSection();
+    </script>
+    """
+
+
+def _render_construct_tabs(
+    constructs: list[dict[str, Any]],
+    *,
+    design_region_label: str,
+    target: dict[str, Any],
+    batch_dir: Path,
+    page_dir: Path,
+    furin_sites: list[dict[str, Any]],
+    ptms: list[dict[str, Any]],
+    allow_structure_assets: bool,
+    identity_label: str,
+) -> str:
+    if not constructs:
+        return "<p>No constructs available.</p>"
+    full_label = "Full design region"
+    if design_region_label == "Secreted Region":
+        full_label = "Full secreted region"
+    elif "Extracellular Region" in design_region_label:
+        full_label = "Full ectodomain"
+    labels = [full_label, "PDB", "Annotated domains / repeats", "Strict", "Lenient", "Full-length multipass", "Trimmed multipass"]
+    groups: list[list[dict[str, Any]]] = [[] for _ in labels]
+    for construct in constructs:
+        group = _construct_display_group(construct)[0]
+        if group == 5 and construct.get("name") != "membrane_expression_full_length":
+            group = 6
+        groups[group].append(construct)
+    tabs: list[str] = []
+    panels: list[str] = []
+    for index, (label, group) in enumerate(zip(labels, groups)):
+        if not group:
+            continue
+        selected = not tabs
+        tab_id = f"construct-tab-{index}"
+        panel_id = f"construct-panel-{index}"
+        tabs.append(
+            f'<button type="button" role="tab" id="{tab_id}" aria-controls="{panel_id}" '
+            f'aria-selected="{str(selected).lower()}" tabindex="{0 if selected else -1}">{escape(label)} ({len(group)})</button>'
+        )
+        sections = [("", group)]
+        if index == 1:
+            soluble, membrane = _partition_construct_dicts(group)
+            sections = [("Soluble PDB constructs", soluble), ("Membrane PDB constructs", membrane)]
+        content: list[str] = []
+        if index == 1:
+            content.append('<p class="section-note">These sequences follow mapped PDB boundaries. Check the original study for tags, fusion partners, mutations, ligands and other components of the experimental construct.</p>')
+        for heading, members in sections:
+            if not members:
+                continue
+            if heading:
+                content.append(f"<h3>{heading}</h3>")
+            cards = "".join(
+                _render_construct_card(
+                    construct, target=target, batch_dir=batch_dir, page_dir=page_dir,
+                    furin_sites=furin_sites, ptms=ptms, allow_structure_assets=allow_structure_assets,
+                    identity_label=identity_label,
+                )
+                for construct in members
+            )
+            content.append(f'<div class="construct-list">{cards}</div>')
+        panels.append(
+            f'<div role="tabpanel" id="{panel_id}" aria-labelledby="{tab_id}" tabindex="0"'
+            f'{"" if selected else " hidden"}>{"".join(content)}</div>'
+        )
+    return (
+        '<div class="construct-tabs" role="tablist" aria-label="Construct categories">'
+        + "".join(tabs) + "</div>" + "".join(panels)
+        + """
+        <script type="module">
+        (() => {
+          const section = document.getElementById('construct-details');
+          const tabs = Array.from(section.querySelectorAll('[role="tab"]'));
+          const activate = (active) => tabs.forEach((tab) => {
+            const selected = tab === active;
+            tab.setAttribute('aria-selected', String(selected));
+            tab.tabIndex = selected ? 0 : -1;
+            document.getElementById(tab.getAttribute('aria-controls')).hidden = !selected;
+          });
+          tabs.forEach((tab, index) => {
+            tab.addEventListener('click', () => activate(tab));
+            tab.addEventListener('keydown', (event) => {
+              let next;
+              if (event.key === 'ArrowRight') next = (index + 1) % tabs.length;
+              else if (event.key === 'ArrowLeft') next = (index + tabs.length - 1) % tabs.length;
+              else if (event.key === 'Home') next = 0;
+              else if (event.key === 'End') next = tabs.length - 1;
+              else return;
+              event.preventDefault();
+              activate(tabs[next]);
+              tabs[next].focus();
+            });
+          });
+        })();
+        </script>
+        """
+    )
 
 
 def _render_construct_card(
@@ -4135,6 +4335,7 @@ def _render_construct_card(
             int(finding.get("position"))
             for finding in (construct.get("cysteine_analysis") or [])
             if finding.get("position") is not None and finding.get("paired_with") is None
+            and not str(finding.get("warning") or "").startswith("Ambiguous")
         }
     )
     construct_start = construct.get("start")
@@ -4256,7 +4457,7 @@ def _render_construct_card(
               <textarea class="selection-tsv construct-export-box construct-export-fasta" readonly>{escape(construct_fasta)}</textarea>
             </div>
           </div>
-          <script type="application/json" class="construct-payload">{escape(json.dumps(construct_payload))}</script>
+          <script type="application/json" class="construct-payload">{_js_json(construct_payload)}</script>
         </div>
         <div class="construct-grid">
           <div>
@@ -4425,7 +4626,7 @@ def _construct_mutation_card_script(*, target: dict[str, Any]) -> str:
           try {
             payload = JSON.parse(payloadEl.textContent || '{}');
           } catch (error) {
-            return;
+            throw new Error(`Invalid construct payload: ${error.message}`);
           }
           const controlsEl = card.querySelector('.construct-mutation-controls');
           const tableBody = card.querySelector('.construct-sequence-table-body');
@@ -4505,7 +4706,7 @@ def _construct_mutation_card_script(*, target: dict[str, Any]) -> str:
                       return `
                         <label class="mutation-checkbox">
                           <input type="checkbox" class="construct-furin-mutation-checkbox" data-site-key="${siteKey}" ${activeFurinSites.has(siteKey) ? 'checked' : ''}>
-                          ${site.motif || 'furin site'} ${site.start}-${site.end} (${edits})
+                          ${escapeHtml(site.motif || 'furin site')} ${site.start}-${site.end} (${edits})
                         </label>
                       `;
                     }).join('')}
@@ -4535,7 +4736,9 @@ def _construct_mutation_card_script(*, target: dict[str, Any]) -> str:
           redraw();
         }
 
-        Array.from(document.querySelectorAll('.construct-card')).forEach((card) => renderConstructMutationCard(card));
+        const initializeCards = () => document.querySelectorAll('.construct-card').forEach(renderConstructMutationCard);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeCards, { once: true });
+        else initializeCards();
       })();
     """
     )
@@ -4869,7 +5072,7 @@ def _render_gpcr_annotation_section(annotation: dict[str, Any] | None) -> str:
     if warnings:
         warning_html = "<p class=\"section-note\">" + " ".join(escape(str(item)) for item in warnings) + "</p>"
     return f"""
-    <section class="card">
+    <section class="card" id="gpcr-annotation" data-report-section="GPCR Annotation">
       <h2>GPCR Annotation</h2>
       <p class="section-note">GPCRdb annotations provide receptor-specific segment names and generic numbering. These annotations improve interpretation of membrane constructs but do not imply expression success.</p>
       {warning_html}
@@ -5072,7 +5275,7 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
             """
         )
     return f"""
-    <section class="card">
+    <section class="card" id="gpcr-engineering" data-report-section="GPCR Engineering">
       <h2>GPCR Expression and Stabilization Strategy</h2>
       <p class="section-note">These are experimental GPCR expression/stability strategies for antibody-discovery workflows. They are intentionally separated from native OpenAntigens construct recommendations because loop fusions and partner cassettes can change receptor conformation, signaling state, trafficking, and epitope presentation.</p>
       <h3>Experimental GPCR Engineering Variants</h3>
@@ -5135,6 +5338,8 @@ def _construct_workbench_js() -> str:
     """Return the shared DOM adapter for the integrated construct workbench."""
 
     return r"""
+        let workbenchSelectionRows = [];
+        let renderWorkbenchSpecies = () => {};
         function scheduleConstructWorkbench() {
           if (document.readyState === "loading") {
             document.addEventListener("DOMContentLoaded", installConstructWorkbench, { once: true });
@@ -5162,7 +5367,7 @@ def _construct_workbench_js() -> str:
           header.className = "construct-workbench-header";
           const heading = document.createElement("h2");
           heading.textContent = "Construct Builder";
-          header.append(heading);
+          header.append(heading, builder.querySelector(".construct-choice-help"));
 
           const picker = makeConstructPicker();
           const sequenceMetadata = readSequenceMetadata();
@@ -5321,16 +5526,7 @@ def _construct_workbench_js() -> str:
                 message.textContent = `Enter a valid range from 1 to ${sequenceMetadata.length}.`;
                 return;
               }
-              const startResidue = document.querySelector(`#sequenceViewer .residue[data-resi="${start}"]`);
-              const endResidue = document.querySelector(`#sequenceViewer .residue[data-resi="${end}"]`);
-              if (!startResidue || !endResidue) {
-                message.textContent = "Those residues are not available in the sequence panel.";
-                return;
-              }
-              const eventInit = { bubbles: true, cancelable: true, view: window };
-              startResidue.dispatchEvent(new MouseEvent("mousedown", eventInit));
-              endResidue.dispatchEvent(new MouseEvent("mouseenter", eventInit));
-              document.dispatchEvent(new MouseEvent("mouseup", eventInit));
+              focusRange(start, end, 'Selected range');
               message.textContent = `Applied ${start}-${end}.`;
             });
             editor.append(startLabel, endLabel, apply, message);
@@ -5340,10 +5536,8 @@ def _construct_workbench_js() -> str:
           function makeCompactSpeciesView(boundaryEditor) {
             const compact = document.createElement("div");
             compact.className = "construct-workbench-species";
-            const tableBody = livePanel.querySelector("#selectionTableBody");
             const render = () => {
-              const rows = Array.from(tableBody?.querySelectorAll("tr") || []);
-              const populated = rows.filter((row) => row.querySelectorAll("td").length >= 4 && !row.querySelector("[colspan]"));
+              const populated = workbenchSelectionRows;
               compact.replaceChildren();
               if (!populated.length) {
                 const empty = document.createElement("p");
@@ -5353,8 +5547,7 @@ def _construct_workbench_js() -> str:
                 return;
               }
               populated.forEach((row, index) => {
-                const cells = row.querySelectorAll("td");
-                const sourceSpecies = cells[1].textContent.trim();
+                const sourceSpecies = row.species;
                 const species = ["MACFA", "MACACA_FASCICULARIS"].includes(sourceSpecies.toUpperCase())
                   ? "CYNO. MONKEY"
                   : sourceSpecies;
@@ -5364,9 +5557,9 @@ def _construct_workbench_js() -> str:
                 const label = document.createElement("strong");
                 label.textContent = species;
                 const boundary = document.createElement("span");
-                boundary.textContent = cells[2].textContent.trim();
+                boundary.textContent = row.boundary;
                 const sequence = document.createElement("code");
-                sequence.textContent = cells[3].textContent.trim();
+                sequence.textContent = row.sequence;
                 metadata.append(label, boundary);
                 item.append(metadata, sequence);
                 compact.append(item);
@@ -5381,13 +5574,7 @@ def _construct_workbench_js() -> str:
               });
             };
             render();
-            if (tableBody) {
-              new MutationObserver(render).observe(tableBody, {
-                childList: true,
-                subtree: true,
-                characterData: true,
-              });
-            }
+            renderWorkbenchSpecies = render;
             return compact;
           }
 
@@ -5471,71 +5658,8 @@ def _construct_workbench_js() -> str:
           function installWorkbenchPlddtRenderer(card) {
             const source = card.querySelector("#plddtPlot");
             if (!source) return;
-            const namespace = "http://www.w3.org/2000/svg";
-            const stage = document.createElement("div");
-            stage.className = "construct-workbench-plddt-stage";
-            const visual = document.createElementNS(namespace, "svg");
-            visual.id = "constructWorkbenchPlddtPlot";
-            visual.classList.add("construct-workbench-plddt-renderer");
-            visual.setAttribute("aria-hidden", "true");
-            source.before(stage);
-            source.classList.add("construct-workbench-plddt-input");
-            stage.append(source, visual);
-
-            const traceColors = {
-              "#ff7d45": "#ef653d",
-              "#ffdb13": "#d7ae00",
-              "#65cbf3": "#29a9d6",
-              "#0053d6": "#155bc8",
-            };
-            const bandColors = {
-              "rgba(255,125,69,0.14)": "#fff3ed",
-              "rgba(255,219,19,0.16)": "#fff9dc",
-              "rgba(101,203,243,0.16)": "#edf9fd",
-              "rgba(0,83,214,0.12)": "#edf3ff",
-            };
-            const render = () => {
-              visual.setAttribute("viewBox", source.getAttribute("viewBox") || "0 0 720 240");
-              visual.setAttribute("preserveAspectRatio", "none");
-              visual.setAttribute("shape-rendering", "geometricPrecision");
-              visual.replaceChildren(...Array.from(source.children, (node) => node.cloneNode(true)));
-              visual.querySelector("rect[fill='white']")?.remove();
-              visual.querySelectorAll("rect").forEach((rect) => {
-                const fill = rect.getAttribute("fill") || "";
-                if (bandColors[fill]) {
-                  rect.setAttribute("fill", bandColors[fill]);
-                } else if (fill.includes("0.07)")) {
-                  rect.setAttribute("opacity", "0.7");
-                } else if (rect.getAttribute("stroke") === "#4c956c") {
-                  rect.setAttribute("fill", "#147d7e");
-                  rect.setAttribute("fill-opacity", "0.1");
-                  rect.setAttribute("stroke", "#147d7e");
-                  rect.setAttribute("stroke-width", "1.6");
-                }
-              });
-              visual.querySelectorAll("line").forEach((line) => {
-                const sourceColor = line.getAttribute("stroke") || "";
-                if (line.getAttribute("stroke-width") === "3") {
-                  line.setAttribute("stroke", traceColors[sourceColor] || sourceColor);
-                  line.setAttribute("stroke-width", "2.25");
-                } else if (line.hasAttribute("stroke-dasharray")) {
-                  line.setAttribute("stroke", "#d8e4e9");
-                  line.setAttribute("stroke-width", "0.8");
-                  line.setAttribute("stroke-dasharray", "3 5");
-                } else if (sourceColor === "#bcae99") {
-                  line.setAttribute("stroke", "#9fb2bd");
-                }
-              });
-              visual.querySelectorAll("text").forEach((text) => {
-                const embedded = text.getAttribute("fill") === "white";
-                text.setAttribute("fill", embedded ? "white" : "#5d7180");
-                text.setAttribute("font-size", embedded ? "10" : "16");
-                text.setAttribute("font-weight", text.getAttribute("font-weight") || "650");
-                text.setAttribute("font-family", "Inter, ui-sans-serif, system-ui, sans-serif");
-              });
-            };
-            render();
-            new MutationObserver(render).observe(source, { childList: true });
+            source.setAttribute("preserveAspectRatio", "none");
+            source.setAttribute("shape-rendering", "geometricPrecision");
           }
         }
 """
@@ -5662,6 +5786,7 @@ def _render_structure_widget(
           <button type="button" class="mini-button" id="copySelectionFasta">Copy FASTA</button>
         </div>
       </div>
+      <p class="selection-export-help"><a class="inline-link" href="../constructs.html#after-export" target="_blank" rel="noopener">After export <span class="muted">(opens in new tab)</span></a></p>
       <div id="selectionSummary" class="viewer-info">Select a residue or contiguous range to populate the table.</div>
       <div id="selectionWarnings" class="selection-warnings">
         <p class="viewer-info">Warnings for the selected region will appear here.</p>
@@ -6170,46 +6295,57 @@ def _render_structure_widget(
           if (downloadSelectedPdbButton) downloadSelectedPdbButton.disabled = !hasSelection;
         }}
 
+        let selectionRenderPending = false;
         function renderSelection() {{
-          if (!viewer) return;
-          viewer.setStyle({{}}, {{}});
-          const isolatedResidues = selectedStructureResidues();
-          if (showSelectionOnly && isolatedResidues.length) {{
-            viewer.setStyle({{ resi: isolatedResidues }}, {{ cartoon: {{ colorfunc: alphaFoldColor }} }});
-            applyCysteineStyle(viewer, {{ resi: isolatedResidues }});
-          }} else {{
-            applyBaseStyle(viewer);
-          }}
-          if (selectedRange) {{
-            const structureResidues = structureResiduesForSequenceRange(selectedRange.start, selectedRange.end);
-            viewer.addStyle({{ resi: structureResidues }}, {{
-              cartoon: {{ color: '#4c956c', opacity: 0.95 }},
-              stick: {{ color: '#4c956c', radius: 0.18 }}
-            }});
-          }}
-          if (selectedResidueSet && selectedResidueSet.positions.length) {{
-            const structureResidues = selectedStructureResidues();
-            viewer.addStyle({{ resi: structureResidues }}, {{
-              cartoon: {{ color: '#4c956c', opacity: 0.95 }},
-              stick: {{ color: '#4c956c', radius: 0.18 }}
-            }});
-          }}
-          if (selectedResidue !== null) {{
-            viewer.addStyle({{ resi: [mapSequenceResidueToStructure(selectedResidue)] }}, {{
-              stick: {{ color: '#c1121f', radius: 0.24 }},
-              sphere: {{ color: '#c1121f', radius: 0.42 }}
-            }});
-          }}
-          if (showSelectionOnly && isolatedResidues.length) {{
-            applyCysteineStyle(viewer, {{ resi: isolatedResidues }});
-          }} else {{
-            applyCysteineStyle(viewer);
-          }}
-          viewer.render();
           updateSelectionOnlyControl();
+          renderSelectionTable();
+          if (selectionRenderPending) return;
+          selectionRenderPending = true;
+          requestAnimationFrame(() => {{
+            selectionRenderPending = false;
+            renderSelectionViews();
+          }});
+        }}
+
+        function renderSelectionViews() {{
+          if (viewer) {{
+            viewer.setStyle({{}}, {{}});
+            const isolatedResidues = selectedStructureResidues();
+            if (showSelectionOnly && isolatedResidues.length) {{
+              viewer.setStyle({{ resi: isolatedResidues }}, {{ cartoon: {{ colorfunc: alphaFoldColor }} }});
+              applyCysteineStyle(viewer, {{ resi: isolatedResidues }});
+            }} else {{
+              applyBaseStyle(viewer);
+            }}
+            if (selectedRange) {{
+              const structureResidues = structureResiduesForSequenceRange(selectedRange.start, selectedRange.end);
+              viewer.addStyle({{ resi: structureResidues }}, {{
+                cartoon: {{ color: '#4c956c', opacity: 0.95 }},
+                stick: {{ color: '#4c956c', radius: 0.18 }}
+              }});
+            }}
+            if (selectedResidueSet && selectedResidueSet.positions.length) {{
+              const structureResidues = selectedStructureResidues();
+              viewer.addStyle({{ resi: structureResidues }}, {{
+                cartoon: {{ color: '#4c956c', opacity: 0.95 }},
+                stick: {{ color: '#4c956c', radius: 0.18 }}
+              }});
+            }}
+            if (selectedResidue !== null) {{
+              viewer.addStyle({{ resi: [mapSequenceResidueToStructure(selectedResidue)] }}, {{
+                stick: {{ color: '#c1121f', radius: 0.24 }},
+                sphere: {{ color: '#c1121f', radius: 0.42 }}
+              }});
+            }}
+            if (showSelectionOnly && isolatedResidues.length) {{
+              applyCysteineStyle(viewer, {{ resi: isolatedResidues }});
+            }} else {{
+              applyCysteineStyle(viewer);
+            }}
+            viewer.render();
+          }}
           updateSequenceSelection();
           renderInteractivePlots();
-          renderSelectionTable();
         }}
 
         function setInfo(message) {{
@@ -6217,7 +6353,6 @@ def _render_structure_widget(
         }}
 
         function focusRange(start, end, label) {{
-          if (!viewer) return;
           const rangeStart = Math.min(Number(start), Number(end));
           const rangeEnd = Math.max(Number(start), Number(end));
           const structureResidues = structureResiduesForSequenceRange(rangeStart, rangeEnd);
@@ -6225,23 +6360,20 @@ def _render_structure_widget(
           selectedResidue = null;
           selectedResidueSet = null;
           ensureSelectionVisible(rangeStart, rangeEnd);
+          if (viewer) viewer.zoomTo({{ resi: structureResidues }});
           renderSelection();
-          viewer.zoomTo({{ resi: structureResidues }});
-          viewer.render();
           setInfo(`${{selectedRange.label}}: residues ${{selectedRange.start}}-${{selectedRange.end}}`);
         }}
 
         function selectResidue(resi) {{
-          if (!viewer) return;
           const residueIndex = Number(resi);
           const structureResidue = mapSequenceResidueToStructure(residueIndex);
           selectedResidue = residueIndex;
           selectedRange = null;
           selectedResidueSet = null;
           ensureSelectionVisible(residueIndex, residueIndex);
+          if (viewer) viewer.zoomTo({{ resi: [structureResidue] }});
           renderSelection();
-          viewer.zoomTo({{ resi: [structureResidue] }});
-          viewer.render();
           setInfo(`Residue ${{residueIndex}}: ${{sequence[residueIndex - 1] || '?'}}`);
         }}
 
@@ -6724,6 +6856,7 @@ def _render_structure_widget(
           const cysteines = viewerData.cysteineAnalysis || [];
           return cysteines
             .filter((finding) => Number(finding.position) >= start && Number(finding.position) <= end)
+            .filter((finding) => !String(finding.warning || '').startsWith('Ambiguous'))
             .filter((finding) => finding.paired_with === null || finding.paired_with === undefined || Number(finding.paired_with) < start || Number(finding.paired_with) > end)
             .map((finding) => Number(finding.position))
             .filter((value) => Number.isFinite(value))
@@ -6796,6 +6929,12 @@ def _render_structure_widget(
             .sort((a, b) => Number(a.start) - Number(b.start) || Number(a.end) - Number(b.end));
         }}
 
+        function escapeHtml(value) {{
+          const element = document.createElement('span');
+          element.textContent = String(value ?? '');
+          return element.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+        }}
+
         function renderSelectionTable() {{
           const bounds = selectionBounds();
           if (!bounds) {{
@@ -6804,6 +6943,8 @@ def _render_structure_widget(
             selectionTableBody.innerHTML = '<tr><td colspan="7">No selection yet.</td></tr>';
             selectionTsv.value = '';
             selectionFasta.value = '';
+            workbenchSelectionRows = [];
+            renderWorkbenchSpecies();
             return;
           }}
           if (bounds.nonContiguous) {{
@@ -6812,6 +6953,8 @@ def _render_structure_widget(
             selectionTableBody.innerHTML = '<tr><td colspan="7">Non-contiguous extracellular residues are focused in the 3D viewer; no construct sequence export is generated for this selection.</td></tr>';
             selectionTsv.value = '';
             selectionFasta.value = '';
+            workbenchSelectionRows = [];
+            renderWorkbenchSpecies();
             return;
           }}
           const mutationCandidates = selectionMutationCandidatePositions(bounds.start, bounds.end);
@@ -6878,15 +7021,17 @@ def _render_structure_widget(
               }}),
             }});
           }});
+          workbenchSelectionRows = rows;
+          renderWorkbenchSpecies();
           selectionSummary.textContent = `${{bounds.label}} ready for copy / paste.`;
           selectionTableBody.innerHTML = rows.map((row) => `
             <tr>
-              <td><code>${{row.name}}</code></td>
-              <td>${{row.species}}</td>
-              <td>${{row.boundary}}</td>
-              <td><code class="sequence">${{row.sequence}}</code></td>
-              <td>${{row.identity}}</td>
-              <td>${{row.surfaceIdentity || ''}}</td>
+              <td><code>${{escapeHtml(row.name)}}</code></td>
+              <td>${{escapeHtml(row.species)}}</td>
+              <td>${{escapeHtml(row.boundary)}}</td>
+              <td><code class="sequence">${{escapeHtml(row.sequence)}}</code></td>
+              <td>${{escapeHtml(row.identity)}}</td>
+              <td>${{escapeHtml(row.surfaceIdentity || '')}}</td>
               <td>${{row.links}}</td>
             </tr>
           `).join('');
@@ -6948,7 +7093,7 @@ def _render_structure_widget(
             ? warnings.map((warning) => `
             <div class="selection-warning-block ${{warning.kind}}">
               <strong>${{warning.title}}</strong>
-              <ul>${{warning.items.map((item) => `<li>${{item}}</li>`).join('')}}</ul>
+              <ul>${{warning.items.map((item) => `<li>${{escapeHtml(item)}}</li>`).join('')}}</ul>
             </div>
           `).join('')
             : '<p class="viewer-info">No unpaired-cysteine or furin-site warnings for the current selection.</p>';
@@ -6978,7 +7123,7 @@ def _render_structure_widget(
                     return `
                     <label class="mutation-checkbox">
                       <input type="checkbox" class="selection-furin-mutation-checkbox" data-site-key="${{siteKey}}" ${{selectionFurinMutationSites.has(siteKey) ? 'checked' : ''}}>
-                      ${{site.motif || 'furin site'}} ${{site.start}}-${{site.end}} (${{edits}})
+                      ${{escapeHtml(site.motif || 'furin site')}} ${{site.start}}-${{site.end}} (${{edits}})
                     </label>
                   `;
                   }}).join('')}}
@@ -7018,7 +7163,7 @@ def _render_structure_widget(
           try {{
             payload = JSON.parse(payloadEl.textContent || '{{}}');
           }} catch (error) {{
-            return;
+            throw new Error(`Invalid construct payload: ${{error.message}}`);
           }}
           const controlsEl = card.querySelector('.construct-mutation-controls');
           const tableBody = card.querySelector('.construct-sequence-table-body');
@@ -7057,12 +7202,12 @@ def _render_structure_widget(
             }});
             tableBody.innerHTML = rows.map((row) => `
               <tr>
-                <td><code>${{row.name}}</code></td>
-                <td>${{row.species}}</td>
-                <td>${{row.boundary}}</td>
-                <td><code class="sequence">${{row.sequence}}</code></td>
-                <td>${{row.identity}}</td>
-                <td>${{row.surfaceIdentity}}</td>
+                <td><code>${{escapeHtml(row.name)}}</code></td>
+                <td>${{escapeHtml(row.species)}}</td>
+                <td>${{escapeHtml(row.boundary)}}</td>
+                <td><code class="sequence">${{escapeHtml(row.sequence)}}</code></td>
+                <td>${{escapeHtml(row.identity)}}</td>
+                <td>${{escapeHtml(row.surfaceIdentity)}}</td>
                 <td>${{resourceLinksHtml({{
                   accession: row.accession,
                   entryName: row.entryName,
@@ -7108,7 +7253,7 @@ def _render_structure_widget(
                       return `
                         <label class="mutation-checkbox">
                           <input type="checkbox" class="construct-furin-mutation-checkbox" data-site-key="${{siteKey}}" ${{activeFurinSites.has(siteKey) ? 'checked' : ''}}>
-                          ${{site.motif || 'furin site'}} ${{site.start}}-${{site.end}} (${{edits}})
+                          ${{escapeHtml(site.motif || 'furin site')}} ${{site.start}}-${{site.end}} (${{edits}})
                         </label>
                       `;
                     }}).join('')}}
@@ -7253,6 +7398,7 @@ def _render_structure_widget(
           `;
         }}
 
+        let paeHeatmapCache = null;
         function renderPaePlot() {{
           const ctx = paeCanvas.getContext('2d');
           const matrix = viewerData.paeMatrix || [];
@@ -7267,22 +7413,29 @@ def _render_structure_widget(
           const viewStart = paeView.start;
           const viewEnd = paeView.end;
           const paeWindow = viewLength(paeView);
-          const image = ctx.createImageData(width, height);
-          for (let y = 0; y < height; y += 1) {{
-            const rowResidue = viewStart + (y / Math.max(height - 1, 1)) * Math.max(paeWindow - 1, 1);
-            const row = paeMatrixIndexForResidue(rowResidue, size);
-            for (let x = 0; x < width; x += 1) {{
-              const colResidue = viewStart + (x / Math.max(width - 1, 1)) * Math.max(paeWindow - 1, 1);
-              const col = paeMatrixIndexForResidue(colResidue, size);
-              const value = Number(matrix[row][col]) || 0;
-              const t = Math.max(0, Math.min(1, value / (viewerData.paeMax || 30)));
-              const [r, g, b] = plasmaColor(t);
-              const idx = (y * width + x) * 4;
-              image.data[idx] = r;
-              image.data[idx + 1] = g;
-              image.data[idx + 2] = b;
-              image.data[idx + 3] = 255;
+          const cacheKey = `${{width}}:${{height}}:${{viewStart}}:${{viewEnd}}:${{viewerData.paeMax}}`;
+          let image;
+          if (paeHeatmapCache && paeHeatmapCache.key === cacheKey && paeHeatmapCache.matrix === matrix) {{
+            image = paeHeatmapCache.image;
+          }} else {{
+            image = ctx.createImageData(width, height);
+            for (let y = 0; y < height; y += 1) {{
+              const rowResidue = viewStart + (y / Math.max(height - 1, 1)) * Math.max(paeWindow - 1, 1);
+              const row = paeMatrixIndexForResidue(rowResidue, size);
+              for (let x = 0; x < width; x += 1) {{
+                const colResidue = viewStart + (x / Math.max(width - 1, 1)) * Math.max(paeWindow - 1, 1);
+                const col = paeMatrixIndexForResidue(colResidue, size);
+                const value = Number(matrix[row][col]) || 0;
+                const t = Math.max(0, Math.min(1, value / (viewerData.paeMax || 30)));
+                const [r, g, b] = plasmaColor(t);
+                const idx = (y * width + x) * 4;
+                image.data[idx] = r;
+                image.data[idx + 1] = g;
+                image.data[idx + 2] = b;
+                image.data[idx + 3] = 255;
+              }}
             }}
+            paeHeatmapCache = {{ key: cacheKey, matrix, image }};
           }}
           ctx.putImageData(image, 0, 0);
           const stripWidth = Math.max(10, Math.round(Math.min(width, height) * 0.026));
@@ -7496,15 +7649,13 @@ def _render_structure_widget(
         }});
 
         resetButton.addEventListener('click', () => {{
-          if (!viewer) return;
           selectedResidue = null;
           selectedRange = null;
           selectedResidueSet = null;
           showSelectionOnly = false;
           resetPlotViews();
           renderSelection();
-          viewer.zoomTo();
-          viewer.render();
+          if (viewer) {{ viewer.zoomTo(); viewer.render(); }}
           setInfo('Reset to full-structure view.');
         }});
 
@@ -7580,9 +7731,9 @@ def _render_structure_widget(
           if (paeView) setPlotView('pae', plotDomain.start, plotDomain.end);
         }});
 
-        Array.from(document.querySelectorAll('.construct-card')).forEach((card) => {{
-          renderConstructMutationCard(card);
-        }});
+        const initializeCards = () => document.querySelectorAll('.construct-card').forEach(renderConstructMutationCard);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initializeCards, {{ once: true }});
+        else initializeCards();
         renderTopologyLegend(plotTopologyLegend);
         renderTopologyLegend(paeTopologyLegend);
         updateSelectionOnlyControl();
@@ -7621,6 +7772,7 @@ def _render_structure_widget(
             }});
             viewer.zoomTo();
             viewer.render();
+            renderSelection();
             setInfo('Interactive AlphaFold viewer ready. Click a residue or a construct button.');
           }} catch (error) {{
             setInfo(`Unable to load the AlphaFold structure: ${{error}}`);
@@ -7694,7 +7846,13 @@ def _build_index_entry(
     if not inferred_gene_symbol:
         query_text = str(item.get("query") or "").strip()
         inferred_gene_symbol = query_text.split("_", 1)[0] if "_" in query_text else query_text
-    pubtator_info = _get_pubtator_literature_info(inferred_gene_symbol) if fetch_literature else None
+    pubtator_info = None
+    if fetch_literature:
+        from .module_refresh import _module_refresh_config
+
+        batch_dir = report_json_path.parent if report_json_path else Path("outputs/surfy_batch")
+        cache_dir = _module_refresh_config(batch_dir=batch_dir, verbose=False, enable_complex_portal=False).cache_dir
+        pubtator_info = _get_pubtator_literature_info(inferred_gene_symbol, cache_dir=cache_dir)
     pubtator_count = _pubtator_count_or_existing(pubtator_info, item)
     if report_data is None:
         entry["detail_page"] = None
@@ -7982,7 +8140,12 @@ def _construct_display_group(construct: dict[str, Any]) -> tuple[int, int, int, 
 
 
 def _sorted_constructs_for_display(constructs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return sorted(constructs, key=_construct_display_group)
+    def summary_order(construct: dict[str, Any]) -> tuple[int, int, int, str]:
+        group, *boundary = _construct_display_group(construct)
+        # Match the builder while keeping the Construct Details tab categories unchanged.
+        return ((0, 1, 4, 2, 3, 5)[group], *boundary)
+
+    return sorted(constructs, key=summary_order)
 
 
 def _partition_construct_dicts(constructs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -8828,56 +8991,19 @@ def _build_sequence_structure_mapping(target_sequence: str, pdb_path: Path) -> d
 
 
 def _portal_align_sequences(query: str, subject: str) -> dict[str, str]:
-    cache_key = (query, subject)
-    cached = _PORTAL_ALIGNMENT_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-
-    matcher = SequenceMatcher(a=query, b=subject, autojunk=False)
-    aligned_query_parts: list[str] = []
-    aligned_subject_parts: list[str] = []
-    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
-        query_chunk = query[i1:i2]
-        subject_chunk = subject[j1:j2]
-        if tag == "equal":
-            aligned_query_parts.append(query_chunk)
-            aligned_subject_parts.append(subject_chunk)
-            continue
-        if tag == "delete":
-            aligned_query_parts.append(query_chunk)
-            aligned_subject_parts.append("-" * len(query_chunk))
-            continue
-        if tag == "insert":
-            aligned_query_parts.append("-" * len(subject_chunk))
-            aligned_subject_parts.append(subject_chunk)
-            continue
-
-        if query_chunk and subject_chunk and len(query_chunk) * len(subject_chunk) <= 40000:
-            refined = global_align(query_chunk, subject_chunk)
-            aligned_query_parts.append(refined.aligned_query)
-            aligned_subject_parts.append(refined.aligned_subject)
-            continue
-
-        block_size = max(len(query_chunk), len(subject_chunk))
-        aligned_query_parts.append(query_chunk.ljust(block_size, "-"))
-        aligned_subject_parts.append(subject_chunk.ljust(block_size, "-"))
-
+    alignment = global_align(query, subject)
     result = {
-        "aligned_query": "".join(aligned_query_parts),
-        "aligned_subject": "".join(aligned_subject_parts),
+        "aligned_query": alignment.aligned_query,
+        "aligned_subject": alignment.aligned_subject,
     }
-    _PORTAL_ALIGNMENT_CACHE[cache_key] = result
     return result
 
 
 def _fetch_homolog_target(record: dict[str, Any], *, batch_dir: Path) -> dict[str, Any] | None:
     accession = str(record.get("accession") or "")
     entry_name = str(record.get("entry_name") or "")
-    cache_key = accession or entry_name
-    if not cache_key:
+    if not (accession or entry_name):
         return None
-    if _PORTAL_SEQUENCE_CACHE.get(cache_key) is not None:
-        return _PORTAL_SEQUENCE_CACHE[cache_key]
     if accession.startswith(("NP_", "XP_")):
         result = _fetch_refseq_target(accession, batch_dir=batch_dir)
     else:
@@ -8888,8 +9014,6 @@ def _fetch_homolog_target(record: dict[str, Any], *, batch_dir: Path) -> dict[st
     # (human is the base, never a homolog, in the human portal).
     if result is None and accession:
         result = _fetch_refseq_target_from_ortholog_table(accession, batch_dir=batch_dir)
-    if result is not None:
-        _PORTAL_SEQUENCE_CACHE[cache_key] = result
     return result
 
 
@@ -9144,6 +9268,9 @@ def _construct_workbench_css() -> str:
   font-size: 1.55rem;
   font-weight: 700;
   letter-spacing: -0.025em;
+}
+.construct-workbench-header .construct-choice-help {
+  margin: 6px 0 0;
 }
 .construct-workbench-shell {
   display: grid;
@@ -9401,34 +9528,6 @@ def _construct_workbench_css() -> str:
   background: #fff;
   box-shadow: 0 1px 4px rgba(16, 42, 67, 0.12);
 }
-.construct-workbench-plddt-stage {
-  position: relative;
-  width: 100%;
-  aspect-ratio: 3 / 1;
-  overflow: hidden;
-  background: #fff;
-}
-.construct-workbench-plddt-stage .plot-svg,
-.construct-workbench-plddt-renderer {
-  position: absolute;
-  inset: 0;
-  display: block;
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  margin: 0;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.construct-workbench-plddt-input {
-  z-index: 2;
-  opacity: 0;
-}
-.construct-workbench-plddt-renderer {
-  z-index: 1;
-  pointer-events: none;
-}
 .construct-workbench-evidence .pae-canvas {
   display: block;
   width: 100%;
@@ -9481,7 +9580,7 @@ def _construct_workbench_css() -> str:
 }
 .construct-workbench-current .selection-live-header {
   align-items: center;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   margin-bottom: 6px;
 }
 .construct-workbench-current .selection-live-header .button-row {
@@ -10135,6 +10234,7 @@ body {
 }
 .doc-layout {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 18px;
 }
 .doc-grid,
@@ -10334,6 +10434,66 @@ body {
 }
 .doc-list li + li {
   margin-top: 8px;
+}
+#choose-constructs,
+#after-export,
+#construct-classes,
+#construct-feature-review {
+  scroll-margin-top: 16px;
+}
+.construct-choice-workflow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 28px;
+  list-style: none;
+  margin: 20px 0;
+  padding: 0;
+}
+.construct-choice-workflow li {
+  position: relative;
+  padding: 14px;
+  border: 1px solid #b9dbe4;
+  border-radius: 12px;
+  background: #f0f8fa;
+}
+.construct-choice-workflow strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #0d1f3c;
+}
+.construct-choice-workflow span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.construct-choice-workflow li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: calc(50% - 5px);
+  right: -19px;
+  width: 8px;
+  height: 8px;
+  border-top: 2px solid #007fa3;
+  border-right: 2px solid #007fa3;
+  transform: rotate(45deg);
+}
+.construct-choice-table {
+  table-layout: fixed;
+  overflow-wrap: anywhere;
+}
+.doc-card .construct-choice-more {
+  margin-top: 14px;
+}
+@media (max-width: 760px) {
+  .construct-choice-workflow {
+    grid-template-columns: 1fr;
+  }
+  .construct-choice-workflow li:not(:last-child)::after {
+    top: auto;
+    right: calc(50% - 5px);
+    bottom: -19px;
+    transform: rotate(135deg);
+  }
 }
 .code-block {
   overflow: auto;
@@ -10614,6 +10774,10 @@ th {
 .selection-live-header h3 {
   margin: 0;
 }
+.selection-export-help {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+}
 .selection-table-wrap {
   overflow: auto;
 }
@@ -10775,6 +10939,95 @@ th {
   color: #a61e2e;
 }
 .construct-list { display: grid; gap: 16px; }
+.report-page { scroll-behavior: smooth; }
+[data-report-section] { scroll-margin-top: 16px; }
+.report-sections-button {
+  position: fixed;
+  right: calc(16px + env(safe-area-inset-right));
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 20;
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 1px solid #fff;
+  border-radius: 24px;
+  background: #0D1F3C;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  box-shadow: 0 4px 18px rgba(13, 31, 60, 0.2);
+  cursor: pointer;
+}
+#report-sections-menu {
+  position: fixed;
+  inset: auto calc(16px + env(safe-area-inset-right)) calc(72px + env(safe-area-inset-bottom)) auto;
+  margin: 0;
+  width: min(300px, calc(100vw - 32px - env(safe-area-inset-left) - env(safe-area-inset-right)));
+  max-height: min(70dvh, calc(100dvh - 96px - env(safe-area-inset-bottom)));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fff;
+  color: var(--ink);
+  box-shadow: 0 8px 32px rgba(13, 31, 60, 0.2);
+}
+#report-sections-menu nav { display: grid; gap: 2px; }
+#report-sections-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+#report-sections-menu a:hover,
+#report-sections-menu a[aria-current="location"] { background: #dff7f5; color: #075e5a; }
+.report-sections-button:focus-visible,
+#report-sections-menu a:focus-visible { outline: 2px solid #007FA3; outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .report-page { scroll-behavior: auto; }
+}
+@media print {
+  .report-sections-button, #report-sections-menu { display: none; }
+}
+.construct-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 4px 12px;
+  margin-bottom: 12px;
+}
+.construct-tabs [role="tab"] {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.construct-tabs [aria-selected="true"] {
+  background: #0D1F3C;
+  color: #fff;
+}
+.construct-tabs [role="tab"]:focus-visible {
+  outline: 2px solid #007FA3;
+  outline-offset: 2px;
+}
+#construct-details [role="tabpanel"][hidden] { display: none; }
+#construct-details .construct-list,
+#construct-details .construct-card,
+#construct-details .construct-export-card {
+  grid-template-columns: minmax(0, 1fr);
+}
+#construct-details .construct-copy > h3,
+#construct-details .construct-copy > p,
+#construct-details .construct-grid li {
+  overflow-wrap: anywhere;
+}
 .construct-card {
   display: grid;
   grid-template-columns: 1fr;

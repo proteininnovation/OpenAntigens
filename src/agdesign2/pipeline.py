@@ -53,6 +53,7 @@ from .structure_utils import (
     collect_region_split_diagnostics,
     find_structured_regions,
     load_pae_matrix,
+    pae_matches_sequence_length,
     parse_alphafold_pdb,
     split_domains_from_pae,
     summarize_construct_quality,
@@ -272,8 +273,11 @@ class AntigenAnalyzer:
                     )
                 self._progress("Parsing AlphaFold structure")
                 structure = parse_alphafold_pdb(pdb_path)
-                pae_matrix = load_pae_matrix(pae_path)
-                pae_stats = build_pae_stats(pae_matrix)
+                loaded_pae = load_pae_matrix(pae_path)
+                if not pae_matches_sequence_length(loaded_pae, len(target.sequence)):
+                    raise ValueError("PAE dimensions do not match the target sequence")
+                pae_stats = build_pae_stats(loaded_pae)
+                pae_matrix = loaded_pae
                 if topology.ectodomain:
                     self._progress("Calling structured regions and domains")
                     lenient_structured_regions = find_structured_regions(

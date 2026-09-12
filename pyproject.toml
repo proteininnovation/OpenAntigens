@@ -20,6 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+test = ["httpx>=0.28"]
 performance = [
   "parasail>=1.3",
 ]

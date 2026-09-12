@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import gzip
+import json
 import sys
 import tempfile
 import unittest
@@ -85,7 +86,7 @@ class CanonicalSelectingHttpClient:
             )
             return destination
         if url.endswith("AF-P08195-2-F1-predicted_aligned_error_v6.json"):
-            destination.write_text('{"predicted_aligned_error":[[0.0]]}', encoding="utf-8")
+            destination.write_text(json.dumps({"predicted_aligned_error": [[0.0] * 6 for _ in range(6)]}), encoding="utf-8")
             return destination
         if url.endswith(".pdb"):
             destination.write_text(

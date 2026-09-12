@@ -325,12 +325,12 @@ def build_fresh_snapshot(
             resume=resume and not reanalyze_reports,
             jobs=jobs,
         ),
-        skip_if=None if reanalyze_reports else (lambda: summary_path.exists()),
     )
+    _validate_batch_completion(target_tsv, summary_path)
     if resume:
         run_step(
             "refresh-complex-portal",
-            lambda: refresh_report_modules(summary_path, modules=["complex-portal"], verbose=verbose),
+            lambda: refresh_report_modules(summary_path, modules=["complex-portal"], verbose=verbose, analyzer=analyzer),
         )
     run_step(
         "generate-assets",
@@ -348,6 +348,7 @@ def build_fresh_snapshot(
         lambda: build_open_targets_associations_from_bulk_downloads(
             summary_path,
             output_dir=output_dir,
+            data_dir=data_dir / "open_targets",
             verbose=verbose,
         ),
         skip_if=lambda: (output_dir / "open_targets_disease_associations.tsv").exists(),
@@ -375,12 +376,13 @@ def build_fresh_snapshot(
                 summary_path=summary_path,
                 mouse_output_dir=mouse_output_dir,
                 mouse_public_site_dir=mouse_public_site_dir,
+                resume=resume and not reanalyze_reports,
                 fetch_mouse_alphafold=fetch_mouse_alphafold,
                 af3_catalog=af3_catalog_path,
                 jobs=jobs,
                 verbose=verbose,
             ),
-            skip_if=lambda: resume and (mouse_public_site_dir / "index.html").exists(),
+            skip_if=lambda: resume and not reanalyze_reports and (mouse_public_site_dir / "index.html").exists(),
         )
 
     _write_snapshot_manifest(
@@ -548,6 +550,7 @@ def prepare_deployment_data(
         build_open_targets_associations_from_bulk_downloads(
             summary_file,
             output_dir=output_root,
+            data_dir=analyzer.config.data_dir / "open_targets",
             verbose=verbose,
         )
         completed.append("build-open-targets")
@@ -802,6 +805,7 @@ def _build_mouse_site_for_snapshot(
     summary_path: Path,
     mouse_output_dir: Path,
     mouse_public_site_dir: Path,
+    resume: bool,
     fetch_mouse_alphafold: bool,
     af3_catalog: Path | None,
     jobs: int,
@@ -810,6 +814,7 @@ def _build_mouse_site_for_snapshot(
     result = build_mouse_portal_from_human_orthologs(
         summary_path,
         output_dir=mouse_output_dir,
+        resume=resume,
         build_site=True,
         bundle_vendor_assets=True,
         fetch_mouse_alphafold=fetch_mouse_alphafold,
@@ -887,37 +892,39 @@ def _package_public_site(portal_dir: Path, public_site_dir: Path) -> Path:
     return public_site_dir
 
 
-# --- public_site disk-size reduction for quota-limited static hosts ---
+# --- public_site disk-size reduction for the disk-quota-limited GoDaddy host ---
 #
-# The packaged public_site/ can exceed a static host's storage quota. Store large
-# browser-fetched text assets gzip-compressed on disk (foo.js -> foo.js.gz,
-# original removed) and serve them through the portal .htaccess rewrite
-# (_PORTAL_HTACCESS in portal.py). HTML stays uncompressed by default so clients
-# without gzip support still receive a page.
+# The packaged public_site/ is ~26 GB, over the host's ~25 GB quota. We store the
+# large browser-fetched text assets gzip-compressed under their public filenames.
+# The precompressed portal .htaccess supplies Content-Encoding directly, avoiding
+# the mod_rewrite dependency that failed on the live GoDaddy host in August 2026.
 
 _COMPRESSIBLE_SUFFIXES = (".js", ".css", ".svg")
 _GZIP_LEVEL = 6  # matches the ratio measured on real assets (report .js ~7.5x)
 
 
-def _gzip_file_atomic(src: Path, level: int = _GZIP_LEVEL) -> int:
-    """Write ``src`` as ``src.gz`` atomically, then remove the original.
+def _is_gzip_file(path: Path) -> bool:
+    with path.open("rb") as handle:
+        return handle.read(2) == b"\x1f\x8b"
 
-    Returns the compressed size in bytes. The original is unlinked only after the
-    .gz is fully written and renamed into place, so an interrupted run leaves a
-    recoverable original rather than a truncated asset.
+
+def _gzip_file_atomic(src: Path, level: int = _GZIP_LEVEL) -> int | None:
+    """Replace ``src`` atomically with gzip bytes while retaining its filename.
+
+    Returns the compressed size, or ``None`` when ``src`` is already gzip data.
+    An interrupted write leaves the original intact.
     """
-    dest = src.with_name(src.name + ".gz")
-    tmp = src.with_name(src.name + ".gz.tmp")
+    if _is_gzip_file(src):
+        return None
+    tmp = src.with_name(src.name + ".gzip.tmp")
     try:
         with src.open("rb") as fin, gzip.open(tmp, "wb", compresslevel=level) as fout:
             shutil.copyfileobj(fin, fout, length=1024 * 1024)
-        os.replace(tmp, dest)
+        os.replace(tmp, src)
     finally:
         if tmp.exists():
             tmp.unlink()
-    size = dest.stat().st_size
-    src.unlink()
-    return size
+    return src.stat().st_size
 
 
 def _dir_size(directory: Path) -> int:
@@ -947,18 +954,15 @@ def _strip_open_targets_json_button(downloads_html: Path) -> bool:
 def compress_public_site(
     public_site_dir: Path | str,
     *,
-    gzip_html: bool = False,
     drop_unreferenced_structures: bool = False,
     drop_redundant_downloads: bool = False,
     verbose: bool = False,
 ) -> dict[str, int]:
-    """Shrink a packaged public_site/ for a quota-limited static host.
+    """Shrink a packaged public_site/ to fit the GoDaddy disk quota. Idempotent.
 
-    Gzips browser-fetched text assets (.js/.css/.svg, plus report .html when
-    ``gzip_html``) on disk and removes the originals; the portal .htaccess serves
-    the .gz transparently to gzip clients (every real browser). With ``gzip_html``
-    the directory index files (``index.html``) are left intact so directory
-    requests still resolve.
+    Gzips browser-fetched text assets (.js/.css/.svg) in place, retaining their
+    public filenames. The compressed portal .htaccess supplies the encoding and
+    MIME headers without relying on URL rewriting.
 
     ``drop_unreferenced_structures`` removes ``structures/`` and
     ``mouse/structures/``: the 3D viewer inlines PDB text into each report's JS,
@@ -979,18 +983,14 @@ def compress_public_site(
         )
 
     suffixes = set(_COMPRESSIBLE_SUFFIXES)
-    if gzip_html:
-        suffixes.add(".html")
 
-    # Materialize the target list first so .gz files created mid-walk cannot feed
-    # back into the iteration.
+    # Materialize the target list before replacing files in place.
     targets = [
         path
         for path in public_site_dir.rglob("*")
         if path.suffix in suffixes
         and path.is_file()
         and not path.is_symlink()
-        and not (path.suffix == ".html" and path.name == "index.html")
     ]
 
     summary = {
@@ -1003,6 +1003,8 @@ def compress_public_site(
     for path in targets:
         before = path.stat().st_size
         after = _gzip_file_atomic(path)
+        if after is None:
+            continue
         summary["files_compressed"] += 1
         summary["bytes_before"] += before
         summary["bytes_after"] += after
@@ -1033,7 +1035,7 @@ def compress_public_site(
     htaccess_dirs = {public_site_dir}
     htaccess_dirs.update(path.parent for path in public_site_dir.rglob(".htaccess"))
     for directory in htaccess_dirs:
-        _write_portal_htaccess(directory)
+        _write_portal_htaccess(directory, precompressed=True)
 
     return summary
 
@@ -1102,7 +1104,7 @@ def _write_snapshot_manifest(
         "timings": timings,
         "freshness_policy": {
             "local_inputs_reused": ["surface/secreted protein universe CSV"],
-            "local_caches_reused": [],
+            "local_caches_reused": [str(snapshot_dir / "cache"), str(snapshot_dir / "data")] if resume else [],
             "snapshot_local_cache": str(snapshot_dir / "cache"),
             "snapshot_local_data": str(snapshot_dir / "data"),
             "uniprot_prefetch_mode": uniprot_prefetch_mode,
@@ -1112,10 +1114,29 @@ def _write_snapshot_manifest(
             "af3_catalog": str(af3_catalog) if af3_catalog is not None else None,
             "render_structure_images": render_structure_images,
             "render_quality_plots": render_quality_plots,
-            "notes": "The snapshot command uses clean snapshot-local cache/data directories and rebuilds BLAST databases from downloaded proteomes.",
+            "notes": "Retrieval and enrichment use snapshot-local cache/data directories. Resume reuses those artifacts and validates target completion before packaging.",
         },
     }
     manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+
+def _validate_batch_completion(target_tsv: Path, summary_path: Path) -> None:
+    from collections import Counter
+    from .batch import load_batch_rows
+    from .portal import _resolve_existing_path
+
+    expected = Counter((row.query, row.source_column) for row in load_batch_rows(target_tsv))
+    rows = json.loads(summary_path.read_text())
+    actual = Counter((row.get("query"), row.get("source_column")) for row in rows)
+    if actual != expected:
+        raise ValueError("Batch summary does not account for every requested target")
+    for row in rows:
+        if row.get("status") not in {"ok", "skipped_existing"}:
+            raise ValueError(f"Target {row.get('query')} is incomplete: {row.get('error') or row.get('status')}")
+        report_path = _resolve_existing_path(row.get("json_report"), summary_path.parent)
+        if report_path is None or not report_path.is_file():
+            raise ValueError(f"Completed target has no report: {row.get('query')}")
+        json.loads(report_path.read_text())
 
 
 def _count_tsv_rows(path: Path) -> int:

@@ -196,7 +196,7 @@ class FakeAlphaFoldClient:
             ),
             encoding="utf-8",
         )
-        pae = {"predicted_aligned_error": [[1.0] * 10 for _ in range(10)]}
+        pae = {"predicted_aligned_error": [[1.0] * len(canonical_sequence or "M" * 10) for _ in range(len(canonical_sequence or "M" * 10))]}
         pae_path.write_text(json.dumps(pae), encoding="utf-8")
         return pdb_path, pae_path
 

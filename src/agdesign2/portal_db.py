@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .portal import (
+    _available_disease_downloads,
     _apply_open_targets_to_entry,
     _copy_brand_assets,
     _copy_portal_structure,
@@ -20,6 +21,9 @@ from .portal import (
     _load_open_targets_index,
     _portal_css,
     _render_index_data_js,
+    _render_disease_index_js,
+    _prune_generated_target_files,
+    _version_portal_assets,
     _resolve_existing_path,
     _safe_filename,
     _split_report_viewer_runtime,
@@ -267,6 +271,7 @@ def build_portal_from_database(
     _write_text_atomic(portal_dir / "index.html", index_html)
     _write_text_atomic(portal_dir / "portal-index-data.js", _render_index_data_js(entries))
     _write_text_atomic(portal_dir / "portal-index.js", index_js)
+    _write_text_atomic(portal_dir / "portal-disease-index.js", _render_disease_index_js(entries))
     shared_report_viewer_js = ""
     for entry in entries:
         detail_page = str(entry.get("detail_page") or "")
@@ -293,11 +298,13 @@ def build_portal_from_database(
     _write_text_atomic(portal_dir / "builder.html", render_builder_page())
     _write_text_atomic(portal_dir / "constructs.html", render_constructs_page())
     _write_text_atomic(portal_dir / "methods.html", render_methods_page())
-    _write_text_atomic(portal_dir / "downloads.html", render_downloads_page(entries))
+    _write_text_atomic(portal_dir / "downloads.html", render_downloads_page(entries, disease_downloads=_available_disease_downloads(portal_dir)))
     _write_text_atomic(portal_dir / "calculator.html", render_calculator_page())
     _write_text_atomic(portal_dir / "terms.html", render_terms_page())
     _write_text_atomic(portal_dir / "privacy.html", render_privacy_page())
     _write_text_atomic(portal_dir / "portal_metadata.json", portal_build_metadata(entries))
+    _prune_generated_target_files(portal_dir, entries)
+    _version_portal_assets(portal_dir)
     return portal_dir / "index.html"
 
 
@@ -321,6 +328,13 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    def disease_downloads() -> tuple[str, ...]:
+        with sqlite3.connect(database_path) as conn:
+            paths = {row[0] for row in conn.execute("SELECT path FROM derived_files")}
+        return tuple(suffix for suffix in ("tsv", "json") if
+                     f"open_targets_disease_associations.{suffix}" in paths or
+                     (asset_root / f"open_targets_disease_associations.{suffix}").is_file())
 
     def entries() -> list[dict[str, Any]]:
         return load_index_entries_from_db(database_path)
@@ -357,7 +371,7 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
 
     @app.get("/downloads.html", response_class=HTMLResponse, include_in_schema=False)
     def downloads_page():
-        return HTMLResponse(render_downloads_page(entries()))
+        return HTMLResponse(render_downloads_page(entries(), disease_downloads=disease_downloads()))
 
     @app.get("/calculator.html", response_class=HTMLResponse, include_in_schema=False)
     def calculator_page():
@@ -384,6 +398,10 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
     def portal_index_data():
         return PlainTextResponse(_render_index_data_js(entries()), media_type="application/javascript")
 
+    @app.get("/portal-disease-index.js", response_class=PlainTextResponse, include_in_schema=False)
+    def portal_disease_index():
+        return PlainTextResponse(_render_disease_index_js(entries()), media_type="application/javascript")
+
     @app.get("/api/genes")
     def api_genes():
         return JSONResponse(entries())
@@ -403,7 +421,7 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
 
     @app.get("/downloads/download_manifest.json", response_class=PlainTextResponse, include_in_schema=False)
     def download_manifest():
-        return PlainTextResponse(portal_download_manifest(entries()), media_type="application/json")
+        return PlainTextResponse(portal_download_manifest(entries(), disease_downloads=disease_downloads()), media_type="application/json")
 
     @app.get("/portal_metadata.json", response_class=PlainTextResponse, include_in_schema=False)
     def portal_metadata():
@@ -458,6 +476,10 @@ def _initialize_schema(conn: sqlite3.Connection) -> None:
             detail_page TEXT NOT NULL UNIQUE,
             report_json TEXT NOT NULL
         );
+        CREATE INDEX IF NOT EXISTS entries_name_upper ON entries(UPPER(entry_name));
+        CREATE INDEX IF NOT EXISTS entries_detail_lower ON entries(LOWER(detail_page));
+        CREATE INDEX IF NOT EXISTS reports_name_upper ON reports(UPPER(entry_name));
+        CREATE INDEX IF NOT EXISTS reports_detail_lower ON reports(LOWER(detail_page));
         CREATE TABLE IF NOT EXISTS assets (
             path TEXT PRIMARY KEY,
             kind TEXT NOT NULL,
@@ -596,11 +618,15 @@ def _write_portal_download_files_from_db(portal_dir: Path, db_path: Path, entrie
     downloads_dir.mkdir(parents=True, exist_ok=True)
     _write_text_atomic(downloads_dir / "agdesign2_portal_index.tsv", portal_index_tsv(entries))
     _write_text_atomic(downloads_dir / "agdesign2_portal_index.json", portal_index_json(entries))
-    _write_text_atomic(downloads_dir / "download_manifest.json", portal_download_manifest(entries))
     for name in ("open_targets_disease_associations.tsv", "open_targets_disease_associations.json"):
         derived = load_derived_file_from_db(db_path, name)
         if derived is not None:
             _write_text_atomic(portal_dir / name, derived[1])
+        else:
+            (portal_dir / name).unlink(missing_ok=True)
+    _write_text_atomic(downloads_dir / "download_manifest.json", portal_download_manifest(
+        entries, disease_downloads=_available_disease_downloads(portal_dir),
+    ))
 
 
 def _is_relative_to(path: Path, parent: Path) -> bool:

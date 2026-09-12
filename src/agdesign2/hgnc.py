@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 import json
 from pathlib import Path
 from urllib.parse import quote
@@ -466,13 +465,7 @@ class HGNCClient:
             self._identity_cache[cache_key] = result
             return result
 
-        pair_size = len(row_sequence) * len(col_sequence)
-        if pair_size <= 40000:
-            alignment = global_align(row_sequence, col_sequence)
-            matches = alignment.matches
-        else:
-            matcher = SequenceMatcher(None, row_sequence, col_sequence, autojunk=False)
-            matches = sum(block.size for block in matcher.get_matching_blocks())
+        matches = global_align(row_sequence, col_sequence).matches
 
         row_identity = round(100.0 * matches / len(row_sequence), 2) if row_sequence else None
         col_identity = round(100.0 * matches / len(col_sequence), 2) if col_sequence else None

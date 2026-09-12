@@ -16,13 +16,12 @@ if str(SRC) not in sys.path:
 from agdesign2.batch import BatchRow, load_batch_rows, rebuild_batch_summary_from_tsv, render_batch_summary_markdown, retry_batch_from_tsv, run_batch_from_tsv, write_batch_summary_markdown
 from agdesign2.cache import FileCache
 from agdesign2.config import AnalysisConfig
-from agdesign2.portal import _PORTAL_SEQUENCE_CACHE, _build_sequence_structure_mapping, _construct_group_label, _copy_report_assets, _ensure_vendor_assets, _features_in_region, _format_alignment_block_html, _load_homolog_mappings, _load_viewer_payload, _portal_align_sequences, _public_gpcr_variant, _pubtator_payload_count, _render_construct_card, _render_cross_reactivity_alignment, _render_obligatory_partner_warning, _render_pubtator_link, _render_structure_widget, build_portal, render_detail_page
+from agdesign2.portal import _build_sequence_structure_mapping, _construct_group_label, _copy_report_assets, _ensure_vendor_assets, _features_in_region, _format_alignment_block_html, _load_homolog_mappings, _load_viewer_payload, _portal_align_sequences, _public_gpcr_variant, _pubtator_payload_count, _render_construct_card, _render_cross_reactivity_alignment, _render_obligatory_partner_warning, _render_pubtator_link, _render_structure_widget, build_portal, render_detail_page
 from agdesign2.models import AnalysisReport, AnalysisNote, AssemblyRequirement, BlastHit, ConstructDetail, ConstructSuggestion, CysteineFinding, DomainAnnotation, ExperimentalConstruct, FamilyContext, Feature, FurinSite, HomologyRecord, Region, TargetRecord
 
 
 class PortalHomologMappingTests(unittest.TestCase):
     def test_loads_human_homolog_sequence_from_batch_cache_for_mouse_portal(self) -> None:
-        _PORTAL_SEQUENCE_CACHE.clear()
         with tempfile.TemporaryDirectory() as tmpdir:
             batch_dir = Path(tmpdir) / "mouse_data"
             cache = FileCache(batch_dir / ".agdesign2" / "cache")
@@ -991,6 +990,21 @@ class BatchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "AF3-derived report"):
                 build_portal(summary_path, fetch_literature=False)
 
+    def test_summary_checkpoint_serialization_is_linear(self) -> None:
+        from agdesign2 import batch
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "genes.tsv"
+            source.write_text("uniprot_name\n" + "\n".join(f"TARGET{i}_HUMAN" for i in range(64)))
+            sizes = []
+            def checkpoint(results, **kwargs):
+                sizes.append(sum(item is not None for item in results))
+            with mock.patch.object(batch, "_run_batch_row", return_value={"status": "ok"}), mock.patch.object(batch, "_write_partial_batch_outputs", side_effect=checkpoint):
+                results = run_batch_from_tsv(analyzer=FakeAnalyzer(), tsv_path=source, output_dir=root / "out")
+            self.assertEqual(len(results), 64)
+            self.assertEqual(sizes[-1], 64)
+            self.assertLessEqual(sum(sizes), 3 * len(results))
+
     def test_load_batch_rows_prefers_gene_then_uniprot_name_then_accession(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "targets.tsv"
@@ -1552,7 +1566,7 @@ class BatchTests(unittest.TestCase):
                 apple_touch_icon_exists = (index_path.parent / "apple-touch-icon.png").exists()
                 webmanifest_exists = (index_path.parent / "site.webmanifest").exists()
         self.assertIn("OpenAntigens", index_html)
-        self.assertIn("Structure-guided antigen construct design", index_html)
+        self.assertIn("Antigen construct design", index_html)
         self.assertIn("cell-surface and secreted proteins", index_html)
         self.assertIn("Completed reports", index_html)
         self.assertIn("Secreted", index_html)
@@ -1605,7 +1619,7 @@ class BatchTests(unittest.TestCase):
         self.assertIn("PDB <span class=\"sort-arrow\">↕</span>", index_html)
         self.assertIn("Entry <span class=\"sort-arrow\">↕</span>", index_html)
         self.assertIn("Top disease <span class=\"sort-arrow\">↕</span>", index_html)
-        self.assertIn("Disease-focused filter", index_html)
+        self.assertIn("Filter by disease", index_html)
         self.assertIn("neoplasm", index_data_js)  # top-disease cell stays embedded
         # The disease-name filter haystack moved out of the row payload into a
         # deferred script, merged client-side; the index no longer fetches the
@@ -1760,7 +1774,7 @@ class BatchTests(unittest.TestCase):
         self.assertIn("Troubleshooting", help_html)
         self.assertIn("The Browse page defaults to all rows sorted by PubTator hits from highest to lowest", help_html)
         self.assertIn("structure/pLDDT/PAE panels when compatible local structure assets exist", help_html)
-        self.assertIn("Treat scores as disease-association context", help_html)
+        self.assertIn("Review the underlying evidence before drawing conclusions", help_html)
         self.assertNotIn("structure filters such as", help_html)
         self.assertNotIn("ranked construct sections", help_html)
         self.assertNotIn("Need raw data?", help_html)
@@ -1771,14 +1785,14 @@ class BatchTests(unittest.TestCase):
         self.assertIn("How to interpret pLDDT", builder_html)
         self.assertIn("How to interpret PAE", builder_html)
         self.assertIn("Live Selected Region", builder_html)
-        self.assertIn("Reports with a local AlphaFold model also include", builder_html)
+        self.assertIn("Reports with a compatible local AlphaFold model include", builder_html)
         self.assertIn("Start from the construct classes present in the report", builder_html)
-        self.assertIn("export-ready sequence records", builder_html)
+        self.assertIn("The table reports sequences for the current selection", builder_html)
         self.assertIn("Manual overrides", builder_html)
-        self.assertIn("generates construct candidates from resolved design scope", constructs_html)
-        self.assertIn("when a compatible AlphaFold model and PAE matrix are available", constructs_html)
-        self.assertIn("Every deposited structure is listed individually", constructs_html)
-        self.assertIn("export-ready TSV/FASTA", constructs_html)
+        self.assertIn("proposes boundaries using the target sequence and topology", constructs_html)
+        self.assertIn("Calculated constructs use a compatible AlphaFold model and PAE matrix", constructs_html)
+        self.assertIn("Eligible PDB chains are kept individually", constructs_html)
+        self.assertIn("with TSV/FASTA exports", constructs_html)
         self.assertIn("How OpenAntigens generates portal annotations", methods_html)
         self.assertIn("Evidence class", methods_html)
         self.assertIn("Construct generation", methods_html)
@@ -1793,7 +1807,7 @@ class BatchTests(unittest.TestCase):
         self.assertNotIn("Exact duplicate PDB boundaries", methods_html)
         self.assertIn("Download static release data", downloads_html)
         self.assertIn("OpenAntigens release snapshots include static flat files", downloads_html)
-        self.assertIn("Downloads are generated files from the current release snapshot", downloads_html)
+        self.assertIn("Open Targets links appear only when those files are included", downloads_html)
         self.assertIn("mouse_ortholog_*", downloads_html)
         self.assertIn("human_source_*", downloads_html)
         self.assertIn("Open Targets TSV/JSON files contain downloaded indirect and direct target-disease association scores", downloads_html)
@@ -1804,7 +1818,7 @@ class BatchTests(unittest.TestCase):
         self.assertIn("Protein concentration calculator", calculator_html)
         self.assertIn('id="molecularWeightUnit"', calculator_html)
         self.assertIn('<option value="kDa" selected>kDa</option>', calculator_html)
-        self.assertIn("Molecular weight is the only required field", calculator_html)
+        self.assertIn("Enter molecular weight first", calculator_html)
         self.assertIn("Equivalent value calculated", calculator_html)
         self.assertIn("massConcentrationUnit", calculator_html)
         self.assertIn("molarConcentrationUnit", calculator_html)

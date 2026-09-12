@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import re
 import os
 from pathlib import Path
 from typing import Any
@@ -89,12 +91,23 @@ class HttpClient:
         *,
         headers: dict[str, str] | None = None,
     ) -> Path:
-        if destination.exists():
-            return destination
+        receipt = destination.with_name(destination.name + ".download.json")
+        if destination.exists() and receipt.exists():
+            recorded = json.loads(receipt.read_text())
+            if recorded.get("url") == url and recorded.get("sha256") == hashlib.sha256(destination.read_bytes()).hexdigest():
+                return destination
         destination.parent.mkdir(parents=True, exist_ok=True)
         payload = self._request(url, headers=headers)
-        destination.write_bytes(payload)
+        _atomic_write(destination, payload)
+        _atomic_write(receipt, json.dumps({"url": url, "sha256": hashlib.sha256(payload).hexdigest()}).encode())
         return destination
+
+    def fetch_json_page(self, url: str) -> tuple[Any, str | None]:
+        # Cursor pages are fetched live; caching them can outlive the server cursor.
+        payload, headers = self._request_response(url)
+        value = json.loads(payload)
+        next_link = re.search(r'<([^>]+)>;\s*rel="next"', headers.get("Link", ""))
+        return value, next_link.group(1) if next_link else None
 
     def _cache_path(self, namespace: str, key: str, suffix: str) -> Path | None:
         if not self.cache:
@@ -102,6 +115,9 @@ class HttpClient:
         return self.cache.path_for(namespace, key, suffix)
 
     def _request(self, url: str, *, headers: dict[str, str] | None = None) -> bytes:
+        return self._request_response(url, headers=headers)[0]
+
+    def _request_response(self, url: str, *, headers: dict[str, str] | None = None) -> tuple[bytes, Any]:
         parsed = urlsplit(url)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise ExternalServiceError(f"Unsupported URL: {url}")
@@ -115,7 +131,7 @@ class HttpClient:
         )
         try:
             with urlopen(request, timeout=self.timeout) as response:  # nosec B310
-                return response.read()
+                return response.read(), response.headers
         except HTTPError as exc:
             raise ExternalServiceError(f"HTTP error for {url}: {exc.code}") from exc
         except URLError as exc:

@@ -305,6 +305,7 @@ def _resolve_paralog_target(*, analyzer: AntigenAnalyzer, batch_row, input_index
         target = resolution.target
         features = analyzer.uniprot_client.get_features(resolution.entry)
         topology = derive_ectodomain(features, len(target.sequence), analyzer.config)
+        analyzer._apply_secreted_universe_fallback(target=target, topology=topology, features=features)
         ectodomain = topology.ectodomain
         if ectodomain is None:
             raise ValueError("No ectodomain / designable extracellular region available for paralog analysis.")
@@ -377,6 +378,7 @@ def _resolve_member_by_symbol(
     target = resolution.target
     features = analyzer.uniprot_client.get_features(resolution.entry)
     topology = derive_ectodomain(features, len(target.sequence), analyzer.config)
+    analyzer._apply_secreted_universe_fallback(target=target, topology=topology, features=features)
     ectodomain = topology.ectodomain
     if ectodomain is None:
         member_cache[cache_key] = None

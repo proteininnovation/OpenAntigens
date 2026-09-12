@@ -156,12 +156,16 @@ def pae_matches_sequence_length(pae_matrix: Any, sequence_length: int) -> bool:
 
 def build_pae_stats(pae_matrix: list[list[float]]) -> PaeStats:
     size = len(pae_matrix)
+    if not pae_matches_sequence_length(pae_matrix, size):
+        raise ValueError("PAE must be a nonempty square matrix")
     prefix_sum = [[0.0] * (size + 1) for _ in range(size + 1)]
     diagonal_prefix = [0.0] * (size + 1)
     for row in range(size):
         row_running_sum = 0.0
         for col in range(size):
             value = float(pae_matrix[row][col])
+            if not math.isfinite(value) or value < 0:
+                raise ValueError("PAE values must be finite and nonnegative")
             row_running_sum += value
             prefix_sum[row + 1][col + 1] = prefix_sum[row][col + 1] + row_running_sum
         diagonal_prefix[row + 1] = diagonal_prefix[row] + float(pae_matrix[row][row])
@@ -246,6 +250,7 @@ def analyze_cysteines(
     ]
     findings: list[CysteineFinding] = []
     paired: dict[int, int] = {}
+    candidates: dict[int, list[int]] = {residue: [] for residue in cysteines}
     for i, residue_a in enumerate(cysteines):
         for residue_b in cysteines[i + 1 :]:
             sg_a = atoms.get(residue_a, {}).get("SG")
@@ -253,8 +258,11 @@ def analyze_cysteines(
             if not sg_a or not sg_b:
                 continue
             if _distance(sg_a, sg_b) <= 2.4:
-                paired[residue_a] = residue_b
-                paired[residue_b] = residue_a
+                candidates[residue_a].append(residue_b)
+                candidates[residue_b].append(residue_a)
+    for residue, partners in candidates.items():
+        if len(partners) == 1 and len(candidates[partners[0]]) == 1:
+            paired[residue] = partners[0]
 
     unpaired_cysteines = [residue for residue in cysteines if residue not in paired]
     closest_unpaired = {
@@ -270,7 +278,9 @@ def analyze_cysteines(
             else _is_surface_exposed(residue, atoms)
         )
         warning = None
-        if pair is None and exposed:
+        if pair is None and candidates[residue]:
+            warning = "Ambiguous cysteine pairing: competing sulfur contacts."
+        elif pair is None and exposed:
             warning = "Unpaired cysteine appears surface exposed."
         closest = closest_unpaired.get(residue)
         findings.append(
@@ -541,6 +551,8 @@ def summarize_construct_quality(
             1 for value in plddt_values if value >= config.plddt_structured_threshold
         ) / len(plddt_values)
 
+    if construct_start < 1 or construct_end > len(pae_stats.matrix):
+        raise ValueError("Construct boundaries exceed the PAE matrix")
     pae_start, pae_end = _clip_region_to_pae_bounds(construct_start, construct_end, pae_stats)
     mean_intra_pae = None
     max_intra_pae = None

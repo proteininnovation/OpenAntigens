@@ -46,3 +46,6 @@ tmp_*.tsv
 # Notebook execution noise
 .ipynb_checkpoints/
 notebooks/.agdesign2/
+
+# Local revision documents and correspondence
+manuscript/
