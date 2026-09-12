@@ -100,6 +100,35 @@ class AuditBuildIntegrityTests(unittest.TestCase):
             mocks['run_batch_from_tsv'].assert_called_once()
             mocks['_package_public_site'].assert_not_called()
 
+    def test_reanalysis_rebuilds_existing_mouse_reports_and_portal(self):
+        from types import SimpleNamespace
+
+        for reanalyze in (False, True):
+            with self.subTest(reanalyze=reanalyze), tempfile.TemporaryDirectory() as tmp, ExitStack() as stack:
+                root = Path(tmp)
+                snapshot = root / 'existing'
+                (snapshot / 'inputs').mkdir(parents=True)
+                (snapshot / 'inputs/accessible_targets.tsv').write_text('uniprot_name\nAAA_HUMAN\n')
+                source = snapshot / 'mouse_data/portal'
+                source.mkdir(parents=True)
+                (source / 'index.html').write_text('rebuilt mouse')
+                published = snapshot / 'public_site/mouse'
+                published.mkdir(parents=True)
+                (published / 'index.html').write_text('old mouse')
+                mocks = {}
+                for name in ['AntigenAnalyzer', 'prefetch_targets_from_tsv', 'build_ortholog_table_from_tsv', 'build_family_alignments_from_tsv', 'build_paralog_reference_from_tsv', 'run_batch_from_tsv', '_validate_batch_completion', 'refresh_report_modules', 'generate_assets_for_summary', 'build_open_targets_associations_from_bulk_downloads', 'build_portal', '_package_public_site', '_write_snapshot_manifest']:
+                    mocks[name] = stack.enter_context(patch.object(deployment, name))
+                mouse = stack.enter_context(patch.object(deployment, 'build_mouse_portal_from_human_orthologs', return_value=SimpleNamespace(portal_index_path=source / 'index.html')))
+                deployment.build_fresh_snapshot(snapshot_root=root, snapshot_name='existing', resume=True, reanalyze_reports=reanalyze)
+                self.assertEqual(mocks['run_batch_from_tsv'].call_args.kwargs['resume'], not reanalyze)
+                if reanalyze:
+                    mouse.assert_called_once()
+                    self.assertFalse(mouse.call_args.kwargs['resume'])
+                    self.assertEqual((published / 'index.html').read_text(), 'rebuilt mouse')
+                else:
+                    mouse.assert_not_called()
+                    self.assertEqual((published / 'index.html').read_text(), 'old mouse')
+
     def test_refresh_paths_stay_in_snapshot_before_directories_exist(self):
         with tempfile.TemporaryDirectory() as tmp:
             snapshot = Path(tmp) / 'snapshot'

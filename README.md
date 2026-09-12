@@ -396,3 +396,5 @@ A database paper describing OpenAntigens is in preparation for the *Nucleic Acid
 The OpenAntigens software is released under the [Apache License 2.0](LICENSE). OpenAntigens-generated annotations are released under CC BY 4.0. Third-party source data keep their original licenses, terms of use, and citation requirements. See [DATA_LICENSE.md](DATA_LICENSE.md) for the full terms and recommended attribution.
 
 Report security issues through the process in [SECURITY.md](SECURITY.md).
+
+When rebuilding a saved snapshot after changes to report calculations, `build-fresh-snapshot --resume --reanalyze-reports` reanalyzes both human and mouse reports and rebuilds both portals. Cached inputs and precomputed reference tables are reused; refresh affected reference tables separately when their calculation changes. Work in a separate release directory to preserve the previous snapshot.

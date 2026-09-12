@@ -376,12 +376,13 @@ def build_fresh_snapshot(
                 summary_path=summary_path,
                 mouse_output_dir=mouse_output_dir,
                 mouse_public_site_dir=mouse_public_site_dir,
+                resume=resume and not reanalyze_reports,
                 fetch_mouse_alphafold=fetch_mouse_alphafold,
                 af3_catalog=af3_catalog_path,
                 jobs=jobs,
                 verbose=verbose,
             ),
-            skip_if=lambda: resume and (mouse_public_site_dir / "index.html").exists(),
+            skip_if=lambda: resume and not reanalyze_reports and (mouse_public_site_dir / "index.html").exists(),
         )
 
     _write_snapshot_manifest(
@@ -804,6 +805,7 @@ def _build_mouse_site_for_snapshot(
     summary_path: Path,
     mouse_output_dir: Path,
     mouse_public_site_dir: Path,
+    resume: bool,
     fetch_mouse_alphafold: bool,
     af3_catalog: Path | None,
     jobs: int,
@@ -812,6 +814,7 @@ def _build_mouse_site_for_snapshot(
     result = build_mouse_portal_from_human_orthologs(
         summary_path,
         output_dir=mouse_output_dir,
+        resume=resume,
         build_site=True,
         bundle_vendor_assets=True,
         fetch_mouse_alphafold=fetch_mouse_alphafold,
