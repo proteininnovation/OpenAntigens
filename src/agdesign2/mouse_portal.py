@@ -223,7 +223,7 @@ def build_mouse_portal_from_human_orthologs(
             bundle_vendor_assets=bundle_vendor_assets,
             portal_title="OpenAntigens Mouse",
             portal_subtitle="Mouse orthologs for OpenAntigens human targets.",
-            portal_intro="OpenAntigens Mouse applies the same structure-aware construct pipeline to resolved mouse orthologs of human targets, using compatible mouse AlphaFold structure evidence when available, running mouse BLAST searches, and recording the originating human target on every report.",
+            portal_intro="Review mouse construct boundaries and available structural evidence, then export sequences as FASTA or TSV. Each report records the source human target.",
             theme="mouse",
             include_disease_context=False,
             sibling_link=("OpenAntigens Human", "../index.html"),

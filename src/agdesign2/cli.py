@@ -665,13 +665,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compress_site.add_argument("public_site_dir", help="Path to a packaged public_site/ directory")
     compress_site.add_argument(
-        "--include-html",
-        action="store_true",
-        help="Also gzip report HTML on disk (saves more, but a .gz-only report page "
-        "404s for the rare non-gzip crawler/monitor; directory index.html is always "
-        "left intact). Off by default.",
-    )
-    compress_site.add_argument(
         "--drop-unreferenced-structures",
         action="store_true",
         help="Remove structures/ and mouse/structures/ — the 3D viewer inlines PDB "
@@ -799,7 +792,6 @@ def main() -> None:
     if args.command == "compress-public-site":
         summary = compress_public_site(
             Path(args.public_site_dir),
-            gzip_html=args.include_html,
             drop_unreferenced_structures=args.drop_unreferenced_structures,
             drop_redundant_downloads=args.drop_redundant_downloads,
             verbose=args.verbose,

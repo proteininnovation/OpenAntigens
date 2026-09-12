@@ -10,6 +10,9 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import gzip
+from html.parser import HTMLParser
+from urllib.parse import urlsplit, unquote
 import json
 import shutil
 import sys
@@ -149,6 +152,13 @@ def main() -> int:
     return 0
 
 
+def _read_portal_text(path: Path) -> str:
+    data = path.read_bytes()
+    if data.startswith(b"\x1f\x8b"):
+        data = gzip.decompress(data)
+    return data.decode("utf-8")
+
+
 def validate_portal(portal_dir: Path) -> None:
     if not portal_dir.exists():
         raise ValueError(f"portal directory does not exist: {portal_dir}")
@@ -176,7 +186,7 @@ def validate_portal(portal_dir: Path) -> None:
     missing_pubtator = [
         path.relative_to(portal_dir)
         for path in index_data_paths
-        if "pubtator3/docsum" not in path.read_text(encoding="utf-8")
+        if "pubtator3/docsum" not in _read_portal_text(path)
     ]
     if missing_pubtator:
         raise ValueError(
@@ -197,7 +207,7 @@ def validate_portal(portal_dir: Path) -> None:
         if path.suffix.lower() not in {".css", ".html", ".js", ".json", ".md", ".tsv", ".txt"}:
             continue
         try:
-            content = path.read_text(encoding="utf-8")
+            content = _read_portal_text(path)
         except UnicodeDecodeError:
             continue
         marker = next((value for value in PUBLIC_AF3_MARKERS if value in content), None)
@@ -206,6 +216,7 @@ def validate_portal(portal_dir: Path) -> None:
                 f"portal contains excluded AF3 content ({marker!r}): {path.relative_to(portal_dir)}"
             )
 
+    validate_frontend_assets(portal_dir)
 
 def resolve_release_dir(output_root: Path, release_name: str) -> Path:
     output_root = output_root.resolve()
@@ -213,6 +224,24 @@ def resolve_release_dir(output_root: Path, release_name: str) -> Path:
     if release_dir.parent != output_root:
         raise ValueError("release name must be one directory name")
     return release_dir
+
+
+def validate_frontend_assets(portal_dir: Path) -> None:
+    class AssetParser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            values = dict(attrs)
+            url = values.get("src") if tag == "script" else values.get("href") if tag == "link" and values.get("rel") == "stylesheet" else None
+            if not url:
+                return
+            parsed = urlsplit(url)
+            if parsed.scheme or parsed.netloc:
+                return
+            asset = (portal_dir / unquote(parsed.path).lstrip("/")) if parsed.path.startswith("/") else page.parent / unquote(parsed.path)
+            if not asset.resolve().is_relative_to(portal_dir.resolve()) or not asset.is_file():
+                raise ValueError(f"Missing local frontend asset in {page.relative_to(portal_dir)}: {url}")
+
+    for page in portal_dir.rglob("*.html"):
+        AssetParser().feed(_read_portal_text(page))
 
 
 def copy_public_portal(portal_dir: Path, release_dir: Path) -> None:

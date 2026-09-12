@@ -10,6 +10,7 @@ from time import perf_counter
 from typing import Any
 
 from .config import AnalysisConfig
+from .http import _atomic_write
 from .pipeline import AntigenAnalyzer
 
 
@@ -81,7 +82,9 @@ def run_batch_from_tsv(
                 resume=resume,
             )
             results[index - 1] = result
-            _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
+            if index & (index - 1) == 0:
+                _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
+        _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
         return [item for item in results if item is not None]
 
     config = analyzer.config
@@ -100,6 +103,7 @@ def run_batch_from_tsv(
         else:
             pending_jobs.append((index, row))
 
+    completed = total - len(pending_jobs)
     _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
     try:
         with ProcessPoolExecutor(
@@ -121,11 +125,18 @@ def run_batch_from_tsv(
             for future in as_completed(futures):
                 index = futures[future]
                 results[index - 1] = future.result()
-                _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
+                completed += 1
+                if completed & (completed - 1) == 0:
+                    _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
     except (OSError, PermissionError):
         for index, row in pending_jobs:
+            if results[index - 1] is not None:
+                continue
             results[index - 1] = _run_batch_worker(config, row, index, total, output_root)
-            _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
+            completed += 1
+            if completed & (completed - 1) == 0:
+                _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
+    _write_partial_batch_outputs(results, summary_path=summary_path, dashboard_path=dashboard_path)
     return [item for item in results if item is not None]
 
 
@@ -226,8 +237,8 @@ def _write_partial_batch_outputs(
     dashboard_path: Path,
 ) -> None:
     written = [item for item in results if item is not None]
-    summary_path.write_text(json.dumps(written, indent=2) + "\n", encoding="utf-8")
-    dashboard_path.write_text(render_batch_summary_markdown(written), encoding="utf-8")
+    _atomic_write(summary_path, (json.dumps(written, indent=2) + "\n").encode("utf-8"))
+    _atomic_write(dashboard_path, render_batch_summary_markdown(written).encode("utf-8"))
 
 
 def retry_batch_from_tsv(

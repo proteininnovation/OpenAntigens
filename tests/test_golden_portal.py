@@ -66,7 +66,9 @@ def _render_to(tmp: Path) -> Path:
     # bytes are deterministic across days; otherwise every page's hash changes
     # daily and the manifest comparison is unrunnable after the day it was made.
     prior_build_date = os.environ.get("OPENANTIGEN_BUILD_DATE")
+    prior_alignment_backend = os.environ.get("AGDESIGN2_ALIGNMENT_BACKEND")
     os.environ["OPENANTIGEN_BUILD_DATE"] = "2026-01-01"
+    os.environ["AGDESIGN2_ALIGNMENT_BACKEND"] = "python"
     try:
         # build_portal returns the rendered index.html path, not the directory.
         build_portal(
@@ -89,6 +91,10 @@ def _render_to(tmp: Path) -> Path:
             os.environ.pop("OPENANTIGEN_BUILD_DATE", None)
         else:
             os.environ["OPENANTIGEN_BUILD_DATE"] = prior_build_date
+        if prior_alignment_backend is None:
+            os.environ.pop("AGDESIGN2_ALIGNMENT_BACKEND", None)
+        else:
+            os.environ["AGDESIGN2_ALIGNMENT_BACKEND"] = prior_alignment_backend
     return portal_dir
 
 

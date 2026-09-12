@@ -1,10 +1,4 @@
-"""Tests for the public_site disk-size reduction pass.
-
-Covers the on-disk gzip of browser-fetched assets, idempotency, the HTML opt-in
-(and its directory-index guard), the structures/redundant-downloads pruning, and
-that the portal .htaccess actually carries the precompressed-serving rules the
-pass depends on.
-"""
+"""Tests for the public_site disk-size reduction pass (GoDaddy quota fit)."""
 from __future__ import annotations
 
 import gzip
@@ -12,9 +6,10 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from agdesign2.deployment import compress_public_site
-from agdesign2.portal import _PORTAL_HTACCESS
+from agdesign2.portal import _PORTAL_HTACCESS, _PRECOMPRESSED_PORTAL_HTACCESS
 
 
 def _make_site(root: Path) -> None:
@@ -39,7 +34,7 @@ class CompressPublicSiteTests(unittest.TestCase):
         self.tmp_path = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp_path, ignore_errors=True)
 
-    def test_compresses_js_css_svg_and_removes_originals(self) -> None:
+    def test_compresses_js_css_svg_under_public_filenames(self) -> None:
         site = self.tmp_path / "public_site"
         site.mkdir()
         _make_site(site)
@@ -47,17 +42,16 @@ class CompressPublicSiteTests(unittest.TestCase):
 
         summary = compress_public_site(site)
 
-        # Target assets gzipped, originals removed.
-        assert (site / "report_scripts" / "egfr_human.js.gz").exists()
-        assert not (site / "report_scripts" / "egfr_human.js").exists()
-        assert (site / "portal-index-data.js.gz").exists()
-        assert (site / "styles.css.gz").exists()
-        assert (site / "logo.svg.gz").exists()
-        # The .gz round-trips to the original bytes (single-encoded, intact).
-        assert gzip.decompress((site / "report_scripts" / "egfr_human.js.gz").read_bytes()) == original_js
+        # Public filenames remain stable while their contents become gzip data.
+        report_js = site / "report_scripts" / "egfr_human.js"
+        assert report_js.exists()
+        assert not (site / "report_scripts" / "egfr_human.js.gz").exists()
+        assert (site / "portal-index-data.js").exists()
+        assert (site / "styles.css").exists()
+        assert (site / "logo.svg").exists()
+        assert gzip.decompress(report_js.read_bytes()) == original_js
         # HTML, PNG, the directory index, and JSON metadata are left untouched.
         assert (site / "reports" / "egfr_human.html").exists()
-        assert not (site / "reports" / "egfr_human.html.gz").exists()
         assert (site / "report_assets" / "egfr.png").exists()
         assert (site / "index.html").exists()
         assert (site / "portal_metadata.json").exists()
@@ -73,25 +67,21 @@ class CompressPublicSiteTests(unittest.TestCase):
         assert first["files_compressed"] == 4
         second = compress_public_site(site)
         assert second["files_compressed"] == 0
-        # No double-compression on a re-run.
-        assert not (site / "report_scripts" / "egfr_human.js.gz.gz").exists()
+        assert gzip.decompress((site / "report_scripts" / "egfr_human.js").read_bytes()).startswith(b"const PDB")
 
-    def test_include_html_gzips_reports_but_not_directory_index(self) -> None:
+    def test_interrupted_compression_preserves_original(self) -> None:
         site = self.tmp_path / "public_site"
         site.mkdir()
         _make_site(site)
-        (site / "mouse").mkdir()
-        (site / "mouse" / "index.html").write_text("<html>mouse index</html>", encoding="utf-8")
+        path = site / "styles.css"
+        original = path.read_bytes()
 
-        compress_public_site(site, gzip_html=True)
+        with patch("agdesign2.deployment.shutil.copyfileobj", side_effect=OSError("stopped")):
+            with self.assertRaises(OSError):
+                compress_public_site(site)
 
-        assert (site / "reports" / "egfr_human.html.gz").exists()
-        assert not (site / "reports" / "egfr_human.html").exists()
-        # Directory index files stay intact so directory requests still resolve.
-        assert (site / "index.html").exists()
-        assert not (site / "index.html.gz").exists()
-        assert (site / "mouse" / "index.html").exists()
-        assert not (site / "mouse" / "index.html.gz").exists()
+        assert path.read_bytes() == original
+        assert not path.with_name(path.name + ".gzip.tmp").exists()
 
     def test_drop_unreferenced_structures(self) -> None:
         site = self.tmp_path / "public_site"
@@ -151,7 +141,8 @@ class CompressPublicSiteTests(unittest.TestCase):
 
         for htaccess in (site / ".htaccess", mouse / ".htaccess"):
             text = htaccess.read_text(encoding="utf-8")
-            assert "RewriteRule ^(.+\\.(?:js|css|svg))$ $1.gz [L]" in text
+            assert "RewriteRule" not in text
+            assert '<FilesMatch "\\.js$">' in text
             assert "Header set Content-Encoding gzip" in text
 
     def test_requires_packaged_public_site(self) -> None:
@@ -160,20 +151,18 @@ class CompressPublicSiteTests(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             compress_public_site(empty)
 
-    def test_htaccess_serves_precompressed_assets(self) -> None:
-        h = _PORTAL_HTACCESS
-        # Transparent rewrite to .gz for gzip-capable clients.
-        assert "RewriteCond %{HTTP:Accept-Encoding} gzip" in h
-        assert "RewriteCond %{REQUEST_FILENAME}.gz -f" in h
-        assert "RewriteRule ^(.+\\.(?:js|css|svg))$ $1.gz [L]" in h
-        # Correct headers on the precompressed files.
+    def test_plain_and_precompressed_htaccess_are_separate(self) -> None:
+        assert "Content-Encoding gzip" not in _PORTAL_HTACCESS
+        assert "RewriteRule" not in _PORTAL_HTACCESS
+
+        h = _PRECOMPRESSED_PORTAL_HTACCESS
+        assert "RewriteRule" not in h
+        assert '<FilesMatch "\\.js$">' in h
+        assert '<FilesMatch "\\.css$">' in h
+        assert '<FilesMatch "\\.svg$">' in h
         assert "Header set Content-Encoding gzip" in h
         assert "Header append Vary Accept-Encoding" in h
-        # Never let mod_deflate double-encode an already-gzipped file.
         assert "SetEnv no-gzip 1" in h
-        # Still <IfModule>-guarded so a missing module no-ops instead of erroring.
-        assert "<IfModule mod_rewrite.c>" in h
-        assert "<IfModule mod_headers.c>" in h
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import gzip
 import tempfile
 import unittest
 from pathlib import Path
@@ -110,6 +111,19 @@ class PublicReleaseTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
+            with self.assertRaisesRegex(ValueError, "excluded AF3 content"):
+                validate_portal(portal_dir)
+
+    def test_compressed_assets_preserve_public_release_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            portal_dir = Path(tmpdir) / "portal"
+            _write_minimal_portal(portal_dir)
+            index = portal_dir / "portal-index-data.js"
+            index.write_bytes(gzip.compress(index.read_bytes()))
+            validate_portal(portal_dir)
+            script = portal_dir / "report_scripts" / "target.js"
+            script.parent.mkdir(exist_ok=True)
+            script.write_bytes(gzip.compress(b'const source = "AlphaFold 3";'))
             with self.assertRaisesRegex(ValueError, "excluded AF3 content"):
                 validate_portal(portal_dir)
 

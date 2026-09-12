@@ -198,7 +198,12 @@ def _alignment_from_strings(query_text: str, subject_text: str, *, query_length:
 
 def find_furin_sites(sequence: str, pattern: str) -> list[tuple[int, int, str]]:
     matches: list[tuple[int, int, str]] = []
-    for match in re.finditer(pattern, sequence):
+    expression = re.compile(pattern)
+    position = 0
+    while (match := expression.search(sequence, position)) is not None:
+        if match.end() == match.start():
+            raise ValueError("Motif patterns must not match an empty sequence")
+        position = match.start() + 1
         start = match.start() + 1
         end = match.end()
         matches.append((start, end, match.group(0)))

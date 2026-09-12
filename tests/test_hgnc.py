@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sys
+import os
+from unittest import mock
+import json
 import unittest
 from pathlib import Path
 
@@ -235,6 +238,17 @@ class HGNCTests(unittest.TestCase):
         self.assertEqual(lookup.predictions["mouse"].ncbi_gene_id, "13649")
         self.assertEqual(lookup.predictions["macaca_fascicularis"].gene_symbol, "EGFR")
         self.assertEqual(lookup.predictions["macaca_fascicularis"].ncbi_gene_id, "613027")
+
+    @mock.patch.dict(os.environ, {"AGDESIGN2_ALIGNMENT_BACKEND": "python"})
+    def test_long_sequence_identity_uses_global_alignment_in_both_orders(self) -> None:
+        fixture = json.loads((Path(__file__).parent / "fixtures/ptprc_mapping.json").read_text())
+        query, subject = fixture["human_sequence"], fixture["mouse_sequence"]
+        client = HGNCClient(FakeHttpClient(), FakeUniProtClient(), AnalysisConfig())
+        forward = client._pairwise_directional_identity(query, subject)
+        self.assertEqual(forward, (42.57, 43.44))
+        client._identity_cache.clear()
+        reverse = client._pairwise_directional_identity(subject, query)
+        self.assertEqual(reverse, forward[::-1])
 
     def test_identity_matrix_is_directional_for_contained_ectodomains(self) -> None:
         client = HGNCClient(FakeHttpClient(), FakeUniProtClient(), AnalysisConfig())

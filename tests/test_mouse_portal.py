@@ -274,7 +274,7 @@ class MousePortalTests(unittest.TestCase):
             self.assertIn("OpenAntigens Human", index_html)
             self.assertIn('href="../../index.html"', detail_html)
             self.assertIn("--accent: #bd4d61", (result.portal_index_path.parent / "portal.css").read_text(encoding="utf-8"))
-            self.assertNotIn("Disease-focused filter", index_html)
+            self.assertNotIn("Filter by disease", index_html)
             self.assertNotIn("Top disease", index_html)
             self.assertNotIn("Open Targets Disease Associations", detail_html)
             self.assertIn("EGFR_MOUSE_1-8", detail_html)

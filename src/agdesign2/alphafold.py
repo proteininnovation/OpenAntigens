@@ -6,8 +6,8 @@ from pathlib import Path
 
 from .config import AnalysisConfig
 from .exceptions import ExternalServiceError
-from .http import HttpClient
-from .structure_utils import parse_alphafold_pdb
+from .http import HttpClient, _atomic_write
+from .structure_utils import parse_alphafold_pdb, load_pae_matrix, pae_matches_sequence_length
 from .af3 import find_local_af3_artifacts
 
 
@@ -116,9 +116,32 @@ class AlphaFoldClient:
         ):
             pdb_path.unlink(missing_ok=True)
             pae_path.unlink(missing_ok=True)
-        self._download_first_available(self._candidate_pdb_urls(accession, metadata, selected_model), pdb_path)
-        self._download_first_available(self._candidate_pae_urls(accession, metadata, selected_model), pae_path)
+        pdb_urls = self._candidate_pdb_urls(accession, metadata, selected_model)
+        pae_urls = self._candidate_pae_urls(accession, metadata, selected_model)
+        if selected_model is not None:
+            self._download_first_available(pdb_urls, pdb_path)
+            self._download_first_available(pae_urls, pae_path)
+        elif not (pdb_path.exists() and pae_path.exists()):
+            errors = []
+            for version in ("v6", "v4"):
+                pdb_path.unlink(missing_ok=True)
+                pae_path.unlink(missing_ok=True)
+                try:
+                    self._download_first_available([url for url in pdb_urls if f"model_{version}." in url], pdb_path)
+                    self._download_first_available([url for url in pae_urls if f"error_{version}." in url], pae_path)
+                    break
+                except ExternalServiceError as exc:
+                    errors.append(str(exc))
+            else:
+                pdb_path.unlink(missing_ok=True)
+                pae_path.unlink(missing_ok=True)
+                raise ExternalServiceError("No complete AlphaFold PDB/PAE version: " + " | ".join(errors))
         self._validate_downloaded_model(pdb_path, canonical_sequence)
+        length = len(canonical_sequence) if canonical_sequence else len(parse_alphafold_pdb(pdb_path)["residue_names"])
+        if not pae_matches_sequence_length(load_pae_matrix(pae_path), length):
+            pae_path.unlink(missing_ok=True)
+            meta_path.unlink(missing_ok=True)
+            raise ExternalServiceError("AlphaFold PAE dimensions do not match the structure sequence")
         self._write_metadata_sidecar(
             meta_path,
             selected_model=selected_model,
@@ -166,6 +189,8 @@ class AlphaFoldClient:
                     value = model.get(key)
                     if isinstance(value, str) and value.strip():
                         urls.append(value.strip())
+        if selected_model is not None:
+            return _dedupe(urls)
         for host in self.METADATA_HOSTS:
             urls.append(f"{host}/files/AF-{accession}-F1-model_v6.pdb")
             urls.append(f"{host}/files/AF-{accession}-F1-model_v6.pdb.gz")
@@ -186,6 +211,8 @@ class AlphaFoldClient:
                     value = model.get(key)
                     if isinstance(value, str) and value.strip():
                         urls.append(value.strip())
+        if selected_model is not None:
+            return _dedupe(urls)
         for host in self.METADATA_HOSTS:
             urls.append(f"{host}/files/AF-{accession}-F1-predicted_aligned_error_v6.json")
             urls.append(f"{host}/files/AF-{accession}-F1-predicted_aligned_error_v6.json.gz")
@@ -255,7 +282,7 @@ class AlphaFoldClient:
             self.http.download(url, temp_path)
             destination.parent.mkdir(parents=True, exist_ok=True)
             with gzip.open(temp_path, "rb") as handle:
-                destination.write_bytes(handle.read())
+                _atomic_write(destination, handle.read())
             temp_path.unlink(missing_ok=True)
             return destination
         return self.http.download(url, destination)
@@ -290,6 +317,8 @@ class AlphaFoldClient:
         except Exception:
             return False
         selected_model_id = str((selected_model or {}).get("modelEntityId") or (selected_model or {}).get("entryId") or "")
+        if cached.get("artifact_validation_version") != 1:
+            return False
         if cached.get("model_entity_id") != selected_model_id:
             return False
         if (canonical_sequence or "") != str(cached.get("canonical_sequence") or ""):
@@ -305,6 +334,7 @@ class AlphaFoldClient:
         canonical_isoform_id: str | None,
     ) -> None:
         payload = {
+            "artifact_validation_version": 1,
             "model_entity_id": (selected_model or {}).get("modelEntityId") or (selected_model or {}).get("entryId"),
             "model_uniprot_accession": (selected_model or {}).get("uniprotAccession"),
             "canonical_isoform_id": canonical_isoform_id,

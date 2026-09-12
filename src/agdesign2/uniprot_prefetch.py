@@ -87,33 +87,28 @@ def _prefetch_taxon(
     page_size: int,
     max_pages: int | None,
 ) -> dict[str, int]:
-    offset = 0
-    pages = 0
-    entries = 0
-    written_entry_cache = 0
-    current_page_size = max(25, page_size)
-    while True:
-        if max_pages is not None and pages >= max_pages:
-            break
-        query = f"(organism_id:{taxon_id}) AND (reviewed:true)"
-        url = (
-            f"{UNIPROT_SEARCH_BASE}?query={quote(query)}&format=json&size={current_page_size}"
-            f"&offset={offset}"
-        )
+    pages = entries = written_entry_cache = 0
+    query = f"(organism_id:{taxon_id}) AND (reviewed:true)"
+    url = f"{UNIPROT_SEARCH_BASE}?query={quote(query)}&format=json&size={min(500, max(25, page_size))}"
+    seen_urls: set[str] = set()
+    seen_accessions: set[str] = set()
+    while url and (max_pages is None or pages < max_pages):
+        if url in seen_urls:
+            raise ValueError("UniProt returned a repeated pagination URL")
+        seen_urls.add(url)
         payload = _fetch_page_with_retry(
-            http=http,
-            url=url,
-            cache_namespace="uniprot_search_bulk",
-            cache_key=url,
+            http=http, url=url, cache_namespace="uniprot_search_bulk", cache_key=url, pagination=True,
         )
         results = payload.get("results", [])
-        if not results:
-            break
+        accessions = {entry["primaryAccession"] for entry in results}
+        if accessions & seen_accessions:
+            raise ValueError("UniProt repeated entries across pagination pages")
+        seen_accessions.update(accessions)
         pages += 1
         for entry in results:
             entries += 1
             written_entry_cache += _cache_entry(cache, entry)
-        offset += current_page_size
+        url = payload.get("_next_url")
     return {
         "pages": pages,
         "entries": entries,
@@ -174,15 +169,17 @@ def _fetch_page_with_retry(
     cache_namespace: str,
     cache_key: str,
     attempts: int = 4,
+    pagination: bool = False,
 ) -> dict[str, object]:
     last_error: Exception | None = None
     for _ in range(attempts):
         try:
-            payload = http.fetch_json(
-                url,
-                cache_namespace=cache_namespace,
-                cache_key=cache_key,
-            )
+            if pagination:
+                payload, next_url = http.fetch_json_page(url)
+                if isinstance(payload, dict):
+                    payload = {**payload, "_next_url": next_url}
+            else:
+                payload = http.fetch_json(url, cache_namespace=cache_namespace, cache_key=cache_key)
             if isinstance(payload, dict):
                 return payload
             raise TypeError(f"UniProt returned {type(payload).__name__}, expected a JSON object")

@@ -172,6 +172,34 @@ class OrthologTableTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
 
+    def test_interrupted_rows_resume_without_rewriting_prefixes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "genes.tsv"
+            source.write_text("uniprot_name\tgene\nEGFR_HUMAN\tEGFR\nERBB2_HUMAN\tERBB2\n")
+            output = root / "orthologs.tsv"
+            original = ortholog_table_module._build_table_row
+
+            def interrupted(**kwargs):
+                if kwargs["input_index"] == 2:
+                    raise KeyboardInterrupt()
+                return original(**kwargs)
+
+            with mock.patch.object(ortholog_table_module, "_build_table_row", side_effect=interrupted):
+                with self.assertRaises(KeyboardInterrupt):
+                    build_ortholog_table_from_tsv(analyzer=FakeAnalyzer(), tsv_path=source, output_path=output)
+            self.assertTrue((root / "orthologs.checkpoints/1.json").is_file())
+            analyzer = FakeAnalyzer()
+            with mock.patch.object(ortholog_table_module, "_write_outputs", wraps=ortholog_table_module._write_outputs) as writer:
+                _, _, rows = build_ortholog_table_from_tsv(analyzer=analyzer, tsv_path=source, output_path=output)
+            self.assertEqual(analyzer.uniprot_client.calls, ["ERBB2_HUMAN"])
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(writer.call_count, 1)
+            self.assertEqual(list((root / "orthologs.checkpoints").glob("*.json")), [])
+            with mock.patch.object(ortholog_table_module, "_write_outputs", wraps=ortholog_table_module._write_outputs) as writer:
+                build_ortholog_table_from_tsv(analyzer=FakeAnalyzer(), tsv_path=source, output_path=output, jobs=2)
+            self.assertEqual(writer.call_count, 1)
+
     def test_load_ortholog_rows_accepts_canonical_csv_columns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "targets.csv"

@@ -326,7 +326,7 @@
     <header class="topbar">
       <div>
         <h1>Protein concentration calculator</h1>
-        <p class="subtitle">Enter molecular weight, then provide any two compatible values among concentration, quantity, and volume. Calculated fields update automatically.</p>
+        <p class="subtitle">Enter molecular weight in daltons, then values from two categories: concentration, amount, or volume. For example, enter mass concentration and volume to calculate total mass and moles.</p>
       </div>
       <div class="actions">
         <button type="button" id="clearCalculated">Clear calculated</button>
@@ -368,7 +368,7 @@
           <div class="row">
             <label for="molarConcentration">
               Molar concentration
-              <span class="hint">Calculated from mass concentration and molecular weight.</span>
+              <span class="hint">Enter this value, or calculate it from mass concentration and molecular weight.</span>
             </label>
             <input id="molarConcentration" data-kind="molarConcentration" type="number" min="0" step="any" inputmode="decimal" placeholder="optional">
             <select id="molarConcentrationUnit" data-kind="molarConcentration" aria-label="Molar concentration unit">
@@ -454,9 +454,9 @@
             </div>
           </div>
           <ul class="notes">
-            <li>Fields you type into are treated as source values. Automatically filled fields are marked with a pale background.</li>
+            <li>Values you enter are inputs. Calculated values have a pale background.</li>
             <li>Changing a unit converts the displayed value so the underlying amount stays the same.</li>
-            <li>Use Reset if you want to start a new calculation from blank fields.</li>
+            <li>Use Reset to clear every field. Zero and negative entries produce an input error.</li>
           </ul>
         </div>
       </aside>
@@ -688,6 +688,12 @@
       resetFacts();
       markUserFields();
 
+      if (Object.values(fields).some((input) => input.validity.badInput || (input.value !== "" && parsePositiveNumber(input) === null))) {
+        updateMessage("<strong>Invalid input.</strong> Enter positive numbers or clear the invalid field.", "error");
+        isProgrammatic = false;
+        return;
+      }
+
       if (mw === null) {
         updateMessage("<strong>Molecular weight is required.</strong> Enter a positive molecular weight in Da before calculating.", "idle");
         isProgrammatic = false;
@@ -727,6 +733,15 @@
       if (concentrationSource) Object.assign(base, baseForSource(concentrationSource, mw));
       if (quantitySource) Object.assign(base, baseForSource(quantitySource, mw));
       if (volumeSource) Object.assign(base, baseForSource(volumeSource, mw));
+
+      if (presentGroups.size === 3) {
+        const expectedMass = base.massConcentration * base.volume / 1000;
+        if (Math.abs(expectedMass - base.massQuantity) > 1e-6 * Math.max(expectedMass, base.massQuantity)) {
+          updateMessage("<strong>Inputs are inconsistent.</strong> Concentration multiplied by volume must equal mass. Correct or clear one of the three source categories.", "error");
+          isProgrammatic = false;
+          return;
+        }
+      }
 
       if (base.massConcentration && base.volume && !base.massQuantity) {
         base.massQuantity = base.massConcentration * base.volume / 1000;
@@ -784,8 +799,7 @@
 
     function rememberSource(kind) {
       if (!sourceKinds.includes(kind)) return;
-      const value = parsePositiveNumber(fields[kind]);
-      if (value === null) {
+      if (fields[kind].value === "" && !fields[kind].validity.badInput) {
         userSources.delete(kind);
         lastEdited = lastEdited.filter((item) => item !== kind);
       } else {
