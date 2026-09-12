@@ -19,3 +19,17 @@ Validation covers the complete Python suite, static JSON and SQLite builds, live
 Local checks passed: 328 pytest tests and 41 subtests, 327 unittest tests, and the Chrome regression suite. The saved-data preview contains 60 human and 53 matching mouse reports, with 1,580 construct cards and 104 structures. Report anchors, tab counts and local frontend assets were checked across all reports; human and mouse GPCR reports were exercised at 1920, 390 and 320 pixels.
 
 The offline preview has no populated PubTator links and therefore does not pass the production release gate. Restore cached literature metadata or fetch it during the production build, then run the complete release validator before deployment. The preview passed the separate frontend-asset and public-content exclusion checks.
+
+## Retained correctness and performance fixes
+
+A second comparison against the latest development checkout confirmed these changes are retained:
+
+| Area | Preserved behavior |
+|---|---|
+| Alignment | Shared global alignment for portal mappings and family identities, optional Parasail/Biopython acceleration, and a 1,024-entry cache keyed by sequences and backend. |
+| Build efficiency | Reuse one analyzer per worker, write batch summaries at increasing intervals, and checkpoint ortholog rows individually. |
+| Viewer efficiency | Reuse the PAE heatmap, schedule selection rendering through animation frames, and keep the existing builder state. |
+| Compressed assets | Keep JS/CSS/SVG filenames; serve gzip bytes with the correct encoding and MIME headers in both portals, without URL rewriting or double compression. Writes remain atomic and repeatable. |
+| Freshness and integrity | Preserve asset-content hashes, stale-file pruning, snapshot-specific sequence reads, complete-build checks, validated downloads and PDB/PAE pairs, and corrected UniProt pagination. |
+
+The alignment, ortholog-checkpoint and family-identity functions match the development versions, as do the compared batch-worker, compression and portal-mapping functions. Focused verification passed 95 tests and 21 subtests; pytest emitted one cache-write warning under the local sandbox. No missing implementation was found in these areas.
