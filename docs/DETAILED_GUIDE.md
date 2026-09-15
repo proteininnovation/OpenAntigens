@@ -404,6 +404,10 @@ Rules:
 - if topology annotations indicate extracellular context at the mature-chain start, those are used as supporting evidence
 - if the curated target universe classifies a no-transmembrane target as secreted but UniProt lacks signal/topology boundaries, the workflow uses UniProt chain or peptide boundaries when available, then propeptide-trimmed sequence when available, and otherwise the full canonical sequence with a warning note
 
+### GPI-anchored proteins
+
+For a protein with an annotated GPI-anchor lipidation site and no conventional transmembrane helix, the design region uses the envelope of valid UniProt `CHAIN` features. This removes both the N-terminal signal peptide and the C-terminal GPI propeptide. When no processed chain contains the GPI anchor, the post-signal sequence is retained so a construct remains available, and the report labels it as untrimmed with an explicit warning. Proteins that also contain a conventional transmembrane helix keep the single-pass or multipass topology path.
+
 ## Precomputed References Versus Live Lookups
 
 Per-gene analysis now prefers local precomputed reference files when they exist:
@@ -709,18 +713,9 @@ Biology columns include:
 
 Human, mouse, and cynomolgus monkey ortholog relationships are seeded from HGNC HCOP.
 
-### How RefSeq proteins are selected
+### How ortholog proteins are selected
 
-For each species, the code queries NCBI RefSeq protein records and ranks candidates.
-
-Preference order:
-
-- `MANE Select` when available
-- `RefSeq Select` when available
-- curated `NP_` accessions ahead of predicted `XP_`
-- lower isoform number ahead of higher isoform number
-
-For cynomolgus monkey, the workflow still uses RefSeq, but there is often no `MANE Select` equivalent, so it picks the best-ranked available canonical-like protein candidate.
+The human target uses its resolved reviewed UniProt record. Mouse candidates are resolved from the HCOP mouse symbol and the human fallback symbol together; a reviewed UniProt record always takes precedence over an unreviewed TrEMBL record. TrEMBL is used only when none of the candidate symbols resolves to reviewed UniProt. Cynomolgus monkey candidates use the canonical-like RefSeq protein selected from the current annotated assembly, preferring curated `NP_` records and then the longest available isoform.
 
 ### Pairwise identity in the table
 
@@ -751,6 +746,8 @@ For each construct:
 2. project that span into the species ectodomain alignment
 3. extract the species construct sequence
 4. compute identity of that construct to the human construct sequence
+
+The projection is rejected when fewer than 70% of the human-region residues align to the homolog. This prevents a fragmentary or badly mismatched ortholog record from being emitted as an apparently complete construct.
 
 That is why each construct can show:
 

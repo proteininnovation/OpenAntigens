@@ -2282,6 +2282,11 @@ class AntigenAnalyzer:
             construct
             for construct in filtered
             if (construct.end - construct.start + 1) >= self.config.min_construct_length
+            or (
+                construct.name == "full_ectodomain"
+                and topology is not None
+                and topology.topology_class == "gpi_anchored_untrimmed"
+            )
         ]
         return sorted(deduped, key=lambda item: (-item.score, item.start, item.end))
 

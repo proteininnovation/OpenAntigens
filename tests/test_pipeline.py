@@ -1168,6 +1168,27 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual((full_length.start, full_length.end), (1, 520))
         self.assertTrue(any("mean pLDDT" in item for item in trimmed.evidence))
 
+    def test_short_untrimmed_gpi_region_keeps_full_construct(self) -> None:
+        config = AnalysisConfig(min_construct_length=50, generate_assets=False, prefer_precomputed_references=False)
+        analyzer = AntigenAnalyzer(config=config)
+        features = [
+            Feature(type="SIGNAL", start=1, end=24, description="Signal peptide"),
+            Feature(type="LIPIDATION", start=36, end=36, description="GPI-anchor amidated serine"),
+        ]
+        topology = derive_ectodomain(features, 61, config)
+        constructs = analyzer._suggest_constructs(
+            features=features,
+            topology=topology.topology,
+            ectodomain=topology.ectodomain,
+            sequence_length=61,
+            structural_regions=[],
+            experimental_constructs=[],
+            cysteine_analysis=[],
+            interpro_annotations=[],
+        )
+
+        self.assertEqual([(item.name, item.start, item.end) for item in constructs], [("full_ectodomain", 25, 61)])
+
     def test_compact_multipass_target_includes_membrane_expression_variants(self) -> None:
         config = AnalysisConfig(min_construct_length=50, generate_assets=False, prefer_precomputed_references=False)
         analyzer = AntigenAnalyzer(config=config)

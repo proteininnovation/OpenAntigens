@@ -267,6 +267,39 @@ class PortalAlignmentTests(unittest.TestCase):
         self.assertNotIn("Native Membrane-Expression Constructs", detail_html)
         self.assertNotIn("No membrane-expression constructs available.", detail_html)
 
+    def test_construct_card_explains_rejected_homolog_mapping(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html = _render_construct_card(
+                {
+                    "name": "test_construct",
+                    "start": 1,
+                    "end": 10,
+                    "length": 10,
+                    "sequence": "ABCDEFGHIJ",
+                    "homologs": [
+                        {
+                            "species": "mouse",
+                            "accession": "P00002",
+                            "entry_name": "P00002",
+                            "available": False,
+                            "notes": [
+                                "Boundary projection rejected: 6/10 query residues aligned to the homolog (60.0% < 70.0% minimum)."
+                            ],
+                        }
+                    ],
+                },
+                target={"entry_name": "TEST_HUMAN", "gene_symbol": "TEST", "accession": "P00001"},
+                batch_dir=Path(tmpdir),
+                page_dir=Path(tmpdir),
+                furin_sites=[],
+                ptms=[],
+                allow_structure_assets=False,
+            )
+
+        self.assertIn("TEST_MOUSE_mapping", html)
+        self.assertIn("Mapping unavailable", html)
+        self.assertIn("60.0% &lt; 70.0% minimum", html)
+
     def test_portal_align_sequences_returns_equal_length_alignment(self) -> None:
         alignment = _portal_align_sequences("ABCDEFGH", "ABCXEFGH")
         self.assertEqual(len(alignment["aligned_query"]), len(alignment["aligned_subject"]))
@@ -2190,6 +2223,7 @@ class BatchTests(unittest.TestCase):
         self.assertIn("showSelectionOnly", detail)
         self.assertIn("extracellularTopologyPositions", detail)
         self.assertIn("focusResidueSet", detail)
+        self.assertIn("alignedPositions / requestedPositions < 0.70", detail)
         self.assertIn("Extracellular topology residues", detail)
         self.assertIn("GPCR Expression and Stabilization Strategy", detail)
         self.assertIn("Experimental GPCR Engineering Variants", detail)

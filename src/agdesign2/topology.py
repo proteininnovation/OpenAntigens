@@ -25,6 +25,47 @@ def derive_ectodomain(
     signal_regions = [feature for feature in features if feature.type.upper() == "SIGNAL"]
     topo_regions = [feature for feature in features if feature.type.upper() == "TOPO_DOM"]
     if len(tm_regions) == 0:
+        gpi_anchors = [
+            feature.start
+            for feature in features
+            if feature.type.upper() == "LIPIDATION" and "gpi" in (feature.description or "").lower()
+        ]
+        if gpi_anchors:
+            gpi_region = _derive_gpi_anchored_region(features, sequence_length, gpi_anchors)
+            used_processed_chain = gpi_region is not None
+            if gpi_region is None:
+                start = max((region.end for region in signal_regions), default=0) + 1
+                gpi_region = Region(
+                    start=start,
+                    end=sequence_length,
+                    label="GPI-anchored sequence (untrimmed)",
+                    source="topology",
+                    confidence=0.5,
+                    metadata={"fallback_reason": "missing_processed_chain"},
+                )
+            topology = _build_topology_annotation(
+                tm_regions=tm_regions,
+                intramembrane_regions=intramembrane_regions,
+                topo_regions=topo_regions,
+                signal_regions=signal_regions,
+                sequence_length=sequence_length,
+                config=config,
+                major_extracellular_region=gpi_region,
+                topology_class="gpi_anchored" if used_processed_chain else "gpi_anchored_untrimmed",
+            )
+            topology.extracellular_regions = [gpi_region]
+            notes.append(
+                AnalysisNote(
+                    severity="info" if used_processed_chain else "warning",
+                    message=(
+                        "Using the processed UniProt chain boundary for the GPI-anchored extracellular design region."
+                        if used_processed_chain
+                        else "A GPI anchor is annotated, but UniProt provides no processed chain containing the anchor; retaining the post-signal sequence without trimming the GPI propeptide."
+                    ),
+                    source="topology",
+                )
+            )
+            return TopologyResult(ectodomain=gpi_region, notes=notes, topology=topology)
         secreted_region = _derive_secreted_region(signal_regions, topo_regions, sequence_length)
         topology = _build_topology_annotation(
             tm_regions=tm_regions,
@@ -501,4 +542,23 @@ def _derive_secreted_region(
         label=label,
         source="topology",
         confidence=confidence,
+    )
+
+
+def _derive_gpi_anchored_region(
+    features: list[Feature], sequence_length: int, anchors: list[int]
+) -> Region | None:
+    chains = [
+        feature
+        for feature in features
+        if feature.type.upper() == "CHAIN" and 1 <= feature.start <= feature.end <= sequence_length
+    ]
+    if not chains or not any(chain.start <= anchor <= chain.end for chain in chains for anchor in anchors):
+        return None
+    return Region(
+        start=min(chain.start for chain in chains),
+        end=max(chain.end for chain in chains),
+        label="GPI-anchored mature chain",
+        source="UniProt",
+        confidence=0.9,
     )

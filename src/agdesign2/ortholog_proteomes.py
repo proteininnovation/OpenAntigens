@@ -127,16 +127,19 @@ class OrthologProteomeResolver:
         symbol (``ANKH``, ``CA10``).
         """
         index = self._species_index(species)
+        candidates: list[tuple[int, ResolvedOrthologProtein]] = []
         if gene_id is not None:
             hit = index["by_gene_id"].get(str(gene_id).strip())
             if hit is not None:
-                return hit
-        for symbol in (gene_symbol, fallback_symbol):
+                candidates.append((0, hit))
+        for position, symbol in enumerate((gene_symbol, fallback_symbol), start=1):
             if symbol:
                 hit = index["by_symbol"].get(symbol.strip().upper())
                 if hit is not None:
-                    return hit
-        return None
+                    candidates.append((position, hit))
+        if not candidates:
+            return None
+        return min(candidates, key=lambda item: (item[1].source == "uniprot-trembl", item[0]))[1]
 
     def _log(self, message: str) -> None:
         if self.verbose:

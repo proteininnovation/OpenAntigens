@@ -8,6 +8,7 @@ from functools import lru_cache
 
 _ALIGNMENT_BACKEND_ENV = "AGDESIGN2_ALIGNMENT_BACKEND"
 _PARASAIL_ALPHABET = "ARNDCQEGHILKMFPSTWYVBZXJUO*arn dcqeghilkmfpstwyvbzxjuo".replace(" ", "")
+_MIN_BOUNDARY_MAPPING_COVERAGE = 0.70
 
 
 @dataclass(slots=True)
@@ -255,6 +256,7 @@ def map_query_region_to_subject(
     subject_position = 0
     mapped_positions: list[int] = []
     gap_count = 0
+    query_residue_count = 0
 
     for query_residue, subject_residue in zip(
         alignment.aligned_query, alignment.aligned_subject, strict=True
@@ -265,6 +267,7 @@ def map_query_region_to_subject(
             subject_position += 1
         if query_residue == "-" or not (query_start <= query_position <= query_end):
             continue
+        query_residue_count += 1
         if subject_residue == "-":
             gap_count += 1
             continue
@@ -272,6 +275,14 @@ def map_query_region_to_subject(
 
     if not mapped_positions:
         return None, None, None, ["No aligned residues mapped to the homolog ectodomain."]
+
+    coverage = len(mapped_positions) / query_residue_count if query_residue_count else 0.0
+    if coverage < _MIN_BOUNDARY_MAPPING_COVERAGE:
+        return None, None, None, [
+            "Boundary projection rejected: "
+            f"{len(mapped_positions)}/{query_residue_count} query residues aligned to the homolog "
+            f"({coverage:.1%} < {_MIN_BOUNDARY_MAPPING_COVERAGE:.1%} minimum)."
+        ]
 
     start = min(mapped_positions)
     end = max(mapped_positions)
