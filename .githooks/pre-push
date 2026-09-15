@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+case "${2:-}" in
+  https://github.com/proteininnovation/OpenAntigens|https://github.com/proteininnovation/OpenAntigens.git|git@github.com:proteininnovation/OpenAntigens.git)
+    exit 0
+    ;;
+esac
+
+echo "Refusing push to non-canonical OpenAntigens remote: ${2:-unknown}" >&2
+echo "Canonical repository: https://github.com/proteininnovation/OpenAntigens" >&2
+exit 1
