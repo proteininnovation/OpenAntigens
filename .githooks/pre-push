@@ -3,10 +3,20 @@ set -eu
 
 case "${2:-}" in
   https://github.com/proteininnovation/OpenAntigens|https://github.com/proteininnovation/OpenAntigens.git|git@github.com:proteininnovation/OpenAntigens.git)
-    exit 0
+    ;;
+  *)
+    echo "Refusing push to non-canonical OpenAntigens remote: ${2:-unknown}" >&2
+    echo "Canonical repository: https://github.com/proteininnovation/OpenAntigens" >&2
+    exit 1
     ;;
 esac
 
-echo "Refusing push to non-canonical OpenAntigens remote: ${2:-unknown}" >&2
-echo "Canonical repository: https://github.com/proteininnovation/OpenAntigens" >&2
-exit 1
+while read -r local_ref _ remote_ref _; do
+  case "$local_ref $remote_ref" in
+    *refs/heads/codex*)
+      echo "Refusing codex-prefixed branch: $local_ref -> $remote_ref" >&2
+      echo "Use an informative prefix such as feat/, fix/, perf/, docs/, test/, refactor/, or chore/." >&2
+      exit 1
+      ;;
+  esac
+done
