@@ -95,6 +95,49 @@ class TopologyTests(unittest.TestCase):
         self.assertEqual((result.ectodomain.start, result.ectodomain.end), (25, 266))
         self.assertEqual(result.ectodomain.label, "Secreted mature chain")
 
+    def test_gpi_anchored_target_uses_processed_chain_boundary(self) -> None:
+        features = [
+            Feature(type="SIGNAL", start=1, end=18, description="Signal peptide"),
+            Feature(type="CHAIN", start=19, end=284, description="Carbonic anhydrase 4"),
+            Feature(type="LIPIDATION", start=284, end=284, description="GPI-anchor amidated serine"),
+        ]
+        result = derive_ectodomain(features, 312, AnalysisConfig())
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (19, 284))
+        self.assertEqual(result.ectodomain.label, "GPI-anchored mature chain")
+        self.assertEqual(result.topology.topology_class, "gpi_anchored")
+
+    def test_gpi_anchored_target_uses_full_processed_chain_envelope(self) -> None:
+        features = [
+            Feature(type="SIGNAL", start=1, end=24, description="Signal peptide"),
+            Feature(type="CHAIN", start=25, end=358, description="Alpha chain"),
+            Feature(type="CHAIN", start=359, end=554, description="Beta chain"),
+            Feature(type="LIPIDATION", start=554, end=554, description="GPI-anchor amidated serine"),
+        ]
+        result = derive_ectodomain(features, 580, AnalysisConfig())
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (25, 554))
+
+    def test_gpi_anchor_without_processed_chain_retains_untrimmed_construct(self) -> None:
+        features = [
+            Feature(type="SIGNAL", start=1, end=18, description="Signal peptide"),
+            Feature(type="LIPIDATION", start=59, end=59, description="GPI-anchor amidated glycine"),
+        ]
+        result = derive_ectodomain(features, 80, AnalysisConfig())
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (19, 80))
+        self.assertEqual(result.ectodomain.label, "GPI-anchored sequence (untrimmed)")
+        self.assertEqual(result.topology.topology_class, "gpi_anchored_untrimmed")
+        self.assertTrue(any("without trimming" in note.message for note in result.notes))
+
+    def test_transmembrane_topology_takes_precedence_over_gpi_processing(self) -> None:
+        features = [
+            Feature(type="TRANSMEM", start=21, end=43, description="Helical"),
+            Feature(type="TOPO_DOM", start=44, end=160, description="Extracellular"),
+            Feature(type="CHAIN", start=1, end=161, description="Tetherin"),
+            Feature(type="LIPIDATION", start=161, end=161, description="GPI-anchor amidated serine"),
+        ]
+        result = derive_ectodomain(features, 180, AnalysisConfig())
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (44, 180))
+        self.assertEqual(result.topology.topology_class, "single_pass")
+
     def test_derives_secreted_chain_from_extracellular_topology_without_tm(self) -> None:
         features = [
             Feature(type="SIGNAL", start=1, end=18, description="Signal peptide"),

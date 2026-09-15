@@ -1905,12 +1905,12 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     ortholog_text = (
         "The mouse portal keeps the originating human target in report metadata and maps additional homolog regions when suitable reference sequences are available."
         if is_mouse
-        else "Precomputed ortholog reference tables provide human, mouse, and cynomolgus monkey canonical RefSeq accessions, sequences, and pairwise identity to the human sequence. Reports use these tables first. If no precomputed row covers the target, the analyzer runs live species lookup."
+        else "Precomputed ortholog reference tables provide human, mouse, and cynomolgus monkey accessions, sequences, and pairwise identity to the human sequence. Mouse resolution ranks matches across the HCOP and human fallback symbols together, always preferring reviewed UniProt over unreviewed TrEMBL. Reports use these tables first. If no precomputed row covers the target, the analyzer runs live species lookup."
     )
     homolog_projection_text = (
-        "Construct-level homolog sequences are inferred by aligning the mouse design scope to available homolog sequences, projecting the selected mouse boundaries through that alignment, and extracting the corresponding homolog region."
+        "Construct-level homolog sequences are inferred by aligning the mouse design scope to available homolog sequences, projecting the selected mouse boundaries through that alignment, and extracting the corresponding homolog region. A projection is rejected when fewer than 70% of the target-region residues align to the homolog."
         if is_mouse
-        else "Construct-level homolog sequences are inferred by aligning the full human design scope to species ortholog sequences, projecting the human construct boundaries through that alignment, and extracting the corresponding species region. Construct-specific identity is then calculated against the human construct sequence."
+        else "Construct-level homolog sequences are inferred by aligning the full human design scope to species ortholog sequences, projecting the human construct boundaries through that alignment, and extracting the corresponding species region. A projection is rejected when fewer than 70% of the human-region residues align to the homolog. Construct-specific identity is then calculated against the human construct sequence."
     )
     blast_database_text = (
         "Mouse target sequences are searched against the configured local human, mouse, and cynomolgus monkey protein databases."
@@ -1981,7 +1981,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       </article>
       <article class="card doc-card">
         <h2>Topology and construct scope</h2>
-        <p>Topology controls which design track is used. Secreted proteins use the mature extracellular protein as the soluble design scope. GPI-anchored proteins and single-pass proteins emphasize extracellular regions, with boundaries inferred from curated topology, signal peptide, propeptide, and transmembrane annotations.</p>
+        <p>Topology controls which design track is used. Secreted proteins use the mature extracellular protein as the soluble design scope. GPI-anchored proteins without a conventional transmembrane helix use the envelope of processed UniProt chain annotations. If no processed chain contains the annotated GPI anchor, OpenAntigens retains the post-signal sequence without trimming the GPI propeptide and marks that limitation. Single-pass proteins use the extracellular region defined by topology and transmembrane annotations.</p>
         <p>Multipass proteins are treated separately. When an eligible extracellular region has at least 80 amino acids by default, OpenAntigens includes a mixed track with both soluble extracellular-region constructs and full-length membrane-expression context. With shorter extracellular loops, the report emphasizes membrane-protein expression and full-length context.</p>
       </article>
       <article class="card doc-card">
@@ -4308,6 +4308,26 @@ def _render_construct_card(
                 ),
             }
         )
+    unavailable_rows = [
+        {
+            "name": f"{gene_symbol}_{_species_code(str(item.get('species') or ''))}_mapping",
+            "species": _species_code(str(item.get("species") or "")),
+            "species_raw": str(item.get("species") or ""),
+            "reason": "; ".join(str(note) for note in (item.get("notes") or []) if str(note).strip())
+            or "No usable homolog boundary was available.",
+            "accession": str(item.get("accession") or ""),
+            "entry_name": str(item.get("entry_name") or item.get("accession") or ""),
+            "gene_symbol": gene_symbol,
+            "links": _render_resource_links(
+                accession=str(item.get("accession") or ""),
+                entry_name=str(item.get("entry_name") or item.get("accession") or ""),
+                gene_symbol=gene_symbol,
+                species=str(item.get("species") or ""),
+            ),
+        }
+        for item in homologs
+        if not (item.get("available") and item.get("start") is not None and item.get("end") is not None)
+    ]
     sequence_rows_html = "".join(
         "<tr><td><code>{name}</code></td><td>{species}</td><td>{boundary}</td><td><code class=\"sequence\">{sequence}</code></td><td>{identity}</td><td>{surface_identity}</td><td>{links}</td></tr>".format(
             name=escape(row["name"]),
@@ -4319,6 +4339,16 @@ def _render_construct_card(
             links=row["links"],
         )
         for row in export_rows
+    )
+    sequence_rows_html += "".join(
+        "<tr><td><code>{name}</code></td><td>{species}</td><td>unavailable</td>"
+        '<td><span class="muted">Mapping unavailable: {reason}</span></td><td>n/a</td><td>n/a</td><td>{links}</td></tr>'.format(
+            name=escape(row["name"]),
+            species=escape(row["species"]),
+            reason=escape(row["reason"]),
+            links=row["links"],
+        )
+        for row in unavailable_rows
     )
     construct_tsv = _export_tsv(
         export_rows,
@@ -4379,6 +4409,19 @@ def _render_construct_card(
                 "links": row["links"],
             }
             for row in export_rows
+        ],
+        "unavailableRows": [
+            {
+                "name": row["name"],
+                "species": row["species"],
+                "speciesRaw": row["species_raw"],
+                "reason": row["reason"],
+                "accession": row["accession"],
+                "entryName": row["entry_name"],
+                "geneSymbol": row["gene_symbol"],
+                "links": row["links"],
+            }
+            for row in unavailable_rows
         ],
         "mutationCandidates": construct_mutation_candidates,
         "furinSites": construct_furin_sites,
@@ -4669,6 +4712,14 @@ def _construct_mutation_card_script(*, target: dict[str, Any]) -> str:
                 <td>${escapeHtml(row.identity)}</td>
                 <td>${escapeHtml(row.surfaceIdentity)}</td>
                 <td>${row.links}</td>
+              </tr>
+            `).join('') + (payload.unavailableRows || []).map((row) => `
+              <tr>
+                <td><code>${escapeHtml(row.name)}</code></td>
+                <td>${escapeHtml(row.species)}</td>
+                <td>unavailable</td>
+                <td><span class="muted">Mapping unavailable: ${escapeHtml(row.reason)}</span></td>
+                <td>n/a</td><td>n/a</td><td>${row.links || '<span class="muted">n/a</span>'}</td>
               </tr>
             `).join('');
             const identityHeader = payload.identityHeader || 'identity_to_human';
@@ -6676,6 +6727,8 @@ def _render_structure_widget(
             }}
           }}
           if (!mapped.length) return null;
+          const requestedPositions = Math.max(0, queryEnd - queryStart + 1);
+          if (!requestedPositions || alignedPositions / requestedPositions < 0.70) return null;
           const mappedStart = Math.min(...mapped);
           const mappedEnd = Math.max(...mapped);
           const homologSequence = (homolog.ectodomainSequence || '').slice(mappedStart - 1, mappedEnd);
@@ -7208,6 +7261,20 @@ def _render_structure_widget(
                 <td><code class="sequence">${{escapeHtml(row.sequence)}}</code></td>
                 <td>${{escapeHtml(row.identity)}}</td>
                 <td>${{escapeHtml(row.surfaceIdentity)}}</td>
+                <td>${{resourceLinksHtml({{
+                  accession: row.accession,
+                  entryName: row.entryName,
+                  geneSymbol: row.geneSymbol,
+                  species: row.speciesRaw,
+                }})}}</td>
+              </tr>
+            `).join('') + (payload.unavailableRows || []).map((row) => `
+              <tr>
+                <td><code>${{escapeHtml(row.name)}}</code></td>
+                <td>${{escapeHtml(row.species)}}</td>
+                <td>unavailable</td>
+                <td><span class="muted">Mapping unavailable: ${{escapeHtml(row.reason)}}</span></td>
+                <td>n/a</td><td>n/a</td>
                 <td>${{resourceLinksHtml({{
                   accession: row.accession,
                   entryName: row.entryName,

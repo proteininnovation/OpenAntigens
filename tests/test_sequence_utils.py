@@ -32,6 +32,31 @@ class SequenceMappingTests(unittest.TestCase):
         self.assertEqual((start, end, sequence), (3, 5, "XDE"))
         self.assertEqual(notes, [])
 
+    def test_rejects_severely_incomplete_boundary_projection(self) -> None:
+        alignment = global_align("ABCDEFGHIJ", "ABCDEF")
+        start, end, sequence, notes = map_query_region_to_subject(
+            alignment,
+            query_start=1,
+            query_end=10,
+            subject_sequence="ABCDEF",
+        )
+        self.assertEqual((start, end, sequence), (None, None, None))
+        self.assertEqual(
+            notes,
+            ["Boundary projection rejected: 6/10 query residues aligned to the homolog (60.0% < 70.0% minimum)."],
+        )
+
+    def test_accepts_boundary_projection_at_seventy_percent_coverage(self) -> None:
+        alignment = global_align("ABCDEFGHIJ", "ABCDEFG")
+        start, end, sequence, notes = map_query_region_to_subject(
+            alignment,
+            query_start=1,
+            query_end=10,
+            subject_sequence="ABCDEFG",
+        )
+        self.assertEqual((start, end, sequence), (1, 7, "ABCDEFG"))
+        self.assertEqual(notes, ["3 construct residues align to gaps in the homolog ectodomain."])
+
     def test_python_alignment_backend_can_be_forced(self) -> None:
         previous = os.environ.get("AGDESIGN2_ALIGNMENT_BACKEND")
         os.environ["AGDESIGN2_ALIGNMENT_BACKEND"] = "python"

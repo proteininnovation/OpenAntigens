@@ -34,7 +34,8 @@ class ResolverTests(unittest.TestCase):
         (data_dir / "ortholog_mouse_swissprot.fasta").write_text(
             ">sp|P11111|CADM1_MOUSE Cell adhesion molecule 1 OS=Mus musculus OX=10090 GN=Cadm1 PE=1 SV=1\nMOUSECADM1SEQ\n"
             ">sp|P22222|OPRM_MOUSE Mu opioid receptor OS=Mus musculus OX=10090 GN=Oprm1 PE=1 SV=1\nMOUSEOPRM1SEQ\n"
-            ">sp|P33333|ANKH_MOUSE Progressive ankylosis OS=Mus musculus OX=10090 GN=Ankh PE=1 SV=1\nMOUSEANKHSEQ\n",
+            ">sp|P33333|ANKH_MOUSE Progressive ankylosis OS=Mus musculus OX=10090 GN=Ankh PE=1 SV=1\nMOUSEANKHSEQ\n"
+            ">sp|Q64444|CAH4_MOUSE Carbonic anhydrase 4 OS=Mus musculus OX=10090 GN=Ca4 PE=1 SV=1\nMOUSECA4REVIEWED\n",
             encoding="utf-8",
         )
         # Unreviewed (TrEMBL) reference-proteome fallback: Abcc8 has no reviewed
@@ -43,7 +44,8 @@ class ResolverTests(unittest.TestCase):
         (data_dir / "ortholog_mouse_trembl.fasta").write_text(
             ">tr|A0A001|A0A001_MOUSE ATP-binding cassette OS=Mus musculus OX=10090 GN=Abcc8 PE=4 SV=1\nMOUSEABCC8SEQ\n"
             ">tr|A0A003|A0A003_MOUSE ATP-binding cassette isoform OS=Mus musculus OX=10090 GN=Abcc8 PE=4 SV=1\nMOUSEABCC8SEQLONGER\n"
-            ">tr|A0A002|A0A002_MOUSE Cell adhesion molecule 1 OS=Mus musculus OX=10090 GN=Cadm1 PE=4 SV=1\nTREMBLCADM1DECOY\n",
+            ">tr|A0A002|A0A002_MOUSE Cell adhesion molecule 1 OS=Mus musculus OX=10090 GN=Cadm1 PE=4 SV=1\nTREMBLCADM1DECOY\n"
+            ">tr|F6ST32|F6ST32_MOUSE Carbonic anhydrase 4 (Fragment) OS=Mus musculus OX=10090 GN=Car4 PE=1 SV=3\nCA4FRAGMENT\n",
             encoding="utf-8",
         )
         # macaca RefSeq fixture: protein FASTA + feature table (CDS rows).
@@ -100,6 +102,13 @@ class ResolverTests(unittest.TestCase):
             cadm1 = r.resolve("mouse", gene_symbol="Cadm1")
             self.assertEqual(cadm1.accession, "P11111")
             self.assertEqual(cadm1.source, "uniprot")
+
+    def test_reviewed_record_wins_across_candidate_symbols(self) -> None:
+        with TemporaryDirectory() as tmp:
+            r = self._resolver(Path(tmp))
+            hit = r.resolve("mouse", gene_symbol="Car4", fallback_symbol="CA4")
+            self.assertEqual(hit.accession, "Q64444")
+            self.assertEqual(hit.source, "uniprot")
 
     def test_macaca_refseq_by_symbol_and_gene_id(self) -> None:
         with TemporaryDirectory() as tmp:
