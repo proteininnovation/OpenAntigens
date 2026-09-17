@@ -1,0 +1,35 @@
+{
+  "title": "OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome",
+  "authors": [
+    {
+      "given": "Andre A. R.",
+      "family": "Teixeira",
+      "orcid": "https://orcid.org/0000-0002-8348-0235"
+    },
+    {
+      "given": "Haisun",
+      "family": "Zhu",
+      "orcid": "https://orcid.org/0000-0001-8395-9409"
+    },
+    {
+      "given": "Deepash",
+      "family": "Kothiwal",
+      "orcid": "https://orcid.org/0000-0002-3634-8813"
+    },
+    {
+      "given": "Ruili",
+      "family": "Cao",
+      "orcid": "https://orcid.org/0000-0002-7578-0561"
+    },
+    {
+      "given": "Allan",
+      "family": "Mills",
+      "orcid": "https://orcid.org/0000-0003-3056-7764"
+    }
+  ],
+  "doi": "10.64898/2026.07.30.741735",
+  "version": "1",
+  "journal": "bioRxiv",
+  "date": "2026-08-04",
+  "type": "preprint"
+}

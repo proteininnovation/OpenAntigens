@@ -27,6 +27,11 @@ REQUIRED_PORTAL_FILES = (
     ".htaccess",
     "apple-touch-icon.png",
     "builder.html",
+    "agent-guide.html",
+    "agent-guide.js",
+    "llms.txt",
+    "downloads/openantigens.bib",
+    "downloads/openantigens.ris",
     "calculator.html",
     "constructs.html",
     "downloads.html",
@@ -367,6 +372,14 @@ def human_size(size: int) -> str:
 
 
 def render_release_readme(manifest: dict[str, object]) -> str:
+    citation = (manifest.get("portal_metadata") or {}).get("citation")
+    citation_section = (
+        "## Recommended scholarly citation\n\n" + citation["text"] + "\n\n"
+        "Record the portal build date, software version, artifact URL, and access date alongside the paper citation. "
+        "Citation files: downloads/openantigens.bib and downloads/openantigens.ris. "
+        "Third-party source terms and data attribution requirements still apply.\n\n"
+        if citation else ""
+    )
     return f"""# OpenAntigens Public Release
 
 This directory is a static OpenAntigens portal release.
@@ -394,7 +407,7 @@ index.html
 - Structure files: `{manifest['structure_file_count']}`
 - Download files: `{manifest['download_file_count']}`
 
-## Not Included
+{citation_section}## Not Included
 
 This public bundle intentionally excludes local caches, BLAST databases,
 refresh state, logs, and intermediate analysis files. Rebuild those from the

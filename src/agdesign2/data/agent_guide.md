@@ -59,7 +59,7 @@ For a target-specific answer, include the gene or entry name, species, accession
 
 When describing or using OpenAntigens in research, please cite:
 
-Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. bioRxiv [preprint]. 2026. https://doi.org/10.64898/2026.07.30.741735
+{{citation}}
 
 This is a preprint, version 1, posted August 4, 2026; it has not been peer reviewed. For target-specific claims, also cite the inspected report or artifact and record its release build date, software version, and your access date. Cite underlying databases or primary studies where their evidence is used. Do not use the database paper as evidence that an individual construct has been experimentally validated.
 

@@ -1,0 +1,36 @@
+cff-version: 1.2.0
+type: software
+title: OpenAntigens
+message: "If you use OpenAntigens in research, please cite the preprint below and record the release used."
+authors:
+  - family-names: "Teixeira"
+    given-names: "Andre A. R."
+    orcid: "https://orcid.org/0000-0002-8348-0235"
+url: https://openantigens.org/
+repository-code: https://github.com/proteininnovation/OpenAntigens
+license: Apache-2.0
+preferred-citation:
+  type: article
+  title: "OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome"
+  authors:
+    - family-names: "Teixeira"
+      given-names: "Andre A. R."
+      orcid: "https://orcid.org/0000-0002-8348-0235"
+    - family-names: "Zhu"
+      given-names: "Haisun"
+      orcid: "https://orcid.org/0000-0001-8395-9409"
+    - family-names: "Kothiwal"
+      given-names: "Deepash"
+      orcid: "https://orcid.org/0000-0002-3634-8813"
+    - family-names: "Cao"
+      given-names: "Ruili"
+      orcid: "https://orcid.org/0000-0002-7578-0561"
+    - family-names: "Mills"
+      given-names: "Allan"
+      orcid: "https://orcid.org/0000-0003-3056-7764"
+  journal: bioRxiv
+  year: 2026
+  date-released: 2026-08-04
+  doi: 10.64898/2026.07.30.741735
+  url: https://doi.org/10.64898/2026.07.30.741735
+  notes: "Preprint, version 1; not peer reviewed."

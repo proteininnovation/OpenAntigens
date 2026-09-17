@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .site_docs import agent_guide_markdown, citation_downloads, site_document_files
+
 from .portal import (
     _available_disease_downloads,
     _apply_open_targets_to_entry,
@@ -29,6 +31,7 @@ from .portal import (
     _split_report_viewer_runtime,
     _structure_source_label,
     _write_text_atomic,
+    _write_site_documents,
     _write_portal_htaccess,
     portal_build_metadata,
     portal_download_manifest,
@@ -40,6 +43,7 @@ from .portal import (
     render_detail_page,
     render_downloads_page,
     render_help_page,
+    render_agent_guide_page,
     render_index_page,
     render_methods_page,
     render_privacy_page,
@@ -302,6 +306,7 @@ def build_portal_from_database(
     _write_text_atomic(portal_dir / "calculator.html", render_calculator_page())
     _write_text_atomic(portal_dir / "terms.html", render_terms_page())
     _write_text_atomic(portal_dir / "privacy.html", render_privacy_page())
+    _write_site_documents(portal_dir)
     _write_text_atomic(portal_dir / "portal_metadata.json", portal_build_metadata(entries))
     _prune_generated_target_files(portal_dir, entries)
     _version_portal_assets(portal_dir)
@@ -352,6 +357,18 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
     @app.get("/index.html", response_class=HTMLResponse, include_in_schema=False)
     def index():
         return HTMLResponse(render_index_page(entries()))
+
+    @app.get("/agent-guide.html", response_class=HTMLResponse, include_in_schema=False)
+    def agent_guide_page():
+        return HTMLResponse(render_agent_guide_page())
+
+    @app.get("/llms.txt", response_class=PlainTextResponse, include_in_schema=False)
+    def agent_guide_text():
+        return PlainTextResponse(agent_guide_markdown())
+
+    @app.get("/agent-guide.js", response_class=PlainTextResponse, include_in_schema=False)
+    def agent_guide_script():
+        return PlainTextResponse(site_document_files()["agent-guide.js"], media_type="text/javascript")
 
     @app.get("/help.html", response_class=HTMLResponse, include_in_schema=False)
     def help_page():
@@ -422,6 +439,14 @@ def create_db_portal_app(db_path: str | Path, *, assets_dir: str | Path | None =
     @app.get("/downloads/download_manifest.json", response_class=PlainTextResponse, include_in_schema=False)
     def download_manifest():
         return PlainTextResponse(portal_download_manifest(entries(), disease_downloads=disease_downloads()), media_type="application/json")
+
+    @app.get("/downloads/{citation_file}", response_class=PlainTextResponse, include_in_schema=False)
+    def download_citation(citation_file: str):
+        content = citation_downloads().get(citation_file)
+        if content is None:
+            raise HTTPException(status_code=404, detail="Citation file not found")
+        media_type = "application/x-research-info-systems" if citation_file.endswith(".ris") else "application/x-bibtex"
+        return PlainTextResponse(content, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{citation_file}"'})
 
     @app.get("/portal_metadata.json", response_class=PlainTextResponse, include_in_schema=False)
     def portal_metadata():
