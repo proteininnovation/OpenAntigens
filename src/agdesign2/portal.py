@@ -26,6 +26,7 @@ from .http import HttpClient, _atomic_write
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align, slice_sequence
 from .structure_utils import load_pae_matrix, pae_matches_sequence_length, parse_alphafold_pdb
+from .site_docs import PAPER, agent_guide_html, citation_html, citation_short_html, citation_metadata, site_document_files
 
 
 # accession -> refseq target dict (or None) per ortholog table, keyed by
@@ -257,6 +258,7 @@ def build_portal(
     _write_text_atomic(portal_dir / "calculator.html", render_calculator_page(portal_title=portal_title))
     _write_text_atomic(portal_dir / "terms.html", render_terms_page(portal_title=portal_title))
     _write_text_atomic(portal_dir / "privacy.html", render_privacy_page(portal_title=portal_title))
+    _write_site_documents(portal_dir, portal_title=portal_title)
     _write_text_atomic(portal_dir / "portal_metadata.json", portal_build_metadata(report_entries, portal_title=portal_title))
     _prune_generated_target_files(portal_dir, report_entries)
     _version_portal_assets(portal_dir)
@@ -813,6 +815,7 @@ def _portal_nav(*, prefix: str = "", active: str = "", sibling_link: tuple[str, 
         ("methods", "Methods", "methods.html"),
         ("downloads", "Downloads", "downloads.html"),
         ("terms", "Terms", "terms.html"),
+        ("agents", "For AI agents", "agent-guide.html"),
     )
     rendered = "".join(
         '<a class="{active}" href="{href}">{label}</a>'.format(
@@ -893,8 +896,14 @@ def _portal_footer(*, prefix: str = "") -> str:
           <a href="{escape(prefix)}downloads.html">Downloads</a>
           <a href="{escape(prefix)}terms.html">Terms</a>
           <a href="{escape(prefix)}privacy.html">Privacy</a>
+          <a href="{escape(prefix)}agent-guide.html">For AI agents</a>
+          <a href="{escape(prefix)}llms.txt">llms.txt</a>
         </nav>
       </div>
+      <p class="footer-citation">Using OpenAntigens in your research? Cite
+        {citation_short_html()} (preprint).
+        <a href="{escape(prefix)}help.html#cite-openantigens">How to cite</a>
+      </p>
       <div class="footer-meta">
         <a href="https://proteininnovation.org/" target="_blank" rel="noreferrer">Institute for Protein Innovation</a>
         <span>OpenAntigens v{escape(version)}</span>
@@ -961,6 +970,80 @@ def _topology_counts(entries: list[dict[str, Any]]) -> dict[str, int]:
         else:
             counts["other"] += 1
     return counts
+
+
+def _citation_download_links() -> str:
+    return '<a class="inline-link" href="downloads/openantigens.bib" download>BibTeX</a> · <a class="inline-link" href="downloads/openantigens.ris" download>RIS</a>'
+
+
+def _citation_section() -> str:
+    return f"""
+    <section class="card doc-card" id="cite-openantigens">
+      <h2>How to cite OpenAntigens</h2>
+      <p>If you use OpenAntigens in research, please cite:</p>
+      <p class="paper-citation">{citation_html()}</p>
+      <p class="section-note">Preprint, version {escape(PAPER['version'])}; posted {escape(PAPER['date'])}. Not peer reviewed.</p>
+      <p>Import the reference: {_citation_download_links()}</p>
+      <p>Also record the portal build date, software version, report or downloaded artifact URL, and your access date. These identify the release you used; the paper describes the database.</p>
+      <p>Cite underlying databases or primary studies where you use their evidence. See <a class="inline-link" href="terms.html">Terms</a> for data attribution and reuse requirements.</p>
+    </section>
+"""
+
+
+def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = False) -> str:
+    site = "https://openantigens.org/mouse/" if portal_title == "OpenAntigens Mouse" else "https://openantigens.org/"
+    prompt = (
+        "Before using OpenAntigens, read https://openantigens.org/llms.txt. "
+        f"Start at {site}index.html. Confirm each target's species and accession, preserve its residue numbering, "
+        "distinguish predicted from experimental evidence, and cite the inspected report and release. "
+        "For research use, include the OpenAntigens preprint citation given in the guide.\n\nMy question: "
+    )
+    label, href = ("Open plain text /llms.txt", "llms.txt") if guide else ("Read the agent guide", "agent-guide.html")
+    return f"""
+    <section class="agent-banner" aria-labelledby="agent-banner-title">
+      <div><p class="agent-eyebrow">For AI assistants</p>
+        <h2 id="agent-banner-title">Using Claude, ChatGPT, or another agent?</h2>
+        <p>Start with the guide for search, downloads, residue numbering, and evidence interpretation.</p></div>
+      <div class="agent-actions"><a class="agent-guide-link" href="{href}">{label}</a>
+        <button id="agent-copy" class="agent-copy" type="button">Copy AI prompt</button></div>
+      <details id="agent-prompt" class="agent-prompt"><summary>View prompt</summary>
+        <label for="agent-prompt-text">Paste this into your assistant and add your question.</label>
+        <textarea id="agent-prompt-text" rows="5" readonly>{escape(prompt)}</textarea>
+      </details>
+      <span id="agent-copy-status" class="agent-copy-status" role="status" aria-live="polite"></span>
+    </section>
+    <script src="agent-guide.js" defer></script>
+"""
+
+
+def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
+    human_prefix = "../" if portal_title == "OpenAntigens Mouse" else ""
+    content = agent_guide_html().replace('href="https://openantigens.org/"', f'href="{human_prefix}index.html"')
+    content = content.replace('href="https://openantigens.org/', f'href="{human_prefix}')
+    headings = re.findall(r"<h2>([^<]+)</h2>", content)
+    links = []
+    for heading in headings:
+        anchor = re.sub(r"[^a-z0-9]+", "-", heading.lower()).strip("-")
+        content = content.replace(f"<h2>{heading}</h2>", f'<h2 id="{anchor}">{heading}</h2>')
+        links.append(f'<a href="#{anchor}">{heading}</a>')
+    return _render_info_page(
+        title="Agent guide", active="agents", eyebrow="For AI assistants",
+        heading="Use OpenAntigens with an AI assistant.",
+        intro="Find the right record, interpret its evidence, and keep the source with your answer.",
+        portal_title=portal_title,
+        body_html=_agent_guidance_panel(portal_title=portal_title, guide=True) + f"""
+        <div class="guide-layout"><nav class="guide-toc" aria-label="Guide contents">
+          <strong>In this guide</strong>{''.join(links)}</nav>
+          <article class="card guide-content">{content}</article></div>""",
+    )
+
+
+def _write_site_documents(portal_dir: Path, *, portal_title: str = "OpenAntigens") -> None:
+    _write_text_atomic(portal_dir / "agent-guide.html", render_agent_guide_page(portal_title=portal_title))
+    for name, content in site_document_files().items():
+        destination = portal_dir / name
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _write_text_atomic(destination, content)
 
 
 def render_index_page(
@@ -1032,6 +1115,7 @@ def render_index_page(
       </div>
     </header>
 
+    {_agent_guidance_panel(portal_title=portal_title)}
     <section class="controls">
       <input id="searchBox" type="search" placeholder="Search gene, protein, or UniProt entry" aria-label="Search gene, entry, protein, alias, family, or topology">
       {disease_controls}
@@ -1039,6 +1123,8 @@ def render_index_page(
       <button id="resetFilters" type="button">Reset</button>
     </section>
 
+    <p class="agent-essentials">Confirm species and accession. Preserve residue numbering. Proposed constructs require experimental validation.
+      <a href="agent-guide.html#interpret-supporting-evidence">How to read the evidence</a></p>
     <section class="pagination-bar" aria-label="Index pagination">
       <label class="page-size-control" for="pageSizeSelect">
         Rows per page
@@ -1404,6 +1490,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         ),
         portal_title=portal_title,
         body_html=f"""
+    {_citation_section()}
     <section class="card doc-card">
       <h2>Quick start</h2>
       <ol class="doc-list">
@@ -1950,6 +2037,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         body_html=f"""
     <section class="card doc-card">
       <h2>Overview</h2>
+      <p>Database paper: {citation_short_html()} (preprint). See <a class="inline-link" href="help.html#cite-openantigens">How to cite OpenAntigens</a>.</p>
       <p>Each release records the results of a local analysis. Reports link proposed construct boundaries to the sequence, annotations, and structural evidence used in that analysis.</p>
       <p>The methods below describe the current pipeline. Previously generated releases retain the results of the software and reference data used for their build.</p>
       <div class="table-scroll">
@@ -2200,6 +2288,7 @@ def render_downloads_page(
     <section class="download-grid">
       <article class="card doc-card">
         <h2>Release flat files</h2>
+      <p>For research use, please cite {citation_short_html()} (preprint) and record the release used. <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> · {_citation_download_links()}</p>
         <p>Current index snapshot: {total:,} portal rows, {ok:,} successful reports, {errors:,} error rows.</p>
         <div class="link-group link-group-wrap">
           <a class="button" href="downloads/agdesign2_portal_index.tsv">Download TSV index</a>
@@ -2831,7 +2920,7 @@ def render_terms_page(*, portal_title: str = "OpenAntigens") -> str:
             "annotations, and third-party source data."
         ),
         portal_title=portal_title,
-        body_html="""
+        body_html=f"""
     <section class="card doc-card">
       <h2>Summary</h2>
       <div class="table-scroll">
@@ -2903,6 +2992,9 @@ def render_terms_page(*, portal_title: str = "OpenAntigens") -> str:
         <p>OpenAntigens downloads contain derived annotations alongside source-derived fields such as accessions, sequences, structure-confidence values, BLAST hit descriptions, disease associations, and links. Original source terms remain attached to source-derived fields included in an OpenAntigens file.</p>
       </article>
       <article class="card doc-card">
+        <h2>Recommended scholarly citation</h2>
+        <p class="paper-citation">{citation_html()}</p>
+        <p>This is a recommended scholarly citation. Data reuse remains governed by the licenses and attribution requirements on this page. See <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> for citation files and release details.</p>
         <h2>Attribution</h2>
         <p>Recommended attribution: <em>OpenAntigens, Institute for Protein Innovation, created by Andre A. R. Teixeira</em>. For publications or redistributed datasets, include the portal build date, downloaded artifact name, OpenAntigens version when available, and the relevant source databases.</p>
       </article>
@@ -3141,11 +3233,16 @@ def portal_download_manifest(entries: list[dict[str, Any]], *, include_disease_c
                 "description": "Same compact portal index represented as JSON objects.",
             },
         ],
+        "citation": citation_metadata(),
         "source_notes": [
             "Files in this manifest are static release artifacts and can be downloaded directly.",
             "Third-party source data retain their own terms and citation requirements.",
         ],
     }
+    manifest["files"].extend([
+        {"path": "downloads/openantigens.bib", "format": "BibTeX", "description": "OpenAntigens preprint citation."},
+        {"path": "downloads/openantigens.ris", "format": "RIS", "description": "OpenAntigens preprint citation."},
+    ])
     if include_disease_context:
         manifest["files"].extend(
             {
@@ -3164,6 +3261,7 @@ def portal_build_metadata(entries: list[dict[str, Any]], *, portal_title: str = 
     topology_counts = Counter(str(row.get("topology_bucket") or "unknown") for row in rows)
     metadata = {
         "database": portal_title,
+        "citation": citation_metadata(),
         "software_version": _openantigen_version(),
         "portal_build_date": _portal_build_date(),
         "portal_build_started_utc": _PORTAL_PROCESS_STARTED_UTC.isoformat(),
@@ -10485,6 +10583,10 @@ body {
 .doc-card {
   overflow: visible;
 }
+.doc-card .inline-link {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
 .doc-card p {
   margin: 0 0 12px;
   color: var(--muted);
@@ -11370,4 +11472,46 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
   .brand-logo { height: 40px; }
   .page { width: min(1480px, calc(100vw - 24px)); }
 }
+.agent-banner {display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px 28px;margin:0 0 16px;padding:20px 24px;border:1px solid #abd8d5;border-left:4px solid #0e8c88;border-radius:14px;background:#f4fcfb;}
+.agent-banner .agent-eyebrow {margin:0 0 5px;color:#076b67;font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;}
+.agent-banner h2 {margin:0 0 6px;font-size:19px;line-height:1.35;letter-spacing:-.25px;}
+.agent-banner p {margin:0;color:#415d72;font-size:14px;line-height:1.6;}
+.agent-actions {display:flex;align-items:center;gap:18px;flex-wrap:wrap;}
+.agent-guide-link {color:#076b67;font-weight:650;font-size:14px;text-underline-offset:4px;}
+.agent-copy {border:1px solid #08716d;border-radius:9px;background:#08716d;color:white;padding:11px 16px;font:inherit;font-size:13px;font-weight:650;cursor:pointer;min-height:44px;}
+.agent-copy:hover {background:#075e5b;}
+.agent-prompt {grid-column:1/-1;font-size:12px;color:#415d72;}
+.agent-prompt summary {cursor:pointer;width:fit-content;text-decoration:underline;text-underline-offset:3px;padding:4px 0;}
+.agent-prompt label {display:block;margin:10px 0;}
+.agent-prompt textarea {display:block;width:100%;max-width:100%;margin:0 0 8px;padding:12px;border:1px solid #abd8d5;border-radius:8px;font-family:inherit;font-size:13px;line-height:1.6;background:white;color:#102338;}
+.agent-copy-status {grid-column:1/-1;color:#076b67;font-size:12px;}
+.agent-copy-status:empty {display:none;}
+.agent-essentials {margin:0 0 16px;padding:0 4px;color:#415d72;font-size:12px;line-height:1.6;}
+.agent-essentials a {color:#076b67;text-underline-offset:3px;}
+.guide-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start;}
+.guide-toc {position:sticky;top:24px;display:grid;gap:16px;padding:20px 0;font-size:13px;line-height:1.5;}
+.guide-toc strong {font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#587089;}
+.guide-toc a {color:#1f4d8c;text-decoration:none;}
+.guide-toc a:hover {text-decoration:underline;}
+.guide-content {padding:30px 36px;font-size:15px;line-height:1.75;overflow-wrap:anywhere;}
+.guide-content h2 {font-size:22px;margin:36px 0 14px;scroll-margin-top:24px;line-height:1.3;}
+.guide-content li {margin:10px 0;}
+.guide-content ul,.guide-content ol {padding-left:24px;}
+.guide-content a {color:#076b67;text-underline-offset:3px;}
+.guide-content blockquote {margin:24px 0;border-left:3px solid #abd8d5;padding:1px 20px;color:#415d72;}
+.guide-content code {background:#eff4f7;padding:2px 4px;border-radius:3px;font-size:.9em;}
+.agent-banner a:focus-visible,.agent-banner button:focus-visible,.agent-banner summary:focus-visible,.agent-banner textarea:focus-visible,.guide-toc a:focus-visible {outline:3px solid #1f4d8c;outline-offset:4px;}
+@media(max-width:800px) {
+ .agent-banner {grid-template-columns:minmax(0,1fr);padding:18px;gap:14px;}
+ .agent-actions {gap:14px;}
+ .agent-banner h2 {font-size:18px;}
+ .guide-layout {grid-template-columns:minmax(0,1fr);gap:16px;}
+ .guide-toc {position:static;padding:0;gap:10px;}
+ .guide-content {padding:20px;font-size:14px;}
+}
+.footer-citation {margin:20px 0 0;color:var(--muted);line-height:1.7;font-size:.9rem;}
+.footer-citation a {color:var(--accent-2);text-underline-offset:3px;}
+.paper-citation {overflow-wrap:anywhere;}
+#cite-openantigens {scroll-margin-top:24px;}
+
 """ + theme_overrides + _construct_workbench_css()

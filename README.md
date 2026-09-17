@@ -387,9 +387,13 @@ or:
 
 ## Citation
 
-A database paper describing OpenAntigens is in preparation for the *Nucleic Acids Research* Database Issue. Until it appears, cite the portal and the snapshot build date, following the attribution in [DATA_LICENSE.md](DATA_LICENSE.md):
+If you use OpenAntigens in research, please cite:
 
-> OpenAntigens, Institute for Protein Innovation, created by Andre A. R. Teixeira. https://openantigens.org. Include the portal build date and software version.
+> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. bioRxiv [preprint]. 2026. https://doi.org/10.64898/2026.07.30.741735
+
+This is a preprint, version 1, posted August 4, 2026. Record the portal build date, software version, report or artifact URL, and access date. See [How to cite](https://openantigens.org/help.html#cite-openantigens) for BibTeX and RIS downloads and [CITATION.cff](CITATION.cff) for repository citation metadata. Source-database citation and attribution requirements still apply.
+
+The portal includes an [agent guide](https://openantigens.org/agent-guide.html) and [/llms.txt](https://openantigens.org/llms.txt) for search, interpretation, and provenance. Their source is `src/agdesign2/data/agent_guide.md`; citation metadata lives in `src/agdesign2/data/openantigens_citation.json`. After changing either, run `PYTHONPATH=src .venv/bin/python -m agdesign2.site_docs` to refresh the tracked `llms.txt` and `CITATION.cff`. Portal builds render the same sources automatically.
 
 ## License
 

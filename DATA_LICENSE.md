@@ -14,6 +14,14 @@ Recommended attribution:
 
 > OpenAntigens, Institute for Protein Innovation, created by Andre A. R. Teixeira. Include the portal build date, downloaded artifact name, and the source databases used for the relevant target.
 
+## Recommended scholarly citation
+
+If you use OpenAntigens in research, please cite:
+
+> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. bioRxiv [preprint]. 2026. https://doi.org/10.64898/2026.07.30.741735
+
+Record the portal build date, software version, artifact URL, and access date. This scholarly citation is recommended; the licenses and attribution requirements described above remain unchanged.
+
 Contact for licensing, corrections, or takedown requests:
 
 Andre A. R. Teixeira, Institute for Protein Innovation, andre.teixeira@proteininnovation.org
