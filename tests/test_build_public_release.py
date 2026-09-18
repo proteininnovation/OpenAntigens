@@ -26,6 +26,8 @@ def _write_minimal_portal(portal_dir: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         if name == "portal-index-data.js":
             content = "https://www.ncbi.nlm.nih.gov/research/pubtator3/docsum?text=%40GENE_TEST"
+        elif name == "downloads/agdesign2_portal_index.json":
+            content = '[{"has_alphafold_structure": 1}]'
         else:
             content = "{}" if path.suffix == ".json" else "content"
         path.write_text(content, encoding="utf-8")
@@ -62,6 +64,18 @@ class PublicReleaseTests(unittest.TestCase):
             )
 
             with self.assertRaisesRegex(ValueError, "no populated PubTator links"):
+                validate_portal(portal_dir)
+
+    def test_portal_validation_rejects_low_local_structure_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            portal_dir = Path(tmpdir) / "portal"
+            _write_minimal_portal(portal_dir)
+            rows = [{"has_alphafold_structure": int(index < 790)} for index in range(1000)]
+            (portal_dir / "downloads/agdesign2_portal_index.json").write_text(
+                json.dumps(rows), encoding="utf-8"
+            )
+
+            with self.assertRaisesRegex(ValueError, "local AlphaFold coverage is 790/1000"):
                 validate_portal(portal_dir)
 
     def test_portal_symlinks_cannot_copy_outside_content(self) -> None:

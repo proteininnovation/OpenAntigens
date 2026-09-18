@@ -230,6 +230,11 @@ validate_public_site() {
     echo "ERROR: public_site contains no HTML files: ${site_dir}" >&2
     exit 1
   fi
+  if [[ -s "${site_dir}/downloads/agdesign2_portal_index.json" ]]; then
+    PYTHONPATH="${REPO_ROOT}" .venv/bin/python -c \
+      'from pathlib import Path; from scripts.build_public_release import validate_structure_coverage; validate_structure_coverage(Path(__import__("sys").argv[1]))' \
+      "${site_dir}"
+  fi
   echo "[openantigen-godaddy] validated public_site=${site_dir} html_files=${html_count}"
 }
 
