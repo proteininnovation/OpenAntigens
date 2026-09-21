@@ -22,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
+from agdesign2.release_validation import validate_release_data, validate_structure_coverage
+
 
 REQUIRED_PORTAL_FILES = (
     ".htaccess",
@@ -72,10 +74,6 @@ PUBLIC_AF3_MARKERS = (
     "AlphaFold Server",
     "alphafold3",
 )
-
-MIN_LOCAL_STRUCTURE_COVERAGE = 0.80
-MIN_CATALOG_SIZE_FOR_STRUCTURE_COVERAGE = 1_000
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -167,28 +165,6 @@ def _read_portal_text(path: Path) -> str:
     return data.decode("utf-8")
 
 
-def validate_structure_coverage(portal_dir: Path) -> None:
-    for relative_path in (
-        Path("downloads/agdesign2_portal_index.json"),
-        Path("mouse/downloads/agdesign2_portal_index.json"),
-    ):
-        path = portal_dir / relative_path
-        if not path.is_file():
-            continue
-        rows = json.loads(_read_portal_text(path))
-        if not isinstance(rows, list) or not rows:
-            raise ValueError(f"portal index is not a non-empty list: {relative_path}")
-        if len(rows) < MIN_CATALOG_SIZE_FOR_STRUCTURE_COVERAGE:
-            continue
-        available = sum(int(row.get("has_alphafold_structure") or 0) for row in rows)
-        coverage = available / len(rows)
-        if coverage < MIN_LOCAL_STRUCTURE_COVERAGE:
-            raise ValueError(
-                f"local AlphaFold coverage is {available}/{len(rows)} ({coverage:.1%}) in "
-                f"{relative_path}; minimum is {MIN_LOCAL_STRUCTURE_COVERAGE:.0%}"
-            )
-
-
 def validate_portal(portal_dir: Path) -> None:
     if not portal_dir.exists():
         raise ValueError(f"portal directory does not exist: {portal_dir}")
@@ -210,6 +186,7 @@ def validate_portal(portal_dir: Path) -> None:
     if missing_directories:
         raise ValueError(f"portal directory is missing required directories: {', '.join(missing_directories)}")
     validate_structure_coverage(portal_dir)
+    validate_release_data(portal_dir)
     index_data_paths = [portal_dir / "portal-index-data.js"]
     mouse_index_data = portal_dir / "mouse" / "portal-index-data.js"
     if mouse_index_data.is_file():

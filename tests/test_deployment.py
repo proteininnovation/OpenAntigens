@@ -111,7 +111,8 @@ class DeploymentPrecomputeTests(unittest.TestCase):
         steps = [row["step"] for row in result.timings]
         self.assertEqual(steps[0], "build-target-tsv")
         self.assertEqual(steps[1], "prepare-af3-catalog-artifacts")
-        self.assertEqual(steps[2:], list(FRESH_SNAPSHOT_STEPS)[1:])
+        self.assertEqual(steps[2:-1], list(FRESH_SNAPSHOT_STEPS)[1:])
+        self.assertEqual(steps[-1], "validate-release-data")
 
     def test_fresh_snapshot_dry_run_ignores_unrequested_af3_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

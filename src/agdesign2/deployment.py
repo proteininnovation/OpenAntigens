@@ -24,6 +24,7 @@ from .ortholog_table import build_ortholog_table_from_tsv, load_ortholog_rows
 from .paralogs import build_paralog_reference_from_tsv
 from .pipeline import AntigenAnalyzer
 from .portal import _write_portal_htaccess, build_portal
+from .release_validation import validate_release_data
 from .target_sets import DEFAULT_ACCESSIBLE_BUCKETS, build_accessible_target_tsv
 from .uniprot_prefetch import prefetch_reviewed_taxa, prefetch_targets_from_tsv
 
@@ -147,6 +148,7 @@ def build_fresh_snapshot(
                     + (("prepare-af3-catalog-artifacts",) if af3_catalog_path is not None else ())
                     + FRESH_SNAPSHOT_STEPS[1:]
                     + (("build-mouse-portal",) if include_mouse else ())
+                    + (("validate-release-data",) if sample_size is None and limit is None else ())
                 )
             ],
         )
@@ -383,6 +385,11 @@ def build_fresh_snapshot(
                 verbose=verbose,
             ),
             skip_if=lambda: resume and not reanalyze_reports and (mouse_public_site_dir / "index.html").exists(),
+        )
+    if sample_size is None and limit is None:
+        run_step(
+            "validate-release-data",
+            lambda: validate_release_data(public_site_dir, require_full_catalog=True),
         )
 
     _write_snapshot_manifest(

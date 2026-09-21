@@ -92,7 +92,7 @@ class AuditBuildIntegrityTests(unittest.TestCase):
             (snapshot / 'inputs/accessible_targets.tsv').write_text('uniprot_name\nAAA_HUMAN\nBBB_HUMAN\n')
             (batch / 'batch_summary.json').write_text('[{"query":"AAA_HUMAN","status":"ok","source_column":"uniprot_name"}]')
             mocks = {}
-            for name in ['AntigenAnalyzer', 'prefetch_targets_from_tsv', 'build_ortholog_table_from_tsv', 'build_family_alignments_from_tsv', 'build_paralog_reference_from_tsv', 'run_batch_from_tsv', '_package_public_site']:
+            for name in ['AntigenAnalyzer', 'prefetch_targets_from_tsv', 'build_ortholog_table_from_tsv', 'build_family_alignments_from_tsv', 'build_paralog_reference_from_tsv', 'run_batch_from_tsv', '_package_public_site', 'validate_release_data']:
                 mocks[name] = stack.enter_context(patch.object(deployment, name))
             stack.enter_context(patch.object(deployment, '_resolve_default_af3_catalog', return_value=None))
             with self.assertRaisesRegex(ValueError, 'every requested target'):
@@ -116,7 +116,7 @@ class AuditBuildIntegrityTests(unittest.TestCase):
                 published.mkdir(parents=True)
                 (published / 'index.html').write_text('old mouse')
                 mocks = {}
-                for name in ['AntigenAnalyzer', 'prefetch_targets_from_tsv', 'build_ortholog_table_from_tsv', 'build_family_alignments_from_tsv', 'build_paralog_reference_from_tsv', 'run_batch_from_tsv', '_validate_batch_completion', 'refresh_report_modules', 'generate_assets_for_summary', 'build_open_targets_associations_from_bulk_downloads', 'build_portal', '_package_public_site', '_write_snapshot_manifest']:
+                for name in ['AntigenAnalyzer', 'prefetch_targets_from_tsv', 'build_ortholog_table_from_tsv', 'build_family_alignments_from_tsv', 'build_paralog_reference_from_tsv', 'run_batch_from_tsv', '_validate_batch_completion', 'refresh_report_modules', 'generate_assets_for_summary', 'build_open_targets_associations_from_bulk_downloads', 'build_portal', '_package_public_site', '_write_snapshot_manifest', 'validate_release_data']:
                     mocks[name] = stack.enter_context(patch.object(deployment, name))
                 mouse = stack.enter_context(patch.object(deployment, 'build_mouse_portal_from_human_orthologs', return_value=SimpleNamespace(portal_index_path=source / 'index.html')))
                 deployment.build_fresh_snapshot(snapshot_root=root, snapshot_name='existing', resume=True, reanalyze_reports=reanalyze)
