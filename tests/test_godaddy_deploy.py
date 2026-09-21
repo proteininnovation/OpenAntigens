@@ -235,6 +235,20 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         self.assertIn("Open Targets association TSV is missing or empty", result.stderr)
         self.assertFalse((marker_dir / "rsync_args").exists())
 
+    def test_missing_complex_portal_state_stops_before_rsync(self) -> None:
+        tmp, snapshot, marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
+        (snapshot / "public_site/reports/example.html").write_text(
+            "Complex Portal lookup was not recorded", encoding="utf-8"
+        )
+
+        result = self._run(snapshot, env)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("human catalog contains 1 reports without Complex Portal lookup state", result.stderr)
+        self.assertFalse((marker_dir / "rsync_args").exists())
+
     def test_publish_purges_before_live_asset_checks(self) -> None:
         tmp, snapshot, marker_dir, env = self._fixture()
         self.addCleanup(tmp.cleanup)
