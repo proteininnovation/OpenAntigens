@@ -297,7 +297,7 @@ verify_live_site() {
       --output /dev/null "${SITE_URL%/}/${asset}"
   done <<< "${refs}"
 
-  report_script="$(find "${PUBLIC_SITE}/report_scripts" -type f -name '*.js' -print -quit)"
+  report_script="$(find "${PUBLIC_SITE}/report_scripts" -type f -name '*.js' -print | LC_ALL=C sort | sed -n '1p')"
   if [[ -z "${report_script}" ]]; then
     echo "ERROR: no report script found for live verification." >&2
     return 1
