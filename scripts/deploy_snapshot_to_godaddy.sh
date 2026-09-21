@@ -234,7 +234,11 @@ validate_public_site() {
     echo "ERROR: public_site is missing the human portal index: ${site_dir}" >&2
     exit 1
   fi
-  PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}" .venv/bin/python -c \
+  local validation_python="${REPO_ROOT}/.venv/bin/python"
+  if [[ ! -x "${validation_python}" ]]; then
+    validation_python="$(command -v python3)"
+  fi
+  PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}" "${validation_python}" -c \
     'from pathlib import Path; from agdesign2.release_validation import validate_release_data, validate_structure_coverage; p=Path(__import__("sys").argv[1]); validate_structure_coverage(p); validate_release_data(p, require_full_catalog=True)' \
     "${site_dir}"
   echo "[openantigen-godaddy] validated public_site=${site_dir} html_files=${html_count}"
