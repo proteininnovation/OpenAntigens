@@ -230,11 +230,13 @@ validate_public_site() {
     echo "ERROR: public_site contains no HTML files: ${site_dir}" >&2
     exit 1
   fi
-  if [[ -s "${site_dir}/downloads/agdesign2_portal_index.json" ]]; then
-    PYTHONPATH="${REPO_ROOT}" .venv/bin/python -c \
-      'from pathlib import Path; from scripts.build_public_release import validate_structure_coverage; validate_structure_coverage(Path(__import__("sys").argv[1]))' \
-      "${site_dir}"
+  if [[ ! -s "${site_dir}/downloads/agdesign2_portal_index.json" ]]; then
+    echo "ERROR: public_site is missing the human portal index: ${site_dir}" >&2
+    exit 1
   fi
+  PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}" .venv/bin/python -c \
+    'from pathlib import Path; from agdesign2.release_validation import validate_release_data, validate_structure_coverage; p=Path(__import__("sys").argv[1]); validate_structure_coverage(p); validate_release_data(p, require_full_catalog=True)' \
+    "${site_dir}"
   echo "[openantigen-godaddy] validated public_site=${site_dir} html_files=${html_count}"
 }
 
@@ -299,6 +301,18 @@ verify_live_site() {
   asset="${report_script#${PUBLIC_SITE}/}"
   curl --silent --show-error --fail --location --compressed \
     --output /dev/null "${SITE_URL%/}/${asset}"
+  local live_dir
+  live_dir="$(mktemp -d)"
+  trap 'rm -rf "${live_dir}"' RETURN
+  mkdir -p "${live_dir}/downloads" "${live_dir}/mouse/downloads"
+  for asset in portal_metadata.json downloads/agdesign2_portal_index.json mouse/portal_metadata.json mouse/downloads/agdesign2_portal_index.json; do
+    mkdir -p "${live_dir}/$(dirname "${asset}")"
+    curl --silent --show-error --fail --location --compressed \
+      --output "${live_dir}/${asset}" "${SITE_URL%/}/${asset}"
+    cmp "${live_dir}/${asset}" "${PUBLIC_SITE}/${asset}"
+  done
+  curl --silent --show-error --fail --location --head \
+    "${SITE_URL%/}/open_targets_disease_associations.tsv" >/dev/null
   echo "[openantigen-godaddy] live asset verification passed"
 }
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
-import sys
 import shutil
+import sys
 from unittest import mock
 import subprocess
 import tempfile
@@ -28,13 +29,52 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             '<script src="portal-index.js?v=test"></script>\n',
             encoding="utf-8",
         )
-        (public_site / "portal_metadata.json").write_text("{}\n", encoding="utf-8")
+        human_row = {
+            "status": "ok",
+            "detail_page": "reports/example.html",
+            "cross_reactivity_count": 1,
+            "top_disease_name": "Example disease",
+            "disease_count": 1,
+            "has_alphafold_structure": 1,
+        }
+        mouse_row = {
+            "status": "ok",
+            "detail_page": "reports/example.html",
+            "cross_reactivity_count": 1,
+            "has_alphafold_structure": 1,
+        }
+        (public_site / "downloads").mkdir()
+        (public_site / "mouse/downloads").mkdir(parents=True)
+        (public_site / "reports").mkdir()
+        (public_site / "mouse/reports").mkdir()
+        (public_site / "mouse/report_scripts").mkdir()
+        (public_site / "reports/example.html").write_text("human", encoding="utf-8")
+        (public_site / "mouse/reports/example.html").write_text("mouse", encoding="utf-8")
+        (public_site / "mouse/report_scripts/example.js").write_text("const report = {};", encoding="utf-8")
+        (public_site / "portal_metadata.json").write_text(
+            json.dumps({"target_count": 5_000}) + "\n", encoding="utf-8"
+        )
+        (public_site / "downloads/agdesign2_portal_index.json").write_text(
+            json.dumps([human_row] * 5_000), encoding="utf-8"
+        )
+        (public_site / "mouse/portal_metadata.json").write_text(
+            json.dumps({"target_count": 4_500}) + "\n", encoding="utf-8"
+        )
+        (public_site / "mouse/downloads/agdesign2_portal_index.json").write_text(
+            json.dumps([mouse_row] * 4_500), encoding="utf-8"
+        )
+        (public_site / "open_targets_disease_associations.tsv").write_text(
+            "entry_name\tdisease_name\topen_targets_url\n"
+            + "EXAMPLE\tExample disease\thttps://example.test\n" * 5_000,
+            encoding="utf-8",
+        )
         (public_site / "portal.css").write_text("body{}", encoding="utf-8")
         (public_site / "portal-index-data.js").write_text("const rows = [];", encoding="utf-8")
         (public_site / "portal-disease-index.js").write_text("const diseases = [];", encoding="utf-8")
         (public_site / "portal-index.js").write_text("const index = [];", encoding="utf-8")
         report_scripts = public_site / "report_scripts"
         report_scripts.mkdir()
+        (report_scripts / "example.js").write_text("const report = {};", encoding="utf-8")
         (report_scripts / "egfr_human.js").write_text("const report = {};", encoding="utf-8")
 
         marker_dir = root / "markers"
@@ -49,9 +89,13 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         )
         self._write_command(
             bin_dir / "curl",
-            'printf "%s\\n" "$*" >> "$TEST_MARKER_DIR/curl_args"\n'
-            'if [[ -n "${TEST_CURL_FAIL_ASSET:-}" && "$*" == *"$TEST_CURL_FAIL_ASSET"* ]]; then exit 22; fi\n'
-            'if [[ "$*" == *"--config -"* ]]; then input="$(cat)"; printf "%s\\n" "$input" >> "$TEST_MARKER_DIR/curl_args"; printf \'{"status":1}\'; fi\n',
+            'args="$*"\n'
+            'printf "%s\\n" "$args" >> "$TEST_MARKER_DIR/curl_args"\n'
+            'if [[ -n "${TEST_CURL_FAIL_ASSET:-}" && "$args" == *"$TEST_CURL_FAIL_ASSET"* ]]; then exit 22; fi\n'
+            'if [[ "$args" == *"--config -"* ]]; then input="$(cat)"; printf "%s\\n" "$input" >> "$TEST_MARKER_DIR/curl_args"; printf \'{"status":1}\'; exit 0; fi\n'
+            'output=""; url=""\n'
+            'while [[ "$#" -gt 0 ]]; do case "$1" in --output) output="$2"; shift 2;; http*) url="$1"; shift;; *) shift;; esac; done\n'
+            'if [[ -n "$output" && "$output" != "/dev/null" && -n "$url" ]]; then rel="${url#*://}"; rel="${rel#*/}"; cp "$TEST_PUBLIC_SITE/$rel" "$output"; fi\n',
         )
         self._write_command(
             bin_dir / "agdesign2",
@@ -71,6 +115,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
                 "AGDESIGN2_BIN": str(bin_dir / "agdesign2"),
                 "SUCURI_ENV_FILE": str(root / "missing-sucuri.env"),
                 "TEST_MARKER_DIR": str(marker_dir),
+                "TEST_PUBLIC_SITE": str(public_site),
             }
         )
         return tmp, snapshot, marker_dir, env
@@ -160,6 +205,34 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("obsolete .gz suffix", result.stderr)
+        self.assertFalse((marker_dir / "rsync_args").exists())
+
+    def test_missing_blast_coverage_stops_before_rsync(self) -> None:
+        tmp, snapshot, marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
+        index = snapshot / "public_site/downloads/agdesign2_portal_index.json"
+        rows = json.loads(index.read_text(encoding="utf-8"))
+        for row in rows:
+            row["cross_reactivity_count"] = 0
+        index.write_text(json.dumps(rows), encoding="utf-8")
+
+        result = self._run(snapshot, env)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("human BLAST coverage is 0/5000", result.stderr)
+        self.assertFalse((marker_dir / "rsync_args").exists())
+
+    def test_missing_open_targets_stops_before_rsync(self) -> None:
+        tmp, snapshot, marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
+        (snapshot / "public_site/open_targets_disease_associations.tsv").unlink()
+
+        result = self._run(snapshot, env)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Open Targets association TSV is missing or empty", result.stderr)
         self.assertFalse((marker_dir / "rsync_args").exists())
 
     def test_publish_purges_before_live_asset_checks(self) -> None:
