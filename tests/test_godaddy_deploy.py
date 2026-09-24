@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from agdesign2.release_validation import REQUIRED_SITE_DOCS, REQUIRED_SITE_PAGES
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEPLOY_SCRIPT = ROOT / "scripts" / "deploy_snapshot_to_godaddy.sh"
@@ -22,6 +24,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         snapshot = root / "snapshot"
         public_site = snapshot / "public_site"
         public_site.mkdir(parents=True)
+        doi = "10.64898/2026.07.30.741735"
         (public_site / "index.html").write_text(
             '<link rel="stylesheet" href="portal.css?v=test">\n'
             '<script src="portal-index-data.js?v=test"></script>\n'
@@ -50,15 +53,27 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         (public_site / "mouse/report_scripts").mkdir()
         (public_site / "reports/example.html").write_text("human", encoding="utf-8")
         (public_site / "mouse/reports/example.html").write_text("mouse", encoding="utf-8")
+        for site_dir in (public_site, public_site / "mouse"):
+            (site_dir / "reports/example.html").write_text(f"https://doi.org/{doi}", encoding="utf-8")
+            for name in (*REQUIRED_SITE_PAGES, *REQUIRED_SITE_DOCS):
+                target = site_dir / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                if name == "constructs.html":
+                    text = f'https://doi.org/{doi}<section id="after-export">' + '<a href="https://doi.org/example">guide</a>' * 7 + "</section>"
+                elif name == "index.html" and target.exists():
+                    text = target.read_text(encoding="utf-8") + f"https://doi.org/{doi}"
+                else:
+                    text = f"https://doi.org/{doi}"
+                target.write_text(text, encoding="utf-8")
         (public_site / "mouse/report_scripts/example.js").write_text("const report = {};", encoding="utf-8")
         (public_site / "portal_metadata.json").write_text(
-            json.dumps({"target_count": 5_000}) + "\n", encoding="utf-8"
+            json.dumps({"target_count": 5_000, "citation": {"doi": doi}}) + "\n", encoding="utf-8"
         )
         (public_site / "downloads/agdesign2_portal_index.json").write_text(
             json.dumps([human_row] * 5_000), encoding="utf-8"
         )
         (public_site / "mouse/portal_metadata.json").write_text(
-            json.dumps({"target_count": 4_500}) + "\n", encoding="utf-8"
+            json.dumps({"target_count": 4_500, "citation": {"doi": doi}}) + "\n", encoding="utf-8"
         )
         (public_site / "mouse/downloads/agdesign2_portal_index.json").write_text(
             json.dumps([mouse_row] * 4_500), encoding="utf-8"
@@ -95,6 +110,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             'if [[ "$args" == *"--config -"* ]]; then input="$(cat)"; printf "%s\\n" "$input" >> "$TEST_MARKER_DIR/curl_args"; printf \'{"status":1}\'; exit 0; fi\n'
             'output=""; url=""\n'
             'while [[ "$#" -gt 0 ]]; do case "$1" in --output) output="$2"; shift 2;; http*) url="$1"; shift;; *) shift;; esac; done\n'
+            'if [[ -n "${TEST_CURL_STALE_ASSET:-}" && "$url" == *"$TEST_CURL_STALE_ASSET" ]]; then printf "stale" > "$output"; exit 0; fi\n'
             'if [[ -n "$output" && "$output" != "/dev/null" && -n "$url" ]]; then rel="${url#*://}"; rel="${rel#*/}"; cp "$TEST_PUBLIC_SITE/$rel" "$output"; fi\n',
         )
         self._write_command(
@@ -284,6 +300,16 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0)
         self.assertNotIn("live asset verification passed", result.stdout)
+
+    def test_stale_mouse_construct_guidance_fails_live_verification(self) -> None:
+        tmp, snapshot, _marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0", "TEST_CURL_STALE_ASSET": "mouse/constructs.html"})
+
+        result = self._run(snapshot, env)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("public construct guidance is stale: mouse/constructs.html", result.stderr)
 
     def test_default_module_entrypoint_compresses_without_copied_cli_shebang(self) -> None:
         tmp, snapshot, marker_dir, env = self._fixture()

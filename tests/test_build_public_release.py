@@ -6,6 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from agdesign2.release_validation import REQUIRED_SITE_DOCS, REQUIRED_SITE_PAGES, _validate_site_content
 from scripts.build_public_release import (
     REQUIRED_PORTAL_DIRECTORIES,
     REQUIRED_PORTAL_FILES,
@@ -34,6 +35,31 @@ def _write_minimal_portal(portal_dir: Path) -> None:
 
 
 class PublicReleaseTests(unittest.TestCase):
+    def test_release_rejects_missing_or_stale_site_guidance(self) -> None:
+        doi = "10.64898/2026.07.30.741735"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            for name in (*REQUIRED_SITE_PAGES, *REQUIRED_SITE_DOCS):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(f"https://doi.org/{doi}", encoding="utf-8")
+            constructs = root / "constructs.html"
+            constructs.write_text(
+                f'https://doi.org/{doi}<section id="after-export">'
+                + '<a href="https://doi.org/example">guide</a>' * 7
+                + "</section>", encoding="utf-8",
+            )
+            _validate_site_content(root, label="mouse", doi=doi)
+            (root / "agent-guide.html").unlink()
+            with self.assertRaisesRegex(ValueError, "agent-guide.html"):
+                _validate_site_content(root, label="mouse", doi=doi)
+            (root / "agent-guide.html").write_text(doi, encoding="utf-8")
+            constructs.write_text(
+                f'https://doi.org/{doi}<section id="after-export">Tegel</section>', encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "stale expression references"):
+                _validate_site_content(root, label="mouse", doi=doi)
+
     def test_portal_validation_requires_complete_nonempty_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             portal_dir = Path(tmpdir) / "portal"
