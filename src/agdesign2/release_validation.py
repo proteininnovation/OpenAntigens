@@ -12,6 +12,11 @@ MIN_BLAST_COVERAGE = 0.80
 MIN_OPEN_TARGETS_COVERAGE = 0.80
 MIN_LOCAL_STRUCTURE_COVERAGE = 0.80
 MIN_CATALOG_SIZE_FOR_STRUCTURE_COVERAGE = 1_000
+REQUIRED_SITE_PAGES = (
+    "index.html", "builder.html", "constructs.html", "help.html", "methods.html",
+    "downloads.html", "calculator.html", "terms.html", "privacy.html", "agent-guide.html",
+)
+REQUIRED_SITE_DOCS = ("agent-guide.js", "llms.txt", "downloads/openantigens.bib", "downloads/openantigens.ris")
 
 
 def validate_structure_coverage(portal_dir: str | Path) -> None:
@@ -81,6 +86,13 @@ def validate_release_data(portal_dir: str | Path, *, require_full_catalog: bool 
         )
         if require_full_catalog or len(mouse) >= 1_000:
             _require_coverage(mouse, "cross_reactivity_count", MIN_BLAST_COVERAGE, "mouse BLAST")
+            human_citation = json.loads((portal_dir / "portal_metadata.json").read_text(encoding="utf-8"))["citation"]
+            mouse_citation = json.loads((portal_dir / "mouse/portal_metadata.json").read_text(encoding="utf-8"))["citation"]
+            if human_citation != mouse_citation:
+                raise ValueError("human and mouse portal citations differ")
+            for name in ("llms.txt", "downloads/openantigens.bib", "downloads/openantigens.ris"):
+                if (portal_dir / name).read_bytes() != (portal_dir / "mouse" / name).read_bytes():
+                    raise ValueError(f"human and mouse portal documents differ: {name}")
 
 
 def _load_rows(path: Path) -> list[dict[str, Any]]:
@@ -118,25 +130,6 @@ def _validate_catalog(
     missing_files = [path for path in detail_pages if not (catalog_root / path).is_file()]
     if missing_files:
         raise ValueError(f"{label} catalog is missing {len(missing_files)} rendered detail pages")
-    missing_complex_portal = 0
-    failed_complex_portal = 0
-    for path in detail_pages:
-        report_html = (catalog_root / path).read_bytes()
-        missing_complex_portal += b"Complex Portal lookup was not recorded" in report_html
-        failed_complex_portal += b"Complex Portal lookup failed" in report_html
-    if missing_complex_portal:
-        raise ValueError(
-            f"{label} catalog contains {missing_complex_portal} reports without Complex Portal lookup state"
-        )
-    if failed_complex_portal:
-        raise ValueError(f"{label} catalog contains {failed_complex_portal} failed Complex Portal lookups")
-    missing_scripts = [
-        path
-        for path in detail_pages
-        if not (catalog_root / "report_scripts" / path.with_suffix(".js").name).is_file()
-    ]
-    if missing_scripts:
-        raise ValueError(f"{label} catalog is missing {len(missing_scripts)} report scripts")
     if not metadata_path.is_file():
         raise ValueError(f"{label} portal metadata is missing: {metadata_path}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -145,6 +138,51 @@ def _validate_catalog(
             f"{label} metadata target_count does not match the index: "
             f"{metadata.get('target_count')!r} != {len(rows)}"
         )
+    citation = metadata.get("citation")
+    if not isinstance(citation, dict) or not citation.get("doi"):
+        raise ValueError(f"{label} portal citation is missing")
+    doi = str(citation["doi"])
+    _validate_site_content(catalog_root, label=label, doi=doi)
+    missing_complex_portal = 0
+    failed_complex_portal = 0
+    missing_citation = 0
+    for path in detail_pages:
+        report_html = (catalog_root / path).read_bytes()
+        missing_complex_portal += b"Complex Portal lookup was not recorded" in report_html
+        failed_complex_portal += b"Complex Portal lookup failed" in report_html
+        missing_citation += doi.encode() not in report_html
+    if missing_complex_portal:
+        raise ValueError(
+            f"{label} catalog contains {missing_complex_portal} reports without Complex Portal lookup state"
+        )
+    if failed_complex_portal:
+        raise ValueError(f"{label} catalog contains {failed_complex_portal} failed Complex Portal lookups")
+    if missing_citation:
+        raise ValueError(f"{label} catalog contains {missing_citation} reports without the portal citation")
+    missing_scripts = [
+        path
+        for path in detail_pages
+        if not (catalog_root / "report_scripts" / path.with_suffix(".js").name).is_file()
+    ]
+    if missing_scripts:
+        raise ValueError(f"{label} catalog is missing {len(missing_scripts)} report scripts")
+
+
+def _validate_site_content(root: Path, *, label: str, doi: str) -> None:
+    for name in (*REQUIRED_SITE_PAGES, *REQUIRED_SITE_DOCS):
+        path = root / name
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"{label} portal site document is missing or empty: {name}")
+    for name in REQUIRED_SITE_PAGES:
+        if doi not in (root / name).read_text(encoding="utf-8"):
+            raise ValueError(f"{label} portal page lacks its citation: {name}")
+    constructs = (root / "constructs.html").read_text(encoding="utf-8")
+    after_export = constructs.partition('id="after-export"')[2].partition("</section>")[0]
+    if after_export.count('href="https://doi.org/') != 7 or "Tegel" in after_export:
+        raise ValueError(f"{label} portal has stale expression references")
+    for name in ("llms.txt", "downloads/openantigens.bib", "downloads/openantigens.ris"):
+        if doi not in (root / name).read_text(encoding="utf-8"):
+            raise ValueError(f"{label} portal document lacks its citation: {name}")
 
 
 def _require_coverage(

@@ -33,7 +33,7 @@ The portal is the primary output. Each build produces:
 - category tabs in each report's final Construct Details section: full ectodomain or secreted region, PDB, annotated domains/repeats, strict, lenient, full-length multipass, and trimmed multipass. Only populated categories appear, with construct counts; PDB entries retain separate soluble and membrane groups within their tab. Switching tabs preserves sequence edits and exports.
 - a floating Sections menu linking to every displayed report section, including empty results. It highlights the current section and supports keyboard navigation, direct section links, and reduced-motion preferences without changing the builder or construct-tab state.
 - a compact visual construct-selection guide at `constructs.html#choose-constructs`, linked from each Construct Builder in a new tab so current selections and edits stay open
-- an After export note on vector, host, secretion-leader and tag choices, linked beside builder exports; reports identify the canonical sequence analyzed and explain PDB engineering and the absence of partner chains from exposure calculations
+- an After export note on vector, host, secretion-leader and tag choices, linked beside builder exports, with seven practical expression and purification references; reports identify the canonical sequence analyzed and explain PDB engineering and the absence of partner chains from exposure calculations
 - the summary and builder list soluble constructs as full region, PDB, strict, lenient, then annotated domains/repeats; builder copy controls wrap to fit the panel, with the export-help link on its own line
 
 Static builds are written to `outputs/<batch>/portal/`. Dynamic serving reads the same JSON and report files live and exposes the same pages plus JSON APIs.
@@ -283,7 +283,7 @@ python3 scripts/build_public_release.py \
   --checksums
 ```
 
-Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target.
+Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target. Full releases also require current construct guidance, citation files, and cited report pages in both human and mouse portals.
 
 Deploy an existing snapshot from the machine that holds it:
 
@@ -296,7 +296,7 @@ GODADDY_IDENTITY_FILE=~/.ssh/id_ed25519_openantigens \
 
 The deployer is host-independent. It requires key-based, non-interactive SSH access to `GODADDY_TARGET`, checks that access before changing local or remote files, compresses the staged portal by default, preserves host-managed `.ftpquota` and `.well-known/` files, mirrors with quota-safe `--delete-before`, and purges Sucuri when `PURGE_SUCURI=1`. `GODADDY_IDENTITY_FILE` is optional when the correct key is already selected by SSH config or an agent. Keep the SSH private key and Sucuri credentials host-local.
 
-The compressed deployment keeps `.js`, `.css`, and `.svg` filenames unchanged and marks their gzip encoding in the generated `.htaccess`; it does not require Apache URL rewriting. Run the deployer from a machine with the deployment identity. A successful publish includes Sucuri purge confirmation and live checks of the versioned index assets plus one report script.
+The compressed deployment keeps `.js`, `.css`, and `.svg` filenames unchanged and marks their gzip encoding in the generated `.htaccess`; it does not require Apache URL rewriting. Run the deployer from a machine with the deployment identity. A successful publish includes Sucuri purge confirmation and checks of ordinary public URLs for index assets, construct guidance, citation documents, and sample reports in both portals.
 
 `--dry-run` intentionally does not compress. For a dry-run that exactly matches the real transfer, compress an isolated deployment copy first and use `COMPRESS=0` for both the dry-run and the publish.
 

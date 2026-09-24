@@ -286,6 +286,8 @@ verify_live_site() {
   local asset
   local report_script
   local refs
+  local citation_doi
+  citation_doi="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["citation"]["doi"])' "${PUBLIC_SITE}/portal_metadata.json")"
   refs="$(grep -Eo '(portal\.css|portal-index-data\.js|portal-disease-index\.js|portal-index\.js)\?v=[^"[:space:]]+' "${PUBLIC_SITE}/index.html" | sort -u)"
   if [[ -z "${refs}" ]]; then
     echo "ERROR: could not resolve versioned index assets for live verification." >&2
@@ -317,6 +319,35 @@ verify_live_site() {
   done
   curl --silent --show-error --fail --location --head \
     "${SITE_URL%/}/open_targets_disease_associations.tsv" >/dev/null
+  for asset in constructs.html mouse/constructs.html; do
+    curl --silent --show-error --fail --location --compressed \
+      --output "${live_dir}/page.html" "${SITE_URL%/}/${asset}"
+    if ! cmp -s \
+      <(sed -n '/id="after-export"/,/<\/section>/p' "${PUBLIC_SITE}/${asset}") \
+      <(sed -n '/id="after-export"/,/<\/section>/p' "${live_dir}/page.html"); then
+      echo "ERROR: public construct guidance is stale: ${asset}" >&2
+      return 1
+    fi
+  done
+  for asset in agent-guide.html llms.txt downloads/openantigens.bib downloads/openantigens.ris \
+               mouse/agent-guide.html mouse/llms.txt mouse/downloads/openantigens.bib mouse/downloads/openantigens.ris; do
+    curl --silent --show-error --fail --location --compressed \
+      --output "${live_dir}/page.html" "${SITE_URL%/}/${asset}"
+    if ! grep -Fq "${citation_doi}" "${live_dir}/page.html"; then
+      echo "ERROR: public citation document is stale: ${asset}" >&2
+      return 1
+    fi
+  done
+  for asset in "$(find "${PUBLIC_SITE}/reports" -type f -name '*.html' | LC_ALL=C sort | sed -n '1p')" \
+               "$(find "${PUBLIC_SITE}/mouse/reports" -type f -name '*.html' | LC_ALL=C sort | sed -n '1p')"; do
+    asset="${asset#${PUBLIC_SITE}/}"
+    curl --silent --show-error --fail --location --compressed \
+      --output "${live_dir}/page.html" "${SITE_URL%/}/${asset}"
+    if ! grep -Fq "${citation_doi}" "${live_dir}/page.html"; then
+      echo "ERROR: public report citation is stale: ${asset}" >&2
+      return 1
+    fi
+  done
   echo "[openantigen-godaddy] live asset verification passed"
 }
 

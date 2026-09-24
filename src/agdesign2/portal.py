@@ -1820,7 +1820,17 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card" id="after-export">
       <h2>After export</h2>
       <p>The exported sequence contains your selected target region and chosen edits. Choose a vector and host appropriate for your experiment, adding a secretion leader or tags where needed. Check whether native signal or processing sequences are already included.</p>
-      <p>Practical resources: <a class="inline-link" href="https://blog.addgene.org/plasmids-101-protein-tags">Addgene&rsquo;s protein-tag guide</a> · <a class="inline-link" href="https://doi.org/10.1016/j.nbt.2020.05.002">Tegel et al.: mammalian protein production</a></p>
+      <p>OpenAntigens supports construct selection and design but does not prescribe expression or purification conditions. These practical guides can help plan the experimental work:</p>
+      <ul class="doc-list">
+        <li><strong>General starting strategy:</strong> Structural Genomics Consortium et al., <a class="inline-link" href="https://doi.org/10.1038/nmeth.f.202">Protein production and purification</a> (2008).</li>
+        <li><strong><em>E. coli</em> expression:</strong> Aguilar Lucero et al., <a class="inline-link" href="https://doi.org/10.1016/bs.mie.2021.08.019">Starting a new recombinant protein production project in <em>Escherichia coli</em></a> (2021).</li>
+        <li><strong>Expi293F expression:</strong> Hederoth et al., <a class="inline-link" href="https://doi.org/10.3389/fbioe.2025.1661193">Updated transient gene expression protocol in Expi293F cells using PEI</a> (2025).</li>
+        <li><strong>ExpiCHO and HEK293E expression:</strong> Hacker et al., <a class="inline-link" href="https://doi.org/10.1007/978-1-0716-3878-1_6">Small-scale cultivation and transfection of ExpiCHO and HEK293E cells in single-use orbitally shaken bioreactors</a> (2024).</li>
+        <li><strong>Insect-cell expression:</strong> Jarvis, <a class="inline-link" href="https://doi.org/10.1016/B978-0-12-420070-8.00013-1">Recombinant protein expression in baculovirus-infected insect cells</a> (2014).</li>
+        <li><strong>Tag selection:</strong> Kimple et al., <a class="inline-link" href="https://doi.org/10.1002/0471140864.ps0909s73">Overview of affinity tags for protein purification</a> (2013).</li>
+        <li><strong>Purification strategy:</strong> Wingfield, <a class="inline-link" href="https://doi.org/10.1002/0471140864.ps0601s80">Overview of the purification of recombinant proteins</a> (2015).</li>
+      </ul>
+      <p>For tag choices, see Addgene&rsquo;s <a class="inline-link" href="https://blog.addgene.org/plasmids-101-protein-tags">protein-tag guide.</a></p>
     </section>
 
     <section class="card doc-card">
@@ -1951,11 +1961,15 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         <h2>Cysteine edits</h2>
         <p>Pre-generated construct cards report unpaired cysteine warnings. In the Interactive Construct Builder, checkboxes can apply Cys-to-Ser edits to selected unpaired cysteines; names, TSV, and FASTA update immediately.</p>
         <p>The builder excludes ambiguous cysteine contacts from its suggested edits. Check the model and curated disulfide annotations before applying a substitution.</p>
+        <p>For an exposed unpaired cysteine, review the literature and biological assembly for an intermolecular disulfide or a partner omitted from the model. If its role is uncertain, compare the original sequence with a Cys-to-Ser variant and assess protein integrity and function as well as yield.</p>
+        <p>A buried unpaired cysteine may be less accessible to intermolecular contacts in the modeled conformation. If production is poor, a substitution is one option to test after checking local packing, conservation, and known function. Burial alone does not establish that the residue is dispensable.</p>
       </article>
       <article class="card doc-card">
         <h2>PTM and processing review</h2>
         <p>Construct cards list overlapping PTMs and processing features for boundary review.</p>
         <p>Cleavage, propeptide, signal peptide, and chain annotations deserve special attention because they can define mature protein boundaries.</p>
+        <p>Review glycosylation and other PTMs when choosing the host, and check the target literature before removing a modification site. Consider whether processing is needed to obtain the intended mature protein.</p>
+        <p>Furin-like motifs warrant particular attention during mammalian expression, where proteolytic processing can affect product integrity. A motif alone does not predict whether cleavage will occur. When intact protein is required and the site's role is uncertain, compare the original sequence with a cleavage-site variant, checking the literature and measuring integrity and function in the intended system.</p>
       </article>
       <article class="card doc-card">
         <h2>Multipass proteins</h2>
@@ -2192,7 +2206,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Assembly and partner requirements</h2>
         <p>Interaction and complex information is summarized separately from obligatory-partner classification. Known interactions provide context; obligatory-partner warnings require stronger curated complex evidence.</p>
-        <p>Obligatory-partner warnings are anchored to curated Complex Portal records when that module is enabled. UniProt <code>SUBUNIT</code> comments are retained as interaction and assembly context without independently creating obligatory-partner warnings.</p>
+        <p>Obligatory-partner warnings are anchored to curated Complex Portal records when that module is enabled. UniProt <code>SUBUNIT</code> comments inform integrin assembly classification but do not independently create obligatory-partner warnings. Other free-text interaction rows are not shown in the public portal.</p>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Class</th><th>Evidence rule</th><th>How to use it</th></tr></thead>

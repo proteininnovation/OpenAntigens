@@ -29,9 +29,25 @@ class ConstructGuidanceTests(unittest.TestCase):
         self.assertIn("Full design region when neither label applies", classes)
         self.assertEqual(html.count('id="after-export"'), 1)
         self.assertLess(html.index('id="after-export"'), html.index("What the construct list contains"))
-        self.assertIn("https://blog.addgene.org/plasmids-101-protein-tags", html)
-        self.assertIn("https://doi.org/10.1016/j.nbt.2020.05.002", html)
+        for portal_title in ("OpenAntigens", "OpenAntigens Mouse"):
+            page = render_constructs_page(portal_title=portal_title)
+            after_export = re.search(r'<section[^>]*id="after-export".*?</section>', page, re.S).group()
+            self.assertEqual(
+                re.findall(r'href="https://doi.org/([^"]+)', after_export),
+                [
+                    "10.1038/nmeth.f.202", "10.1016/bs.mie.2021.08.019",
+                    "10.3389/fbioe.2025.1661193", "10.1007/978-1-0716-3878-1_6",
+                    "10.1016/B978-0-12-420070-8.00013-1",
+                    "10.1002/0471140864.ps0909s73", "10.1002/0471140864.ps0601s80",
+                ],
+            )
+            self.assertIn("https://blog.addgene.org/plasmids-101-protein-tags", after_export)
+            self.assertNotIn("Tegel", after_export)
+            self.assertNotIn("https://info.addgene.org/plasmids-101-topic-page", after_export)
+            self.assertIn("For an exposed unpaired cysteine", page)
+            self.assertIn("Furin-like motifs warrant particular attention", page)
         self.assertIn("without partner chains", render_methods_page())
+        self.assertIn("Other free-text interaction rows are not shown", render_methods_page())
 
     def test_help_link_and_guide_across_serving_modes_and_mouse_theme(self):
         with tempfile.TemporaryDirectory() as tmp:
