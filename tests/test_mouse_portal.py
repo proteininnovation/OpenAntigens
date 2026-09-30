@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from agdesign2.portal import render_index_page
 from agdesign2.mouse_portal import (
     build_mouse_portal_from_human_orthologs,
     _require_blast_tools_for_mouse_cross_reactivity,
@@ -273,6 +274,13 @@ class MousePortalTests(unittest.TestCase):
             downloads_tsv = (result.portal_index_path.parent / "downloads" / "agdesign2_portal_index.tsv").read_text(encoding="utf-8")
             download_manifest = json.loads((result.portal_index_path.parent / "downloads" / "download_manifest.json").read_text(encoding="utf-8"))
             self.assertIn("OpenAntigens Mouse", index_html)
+            shared_intro = render_index_page([]).split('<p class="hero-text">', 1)[1].split('</p>', 1)[0]
+            self.assertIn(f'<p class="hero-text">{shared_intro}</p>', index_html)
+            self.assertIn("Antigen constructs for mouse orthologs of human targets.", index_html)
+            self.assertLess(index_html.index('class="homepage-citation"'), index_html.index('</header>'))
+            self.assertNotIn("agent-essentials", index_html)
+            self.assertNotIn('href="llms.txt">llms.txt</a>', index_html)
+            self.assertIn('href="agent-guide.html">For AI agents</a>', index_html)
             self.assertIn("openantigens mouse", index_html.lower())
             self.assertIn("OpenAntigens Human", index_html)
             self.assertIn('href="../../index.html"', detail_html)

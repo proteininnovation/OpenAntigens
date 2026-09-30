@@ -897,7 +897,6 @@ def _portal_footer(*, prefix: str = "") -> str:
           <a href="{escape(prefix)}terms.html">Terms</a>
           <a href="{escape(prefix)}privacy.html">Privacy</a>
           <a href="{escape(prefix)}agent-guide.html">For AI agents</a>
-          <a href="{escape(prefix)}llms.txt">llms.txt</a>
         </nav>
       </div>
       <p class="footer-citation">Using OpenAntigens in your research? Cite
@@ -1063,7 +1062,7 @@ def render_index_page(
     topology_counts = _topology_counts(ready_entries)
 
     subtitle = portal_subtitle or "Antigen constructs for human cell-surface and secreted proteins."
-    intro = portal_intro or "Open a protein report to compare proposed construct boundaries and inspect sequence and structural evidence. Export selected sequences as FASTA or TSV."
+    intro = portal_intro or "Design antigen constructs using protein structures and sequence annotations. Compare homologs across species and identify closely related proteins to assess potential cross-reactivity. Refine construct boundaries and export sequences for experimental testing."
     disease_controls = (
         """
       <input id="diseaseSearchBox" type="search" list="diseaseSuggestions" placeholder="Filter by disease" aria-label="Filter by disease">
@@ -1102,6 +1101,10 @@ def render_index_page(
           <p class="eyebrow">Recombinant antigen design</p>
           <h1>{escape(subtitle)}</h1>
           <p class="hero-text">{escape(intro)}</p>
+          <p class="homepage-citation">Using OpenAntigens in your research? Cite
+            {citation_short_html()} (preprint).
+            <a href="help.html#cite-openantigens">How to cite</a>
+          </p>
         </div>
         <div class="hero-panel">
           <div class="stats">
@@ -1123,8 +1126,6 @@ def render_index_page(
       <button id="resetFilters" type="button">Reset</button>
     </section>
 
-    <p class="agent-essentials">Confirm species and accession. Preserve residue numbering. Proposed constructs require experimental validation.
-      <a href="agent-guide.html#interpret-supporting-evidence">How to read the evidence</a></p>
     <section class="pagination-bar" aria-label="Index pagination">
       <label class="page-size-control" for="pageSizeSelect">
         Rows per page
@@ -9946,6 +9947,7 @@ body {
     linear-gradient(135deg, #6e2434 0%, #b64a5d 54%, #d17682 100%);
   box-shadow: 0 28px 70px rgba(166, 62, 80, 0.14);
 }
+.site-hero .homepage-citation a {color:#fff;}
 :root {
   --bg: #fff7f8;
   --bg-deep: #6e2434;
@@ -11500,8 +11502,6 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 .agent-prompt textarea {display:block;width:100%;max-width:100%;margin:0 0 8px;padding:12px;border:1px solid #abd8d5;border-radius:8px;font-family:inherit;font-size:13px;line-height:1.6;background:white;color:#102338;}
 .agent-copy-status {grid-column:1/-1;color:#076b67;font-size:12px;}
 .agent-copy-status:empty {display:none;}
-.agent-essentials {margin:0 0 16px;padding:0 4px;color:#415d72;font-size:12px;line-height:1.6;}
-.agent-essentials a {color:#076b67;text-underline-offset:3px;}
 .guide-layout {display:grid;grid-template-columns:220px minmax(0,1fr);gap:28px;align-items:start;}
 .guide-toc {position:sticky;top:24px;display:grid;gap:16px;padding:20px 0;font-size:13px;line-height:1.5;}
 .guide-toc strong {font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#587089;}
@@ -11525,6 +11525,8 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 }
 .footer-citation {margin:20px 0 0;color:var(--muted);line-height:1.7;font-size:.9rem;}
 .footer-citation a {color:var(--accent-2);text-underline-offset:3px;}
+.hero-copy .homepage-citation {margin:16px 0 0;max-width:62ch;color:rgba(241,247,255,.82);line-height:1.7;font-size:.85rem;}
+.homepage-citation a {color:#91d7cf;text-underline-offset:3px;}
 .paper-citation {overflow-wrap:anywhere;}
 #cite-openantigens {scroll-margin-top:24px;}
 

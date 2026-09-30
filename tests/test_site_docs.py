@@ -8,7 +8,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from agdesign2.dynamic_portal import create_app
-from agdesign2.portal import build_portal, render_agent_guide_page
+from agdesign2.portal import build_portal, render_agent_guide_page, render_index_page
 from agdesign2.portal_db import build_portal_database, build_portal_from_database, create_db_portal_app
 from agdesign2.site_docs import PAPER, agent_guide_markdown, citation_cff, citation_downloads, citation_text, site_document_files
 from scripts.build_public_release import copy_public_portal, render_release_readme
@@ -19,6 +19,18 @@ DOI = "10.64898/2026.07.30.741735"
 
 
 class SiteDocumentationTests(unittest.TestCase):
+    def test_homepage_keeps_evidence_instructions_in_agent_guide(self):
+        for title in ("OpenAntigens", "OpenAntigens Mouse"):
+            with self.subTest(title=title):
+                homepage = render_index_page([], portal_title=title)
+                self.assertNotIn("agent-essentials", homepage)
+                self.assertNotIn("How to read the evidence", homepage)
+                self.assertIn('href="agent-guide.html"', homepage)
+                self.assertLess(homepage.index('class="hero-text"'), homepage.index('class="homepage-citation"'))
+                self.assertLess(homepage.index('class="homepage-citation"'), homepage.index('</header>'))
+                self.assertIn(DOI, homepage.split('class="homepage-citation"')[1].split('</p>')[0])
+                self.assertIn('id="interpret-supporting-evidence"', render_agent_guide_page(portal_title=title))
+
     def test_verified_reference_and_repository_copies(self):
         self.assertEqual(PAPER["doi"], DOI)
         self.assertEqual(PAPER["date"], "2026-08-04")
@@ -64,6 +76,8 @@ class SiteDocumentationTests(unittest.TestCase):
                     self.assertIn(DOI, html, name)
                     prefix = "../" if name.startswith("reports/") else ""
                     self.assertIn(f'href="{prefix}help.html#cite-openantigens"', html)
+                    self.assertIn(f'href="{prefix}agent-guide.html">For AI agents</a>', html)
+                    self.assertNotIn(f'href="{prefix}llms.txt">llms.txt</a>', html)
                 metadata = json.loads((folder / "portal_metadata.json").read_text())
                 manifest = json.loads((folder / "downloads/download_manifest.json").read_text())
                 self.assertEqual(metadata["citation"]["doi"], DOI)
