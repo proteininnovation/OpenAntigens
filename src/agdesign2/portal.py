@@ -891,9 +891,15 @@ def _portal_footer(*, prefix: str = "", portal_title: str = "OpenAntigens") -> s
     <footer class="site-footer">
       <div class="footer-grid">
         <div class="footer-brand">
-          <div class="footer-lockup">
-            <img class="footer-mark" src="{escape(prefix)}{mark}" alt="" width="48" height="48">
-            <strong class="footer-wordmark">Open<b>Antigens</b></strong>
+          <div class="footer-cobrand">
+            <a class="footer-lockup" href="{escape(prefix)}index.html" aria-label="OpenAntigens home">
+              <img class="footer-mark" src="{escape(prefix)}{mark}" alt="" width="48" height="48">
+              <strong class="footer-wordmark">Open<b>Antigens</b></strong>
+            </a>
+            <span class="footer-divider" aria-hidden="true"></span>
+            <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
+              <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
+            </a>
           </div>
           <p>Antigen construct design for cell-surface and secreted proteins.</p>
         </div>
@@ -906,9 +912,6 @@ def _portal_footer(*, prefix: str = "", portal_title: str = "OpenAntigens") -> s
           <a href="{escape(prefix)}privacy.html">Privacy</a>
           <a href="{escape(prefix)}agent-guide.html">For AI agents</a>
         </nav>
-        <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
-          <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
-        </a>
       </div>
       <p class="footer-citation">Using OpenAntigens in your research? Cite
         {citation_short_html()} (preprint).
@@ -11554,12 +11557,17 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 .brand-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.28); }
 .brand-ipi-link { display: inline-flex; }
 .brand-logo { height: 46px; }
-.footer-brand { flex-direction: column; align-items: flex-start; gap: 10px; }
-.footer-lockup { display: flex; align-items: center; gap: 10px; }
+.footer-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 24px 40px; }
+.footer-grid .footer-links { justify-content: flex-end; }
+.footer-brand { flex-direction: column; align-items: flex-start; gap: 12px; max-width: 400px; }
+.footer-cobrand { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.footer-lockup { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.footer-lockup:hover { opacity: 0.86; }
 .footer-mark { display: block; width: 48px; height: 48px; }
 .footer-brand .footer-wordmark { font-family: Manrope, "Avenir Next", "Segoe UI", sans-serif; font-size: 1.38rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1; color: var(--ink); }
+.footer-divider { width: 1px; height: 40px; background: var(--line); }
+.footer-logo { height: 48px; }
 .footer-brand p { margin: 0; }
-.footer-logo { height: 64px; }
 .card.design-region-card { background: var(--accent-soft); }
 .design-region-boundary { margin: 0 0 14px; font: 700 clamp(2.2rem, 4vw, 3.2rem)/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -0.02em; color: var(--ink); }
 .design-region-boundary:empty { display: none; }
@@ -11568,7 +11576,11 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
   .brand-wordmark { font-size: 1.3rem; }
   .brand-divider { display: none; }
   .brand-logo { height: 38px; }
-  .footer-logo { height: 52px; }
+  .footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .footer-grid .footer-links { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .footer-divider { display: none; }
 }
 
 """ + theme_overrides + _construct_workbench_css()
