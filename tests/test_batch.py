@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import sys
 import tempfile
 import unittest
@@ -268,37 +269,65 @@ class PortalAlignmentTests(unittest.TestCase):
         self.assertNotIn("No membrane-expression constructs available.", detail_html)
 
     def test_construct_card_explains_rejected_homolog_mapping(self) -> None:
+        # 6 of 10 construct residues align to the mouse ortholog: below the Construct Builder's 70% rule.
+        mapping = {
+            "species": "mouse", "accession": "P00002", "entryName": "P00002",
+            "humanRegionStart": 1, "humanRegionEnd": 10, "homologRegionStart": 1,
+            "alignedHumanEctodomain": "ABCDEFGHIJ", "alignedHomologEctodomain": "ABCDEF----",
+            "ectodomainSequence": "ABCDEF",
+        }
         with tempfile.TemporaryDirectory() as tmpdir:
             html = _render_construct_card(
-                {
-                    "name": "test_construct",
-                    "start": 1,
-                    "end": 10,
-                    "length": 10,
-                    "sequence": "ABCDEFGHIJ",
-                    "homologs": [
-                        {
-                            "species": "mouse",
-                            "accession": "P00002",
-                            "entry_name": "P00002",
-                            "available": False,
-                            "notes": [
-                                "Boundary projection rejected: 6/10 query residues aligned to the homolog (60.0% < 70.0% minimum)."
-                            ],
-                        }
-                    ],
-                },
+                {"name": "test_construct", "start": 1, "end": 10, "length": 10, "sequence": "ABCDEFGHIJ"},
                 target={"entry_name": "TEST_HUMAN", "gene_symbol": "TEST", "accession": "P00001"},
                 batch_dir=Path(tmpdir),
                 page_dir=Path(tmpdir),
                 furin_sites=[],
                 ptms=[],
                 allow_structure_assets=False,
+                homolog_mappings=[mapping],
             )
 
         self.assertIn("TEST_MOUSE_mapping", html)
         self.assertIn("Mapping unavailable", html)
-        self.assertIn("60.0% &lt; 70.0% minimum", html)
+        self.assertIn("Only 60% of this boundary aligns to the ortholog; the Construct Builder requires 70%.", html)
+
+    def test_mouse_construct_rows_follow_builder_alignment(self) -> None:
+        # Regression: mouse cards showed a self "Egfr_MOUSE_mapping" row and no human row, while the
+        # builder (homologMappings) mapped human and cynomolgus. Cards must use the builder alignment.
+        target = {"entry_name": "TEST_MOUSE", "gene_symbol": "Test", "accession": "Q00001", "organism": "Mus musculus"}
+        mappings = [
+            {"species": "human", "accession": "P00001", "entryName": "TEST_HUMAN",
+             "humanRegionStart": 3, "humanRegionEnd": 12, "homologRegionStart": 5,
+             "alignedHumanEctodomain": "ABCD-EFGHIJ", "alignedHomologEctodomain": "ABXDQEFG-IJ",
+             "ectodomainSequence": "ABXDQEFGIJ"},
+        ]
+        records = [
+            {"species": "human", "accession": "P00001", "available": True},
+            {"species": "macaca_fascicularis", "accession": "XP_1", "available": False, "notes": ["No cynomolgus ortholog."]},
+        ]
+        construct = {
+            "name": "c1", "start": 4, "end": 11, "length": 8, "sequence": "BCDEFGHI",
+            "homologs": [{"species": "mouse", "available": False, "notes": ["No same-name UniProt entry found for species."]}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            html = _render_construct_card(
+                construct, target=target, batch_dir=Path(tmpdir), page_dir=Path(tmpdir), furin_sites=[], ptms=[],
+                allow_structure_assets=False, homolog_mappings=mappings, homolog_records=records, surface_positions={5, 6},
+            )
+        payload = json.loads(html.split('class="construct-payload">', 1)[1].split("</script>", 1)[0])
+        rows = {row["speciesRaw"]: row for row in payload["rows"]}
+        self.assertNotIn("TEST_MOUSE_mapping", html)  # the target's own species is never a homolog
+        self.assertEqual(set(rows), {"mouse", "human"})
+        human = rows["human"]
+        # Target 4-11 (BCDEFGHI) maps to homolog residues 6-13 (BXDQEFGI): Q is an insertion, H aligns to a gap.
+        self.assertEqual((human["start"], human["end"], human["sequence"]), (6, 13, "BXDQEFGI"))
+        self.assertEqual(human["alignedTarget"].replace("-", ""), construct["sequence"])
+        self.assertEqual(human["alignedHomolog"].replace("-", ""), human["sequence"])
+        self.assertEqual(human["identity"], "85.71%")  # 6 of 7 aligned residues identical (C vs X differs)
+        self.assertEqual(human["surfaceIdentity"], "50.00% (2 aa)")  # surface residues 5 (C/X) and 6 (D/D)
+        self.assertEqual([row["species"] for row in payload["unavailableRows"]], ["MACFA"])
+        self.assertEqual(payload["unavailableRows"][0]["reason"], "No cynomolgus ortholog.")
 
     def test_portal_align_sequences_returns_equal_length_alignment(self) -> None:
         alignment = _portal_align_sequences("ABCDEFGH", "ABCXEFGH")
@@ -1320,10 +1349,20 @@ class BatchTests(unittest.TestCase):
             (assets_dir / "full_ectodomain_quality.png").write_bytes(b"png")
             alphafold_dir = batch_dir / ".agdesign2" / "data" / "alphafold"
             alphafold_dir.mkdir(parents=True)
+            # Realistic invariants: the construct is the target slice 25-645 and the orthologs align to it
+            # (mouse carries a 2-residue insertion, so it spans 25-647; cynomolgus has one substitution).
+            three_letter = {"A": "ALA", "C": "CYS", "D": "ASP", "E": "GLU", "F": "PHE", "G": "GLY", "H": "HIS", "I": "ILE",
+                            "K": "LYS", "L": "LEU", "M": "MET", "N": "ASN", "P": "PRO", "Q": "GLN", "R": "ARG", "S": "SER",
+                            "T": "THR", "V": "VAL", "W": "TRP", "Y": "TYR"}
+            rng = random.Random(7)
+            target_sequence = "M" + "".join(rng.choice("ACDEFGHIKLMNPQRSTVWY") for _ in range(699))
+            construct_sequence = target_sequence[24:645]
+            mouse_sequence = construct_sequence[:300] + "WW" + construct_sequence[300:]
+            monkey_sequence = construct_sequence[:100] + ("A" if construct_sequence[100] != "A" else "G") + construct_sequence[101:]
             (alphafold_dir / "P00533.pdb").write_text(
                 "".join(
-                    f"ATOM  {index:5d}  CA  MET A{index:4d}    {float(index):8.3f}{13.207:8.3f}{2.100:8.3f}  1.00 91.00           C\n"
-                    for index in range(1, 101)
+                    f"ATOM  {index:5d}  CA  {three_letter[residue]} A{index:4d}    {float(index):8.3f}{13.207:8.3f}{2.100:8.3f}  1.00 91.00           C\n"
+                    for index, residue in enumerate(target_sequence, start=1)
                 ) + "END\n",
                 encoding="utf-8",
             )
@@ -1338,7 +1377,7 @@ class BatchTests(unittest.TestCase):
                             "gene_synonyms": ["ERBB1"],
                             "organism": "Homo sapiens",
                             "taxon_id": 9606,
-                            "sequence": "M" * 100,
+                            "sequence": target_sequence,
                         },
                         "ectodomain": {"start": 25, "end": 645, "label": "ecto", "source": "topology"},
                         "construct_details": [
@@ -1347,7 +1386,7 @@ class BatchTests(unittest.TestCase):
                                 "start": 25,
                                 "end": 645,
                                 "length": 621,
-                                "sequence": "A" * 50,
+                                "sequence": construct_sequence,
                                 "score": 93.0,
                                 "rationale": "Complete ectodomain.",
                                 "classification": "multi_domain_unit",
@@ -1363,7 +1402,7 @@ class BatchTests(unittest.TestCase):
                                         "available": True,
                                         "start": 25,
                                         "end": 647,
-                                        "sequence": "MOUSESEQ",
+                                        "sequence": mouse_sequence,
                                         "identity_to_human": 88.73,
                                     },
                                     {
@@ -1373,7 +1412,7 @@ class BatchTests(unittest.TestCase):
                                         "available": True,
                                         "start": 25,
                                         "end": 645,
-                                        "sequence": "MONKEYSEQ",
+                                        "sequence": monkey_sequence,
                                         "identity_to_human": 98.71,
                                     },
                                 ],
@@ -1749,8 +1788,8 @@ class BatchTests(unittest.TestCase):
         self.assertIn("EGFR_HUMAN_25-645", detail_html)
         self.assertIn("EGFR_MOUSE_25-647", detail_html)
         self.assertIn("EGFR_MACFA_25-645", detail_html)
-        self.assertIn("MOUSESEQ", detail_html)
-        self.assertIn("MONKEYSEQ", detail_html)
+        self.assertIn(mouse_sequence, detail_html)
+        self.assertIn(monkey_sequence, detail_html)
         self.assertIn("species=HUMAN boundary=25-645 identity_to_human=100.00%", detail_html)
         self.assertIn("construct-mutation-checkbox", report_viewer_js)
         self.assertIn("Optional Cys→Ser edits", report_viewer_js)
