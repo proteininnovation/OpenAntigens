@@ -717,6 +717,11 @@ def _copy_brand_assets(portal_dir: Path) -> None:
     for asset_name in (
         "ipi-logo-dark-800.png",
         "ipi-logo-light-800.png",
+        "openantigens-mark.svg",
+        "openantigens-mark-reversed.svg",
+        "openantigens-mark-mouse.svg",
+        "manrope-latin.woff2",
+        "favicon.svg",
         "favicon.ico",
         "favicon-32.png",
         "apple-touch-icon.png",
@@ -738,6 +743,7 @@ def _copy_brand_assets(portal_dir: Path) -> None:
 
 def _portal_favicon_links(*, prefix: str = "") -> str:
     return f"""  <link rel="icon" href="{escape(prefix)}favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="{escape(prefix)}favicon.svg?v={_PORTAL_CSS_VERSION}">
   <link rel="icon" type="image/png" sizes="32x32" href="{escape(prefix)}favicon-32.png?v={_PORTAL_CSS_VERSION}">
   <link rel="apple-touch-icon" sizes="180x180" href="{escape(prefix)}apple-touch-icon.png?v={_PORTAL_CSS_VERSION}">
   <link rel="manifest" href="{escape(prefix)}site.webmanifest?v={_PORTAL_CSS_VERSION}">"""
@@ -852,16 +858,19 @@ def _portal_brand_header(
 ) -> str:
     chip = chip_html or '<div class="hero-chip">Antigen constructs and supporting evidence</div>'
     species_switch = _portal_species_switch(portal_title, sibling_link)
+    species_suffix = portal_title.removeprefix("OpenAntigens").strip()
+    species_tag = f'<span class="brand-species">{escape(species_suffix)}</span>' if species_suffix else ""
     return f"""
       <div class="brand-bar">
         <div class="brand-lockup">
-          <a class="brand-home-link" href="{escape(prefix)}index.html" aria-label="OpenAntigens home" style="color:#fff;text-decoration:none;display:inline-flex;align-items:center;">
+          <a class="brand-home-link" href="{escape(prefix)}index.html" aria-label="OpenAntigens home">
+            <img class="brand-mark" src="{escape(prefix)}openantigens-mark-reversed.svg" alt="" width="54" height="54">
+            <span class="brand-wordmark">Open<b>Antigens</b></span>{species_tag}
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <a class="brand-ipi-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer">
             <img class="brand-logo" src="{escape(prefix)}ipi-logo-light-800.png" alt="Institute for Protein Innovation">
           </a>
-          <div class="brand-copy">
-            <a class="brand-kicker" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" style="color:#fff;text-decoration:none;">Institute for Protein Innovation</a>
-            <a class="brand-product" href="{escape(prefix)}index.html" style="color:#fff;text-decoration:none;">{escape(portal_title)}</a>
-          </div>
         </div>
         <div class="brand-actions">
           {_portal_nav(prefix=prefix, active=active)}
@@ -874,20 +883,19 @@ def _portal_brand_header(
 """
 
 
-def _portal_footer(*, prefix: str = "") -> str:
+def _portal_footer(*, prefix: str = "", portal_title: str = "OpenAntigens") -> str:
     version = _openantigen_version()
     build_date = _portal_build_date()
+    mark = "openantigens-mark-mouse.svg" if "mouse" in portal_title.lower() else "openantigens-mark.svg"
     return f"""
     <footer class="site-footer">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
-            <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
-          </a>
-          <div>
-            <strong>OpenAntigens</strong>
-            <p>Antigen construct design for cell-surface and secreted proteins.</p>
+          <div class="footer-lockup">
+            <img class="footer-mark" src="{escape(prefix)}{mark}" alt="" width="48" height="48">
+            <strong class="footer-wordmark">Open<b>Antigens</b></strong>
           </div>
+          <p>Antigen construct design for cell-surface and secreted proteins.</p>
         </div>
         <nav class="footer-links" aria-label="Footer navigation">
           <a href="{escape(prefix)}builder.html">Builder guide</a>
@@ -898,6 +906,9 @@ def _portal_footer(*, prefix: str = "") -> str:
           <a href="{escape(prefix)}privacy.html">Privacy</a>
           <a href="{escape(prefix)}agent-guide.html">For AI agents</a>
         </nav>
+        <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
+          <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
+        </a>
       </div>
       <p class="footer-citation">Using OpenAntigens in your research? Cite
         {citation_short_html()} (preprint).
@@ -1165,7 +1176,7 @@ def render_index_page(
         <tbody></tbody>
       </table>
     </section>
-    {_portal_footer()}
+    {_portal_footer(portal_title=portal_title)}
   </main>
   <script src="portal-index-data.js?v={_PORTAL_JS_VERSION}"></script>{disease_index_script}
   <script>
@@ -2492,7 +2503,7 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
         </ul>
       </aside>
     </section>
-    """ + _portal_footer() + """
+    """ + _portal_footer(portal_title=portal_title) + """
   </main>
 
   <script>
@@ -3114,7 +3125,7 @@ def _render_info_page(
     <div class="doc-layout">
       {body_html}
     </div>
-    {_portal_footer()}
+    {_portal_footer(portal_title=portal_title)}
   </main>
 </body>
 </html>
@@ -3972,8 +3983,9 @@ def render_detail_page(
         </dl>
         <p class="section-note">Alternative isoforms are not analyzed separately; the coordinates and annotations shown refer to this sequence.</p>
       </article>
-      <article class="card">
+      <article class="card design-region-card">
         <h2>{escape(design_region_label)}</h2>
+        <p class="design-region-boundary">{escape(_format_region(ectodomain))}</p>
         <dl class="meta">
           <dt>Boundary</dt><dd>{escape(_format_region(ectodomain))}</dd>
           <dt>Label</dt><dd>{escape(str(ectodomain.get('label') or ''))}</dd>
@@ -4083,7 +4095,7 @@ def render_detail_page(
       <h2>Notes</h2>
       <ul>{note_items}</ul>
     </section>
-    {_portal_footer(prefix="../")}
+    {_portal_footer(prefix="../", portal_title=portal_title)}
   </main>
   {construct_mutation_script}
   {_report_section_navigation()}
@@ -11529,5 +11541,34 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 .homepage-citation a {color:#91d7cf;text-underline-offset:3px;}
 .paper-citation {overflow-wrap:anywhere;}
 #cite-openantigens {scroll-margin-top:24px;}
+
+/* Brand: receptor mark + Manrope wordmark beside the IPI logo (design system "OpenAntigens"). */
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("manrope-latin.woff2") format("woff2"); }
+.brand-lockup { flex-wrap: wrap; gap: 18px; }
+.brand-home-link { gap: 10px; color: #fff; text-decoration: none; }
+.brand-home-link:hover, .brand-ipi-link:hover { opacity: 0.86; }
+.brand-mark { display: block; width: 54px; height: 54px; }
+.brand-wordmark { font-family: Manrope, "Avenir Next", "Segoe UI", sans-serif; font-size: 1.56rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1; color: #fff; }
+.brand-wordmark b, .footer-wordmark b { font-weight: 800; }
+.brand-species { padding: 3px 9px; border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; }
+.brand-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.28); }
+.brand-ipi-link { display: inline-flex; }
+.brand-logo { height: 46px; }
+.footer-brand { flex-direction: column; align-items: flex-start; gap: 10px; }
+.footer-lockup { display: flex; align-items: center; gap: 10px; }
+.footer-mark { display: block; width: 48px; height: 48px; }
+.footer-brand .footer-wordmark { font-family: Manrope, "Avenir Next", "Segoe UI", sans-serif; font-size: 1.38rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1; color: var(--ink); }
+.footer-brand p { margin: 0; }
+.footer-logo { height: 64px; }
+.card.design-region-card { background: var(--accent-soft); }
+.design-region-boundary { margin: 0 0 14px; font: 700 clamp(2.2rem, 4vw, 3.2rem)/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -0.02em; color: var(--ink); }
+.design-region-boundary:empty { display: none; }
+@media (max-width: 980px) {
+  .brand-mark { width: 44px; height: 44px; }
+  .brand-wordmark { font-size: 1.3rem; }
+  .brand-divider { display: none; }
+  .brand-logo { height: 38px; }
+  .footer-logo { height: 52px; }
+}
 
 """ + theme_overrides + _construct_workbench_css()
