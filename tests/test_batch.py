@@ -300,6 +300,43 @@ class PortalAlignmentTests(unittest.TestCase):
         self.assertIn("Mapping unavailable", html)
         self.assertIn("60.0% &lt; 70.0% minimum", html)
 
+    def test_construct_card_and_builder_share_export_name_when_gene_symbol_differs(self) -> None:
+        # PD-L1: gene CD274, UniProt entry PD1L1_*. Cards and builder must export the same region name.
+        cases = [
+            ({"entry_name": "PD1L1_HUMAN", "gene_symbol": "CD274", "organism": "Homo sapiens", "taxon_id": 9606}, "HUMAN"),
+            ({"entry_name": "PD1L1_MOUSE", "gene_symbol": "Cd274", "organism": "Mus musculus", "taxon_id": 10090}, "MOUSE"),
+        ]
+        for target_fields, species_code in cases:
+            with self.subTest(species=species_code), tempfile.TemporaryDirectory() as tmpdir:
+                root = Path(tmpdir)
+                target = {"accession": "P00001", "sequence": "AA", **target_fields}
+                card_html = _render_construct_card(
+                    {"name": "ecto", "start": 19, "end": 238, "length": 220, "sequence": "A" * 220, "homologs": []},
+                    target=target,
+                    batch_dir=root,
+                    page_dir=root,
+                    furin_sites=[],
+                    ptms=[],
+                    allow_structure_assets=False,
+                )
+                structures = root / "portal" / "structures"
+                structures.mkdir(parents=True)
+                pdb_path = structures / "test.pdb"
+                pdb_path.write_text(
+                    "ATOM      1  CA  ALA A   1       0.000   0.000   0.000  1.00 95.00           C\n"
+                    "ATOM      2  CA  ALA A   2       1.000   0.000   0.000  1.00 95.00           C\nEND\n",
+                    encoding="utf-8",
+                )
+                widget_html = _render_structure_widget(
+                    {"portal_structure_path": str(pdb_path)},
+                    {"target": target, "ectodomain": {"start": 1, "end": 2}, "topology": {"topology_class": "single_pass"}},
+                    batch_dir=root,
+                )
+                self.assertIn(f"<code>PD1L1_{species_code}_19-238</code>", card_html)
+                self.assertIn('"nameSymbol":"PD1L1"', card_html.replace(" ", ""))
+                self.assertNotIn("CD274_", card_html)
+                self.assertIn('nameSymbol: "PD1L1"', widget_html)
+
     def test_portal_align_sequences_returns_equal_length_alignment(self) -> None:
         alignment = _portal_align_sequences("ABCDEFGH", "ABCXEFGH")
         self.assertEqual(len(alignment["aligned_query"]), len(alignment["aligned_subject"]))
