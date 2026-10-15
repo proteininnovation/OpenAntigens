@@ -3974,17 +3974,22 @@ def render_detail_page(
     ) or f"<tr><td colspan=\"5\">{escape(_cysteine_empty_reason(report))}</td></tr>"
 
     furin_rows = "".join(
-        "<tr><td>{boundary}</td><td><code>{motif}</code></td><td>{suggestions}</td></tr>".format(
+        "<tr><td>{boundary}</td><td><code>{motif}</code></td><td>{suggestions}</td><td>{annotation}</td></tr>".format(
             boundary=escape(f"{item.get('start')}-{item.get('end')}" if item.get("start") is not None and item.get("end") is not None else ""),
             motif=escape(str(item.get("motif") or "")),
             suggestions=escape(", ".join(item.get("suggestions") or [])),
+            annotation=(
+                escape(str(item.get("curated_annotation")))
+                if item.get("curated_annotation")
+                else '<span class="muted">no curated cleavage annotation here</span>'
+            ),
         )
         for item in (report.get("furin_sites") or [])
     ) or (
-        "<tr><td colspan=\"3\">No candidate furin-like motif was found in the design "
+        "<tr><td colspan=\"4\">No candidate furin-like motif was found in the design "
         "region.</td></tr>"
         if region_blast_ran
-        else "<tr><td colspan=\"3\">No design region was defined, so no furin-like motif "
+        else "<tr><td colspan=\"4\">No design region was defined, so no furin-like motif "
         "search was run. The search covers the design region only, never the full "
         "sequence.</td></tr>"
     )
@@ -4298,7 +4303,7 @@ def render_detail_page(
       <article class="card" id="furin-cleavage-sites" data-report-section="Furin Cleavage Sites">
         <h2>Candidate Furin-like Motifs</h2>
         <table>
-          <thead><tr><th>Boundary</th><th>Motif</th><th>Suggested edits</th></tr></thead>
+          <thead><tr><th>Boundary</th><th>Motif</th><th>Suggested edits</th><th>Curated annotation</th></tr></thead>
           <tbody>{furin_rows}</tbody>
         </table>
       </article>

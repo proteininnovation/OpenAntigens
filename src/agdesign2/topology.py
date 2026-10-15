@@ -14,13 +14,122 @@ class TopologyResult:
     topology: TopologyAnnotation | None = None
 
 
+# Legacy spellings that reports written before the OA-018 alias fix carry.
+_FEATURE_TYPE_ALIASES = {
+    "PROPEPTIDE": "PROPEP",
+    "LIPIDATION": "LIPID",
+    "INTRAMEMBRANE": "INTRAMEM",
+    "TRANSIT_PEPTIDE": "TRANSIT",
+}
+
+
+def feature_type(feature: Feature) -> str:
+    """The canonical type, accepting the pre-OA-018 spellings on read."""
+    raw = str(feature.type or "").upper()
+    return _FEATURE_TYPE_ALIASES.get(raw, raw)
+
+
+def is_beta_stranded_transmem(feature: Feature) -> bool:
+    """A UniProt TRANSMEM that is a beta strand, not a helix.
+
+    F10a: every TRANSMEM was counted as a helix and the description was never
+    read. MACPF and gasdermin beta-hairpins and the VDAC1 beta-barrel are
+    annotated "Beta stranded", so C6/C8A/C8B/C9/PRF1/MPEG1, GSDMA/B/D and VDAC1
+    — 10 human / 9 mouse reports — became Track Multipass with a blank
+    ectodomain, while C7, which has no TRANSMEM at all, is correctly Secreted
+    23-843. These hairpins only insert into a target membrane on activation;
+    the soluble protein is the antigen.
+    """
+    return "beta" in str(feature.description or "").lower()
+
+
 def derive_ectodomain(
     features: list[Feature],
     sequence_length: int,
     config: AnalysisConfig,
 ) -> TopologyResult:
+    """Derive the design region, then cap it at a GPI omega site.
+
+    F16b residual: 7 reports carry a GPI anchor **and** a TRANSMEM, so they take
+    the single-pass branch and never reach the cap inside
+    ``_derive_gpi_anchored_region``. Capping once, after the branch has chosen,
+    reaches all of them. Measured over both snapshots: 12 human / 116 mouse
+    regions ran past the omega site, 6 / 6 survived the chain-branch cap alone,
+    0 survive this.
+    """
+    result = _derive_ectodomain(features, sequence_length, config)
+    return _cap_region_at_gpi_omega_site(result, features)
+
+
+def _cap_region_at_gpi_omega_site(
+    result: TopologyResult, features: list[Feature]
+) -> TopologyResult:
+    """Trim a design region that runs past a GPI omega site — conditionally.
+
+    F16b residual: 6 human / 6 mouse reports carry a GPI anchor **and** a
+    TRANSMEM, so they take the single-pass branch and never reach the cap
+    inside ``_derive_gpi_anchored_region``.
+
+    The condition matters, and it is the one the plan's §7 release check names:
+    only cap **where a CHAIN bounds the GPI region**. An *untrimmed* region —
+    no CHAIN at all, as on CD24 and in
+    ``test_gpi_anchor_without_processed_chain_retains_untrimmed_construct`` —
+    is left whole, because without a processed chain there is nothing saying
+    the tail is a propeptide rather than part of the protein.
+
+    Where a CHAIN does contain the omega site the biology is not in doubt: the
+    transamidase cleaves there and replaces the C-terminal signal with the
+    anchor, so those residues are not in the mature protein. That applies to
+    TM+GPI proteins too (tetherin/BST2, ALPL, ULBP5), which take the
+    single-pass branch and never reach the cap inside
+    ``_derive_gpi_anchored_region``.
+    """
+    region = result.ectodomain
+    if region is None:
+        return result
+    anchors = [
+        feature.start
+        for feature in features
+        if feature_type(feature) == "LIPID" and "gpi" in (feature.description or "").lower()
+    ]
+    chains = [feature for feature in features if feature_type(feature) == "CHAIN"]
+    if not anchors or not chains:
+        return result
+    inside = [
+        anchor
+        for anchor in anchors
+        if region.start <= anchor < region.end
+        and any(chain.start <= anchor <= chain.end for chain in chains)
+    ]
+    if not inside:
+        return result
+    omega = max(inside)
+    result.notes.append(
+        AnalysisNote(
+            severity="info",
+            message=(
+                f"Design region trimmed to {omega}: the GPI transamidase removes everything "
+                f"after the omega site, so residues {omega + 1}-{region.end} are not part of "
+                "the mature protein."
+            ),
+            source="topology",
+        )
+    )
+    result.ectodomain = replace_region(region, end=omega)
+    return result
+
+
+def _derive_ectodomain(
+    features: list[Feature],
+    sequence_length: int,
+    config: AnalysisConfig,
+) -> TopologyResult:
     notes: list[AnalysisNote] = []
-    tm_regions = [feature for feature in features if feature.type.upper() == "TRANSMEM"]
+    tm_regions = [
+        feature
+        for feature in features
+        if feature.type.upper() == "TRANSMEM" and not is_beta_stranded_transmem(feature)
+    ]
     intramembrane_regions = [feature for feature in features if feature.type.upper() == "INTRAMEMBRANE"]
     signal_regions = [feature for feature in features if feature.type.upper() == "SIGNAL"]
     topo_regions = [feature for feature in features if feature.type.upper() == "TOPO_DOM"]
@@ -28,7 +137,10 @@ def derive_ectodomain(
         gpi_anchors = [
             feature.start
             for feature in features
-            if feature.type.upper() == "LIPIDATION" and "gpi" in (feature.description or "").lower()
+            # Both spellings: reports written before the OA-018 alias say
+            # LIPIDATION, new ones say LIPID. Testing only one of them would
+            # silently stop detecting GPI anchors.
+            if feature_type(feature) == "LIPID" and "gpi" in (feature.description or "").lower()
         ]
         if gpi_anchors:
             gpi_region = _derive_gpi_anchored_region(features, sequence_length, gpi_anchors)
@@ -66,7 +178,7 @@ def derive_ectodomain(
                 )
             )
             return TopologyResult(ectodomain=gpi_region, notes=notes, topology=topology)
-        secreted_region = _derive_secreted_region(signal_regions, topo_regions, sequence_length)
+        secreted_region = _derive_secreted_region(signal_regions, topo_regions, sequence_length, features)
         topology = _build_topology_annotation(
             tm_regions=tm_regions,
             intramembrane_regions=intramembrane_regions,
@@ -133,10 +245,19 @@ def derive_ectodomain(
                 notes=notes,
                 topology=topology,
             )
+        # F10b (1,531 human / 1,347 mouse pages): this described a failed
+        # precondition of the single-pass derivation, not a problem with the
+        # report. The class is already multipass_compact by this point, so the
+        # page showed Track "Multipass" beside a WARNING saying the protein was
+        # not what it had just been classified as. Say what happened instead.
         notes.append(
             AnalysisNote(
-                severity="warning",
-                message=f"Expected exactly one transmembrane region, found {len(tm_regions)}.",
+                severity="info",
+                message=(
+                    f"{len(tm_regions)} transmembrane regions are annotated; no single "
+                    "extracellular domain could be assigned, so only full-length membrane "
+                    "constructs are offered."
+                ),
                 source="topology",
             )
         )
@@ -565,7 +686,16 @@ def _derive_secreted_region(
     signal_regions: list[Feature],
     topo_regions: list[Feature],
     sequence_length: int,
+    features: list[Feature] | None = None,
 ) -> Region | None:
+    """The post-signal region.
+
+    F16c: the label said "Secreted mature chain" on 306 human / 263 mouse
+    regions that still contain a PROPEPTIDE — BMP8B 20-402 with a propeptide at
+    20-263 and the mature chain at 264-402. The interval is deliberately kept
+    (a pro-domain is often wanted for expression; trimming is a design decision,
+    not a bug), but it is no longer called the mature chain.
+    """
     start = 1
     confidence = 0.55
     label = "Secreted mature chain"
@@ -585,12 +715,33 @@ def _derive_secreted_region(
         return None
     if start >= sequence_length:
         return None
+    metadata: dict[str, object] = {}
+    propeptides = [
+        feature
+        for feature in (features or [])
+        if feature_type(feature) == "PROPEP" and feature.end >= start
+    ]
+    chains = [
+        feature
+        for feature in (features or [])
+        if feature_type(feature) == "CHAIN" and feature.end >= start
+    ]
+    if propeptides:
+        label = "Post-signal precursor region"
+        metadata["propeptide_spans"] = [
+            [feature.start, feature.end] for feature in propeptides
+        ]
+        if chains:
+            metadata["processed_chain_spans"] = [
+                [feature.start, feature.end] for feature in chains
+            ]
     return Region(
         start=start,
         end=sequence_length,
         label=label,
         source="topology",
         confidence=confidence,
+        metadata=metadata,
     )
 
 
@@ -604,9 +755,20 @@ def _derive_gpi_anchored_region(
     ]
     if not chains or not any(chain.start <= anchor <= chain.end for chain in chains for anchor in anchors):
         return None
+    start = min(chain.start for chain in chains)
+    end = max(chain.end for chain in chains)
+    # F16b: UniProt gives some of these entries a CHAIN covering the whole
+    # sequence, so the region ran past the omega site and kept the propeptide
+    # that the GPI transamidase removes (CD14 20-367 with the site at 345).
+    # Conditional, so an untrimmed region that is already correct is untouched.
+    omega = max(anchor for anchor in anchors if start <= anchor <= end)
+    if omega < end:
+        end = omega
+    if end <= start:
+        return None
     return Region(
-        start=min(chain.start for chain in chains),
-        end=max(chain.end for chain in chains),
+        start=start,
+        end=end,
         label="GPI-anchored mature chain",
         source="UniProt",
         confidence=0.9,

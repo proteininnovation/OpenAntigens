@@ -63,13 +63,24 @@ class UniProtClient:
         except Exception:
             return None
 
-    def get_features(self, entry: dict[str, Any]) -> list[Feature]:
+    def get_features(self, entry: dict[str, Any], *, sequence_length: int | None = None) -> list[Feature]:
+        """Features of the analysed sequence.
+
+        RSM-002: a feature's ``location.sequence`` names the isoform it belongs
+        to. Where the coordinates fall outside the canonical sequence they are
+        another isoform's and must not be applied here — 13 human and 1 mouse
+        report carry such a feature, and on PPAP it is topology-determining.
+        """
+        if sequence_length is None:
+            sequence_length = len(str((entry.get("sequence") or {}).get("value") or "")) or None
         features: list[Feature] = []
         for feature in entry.get("features", []):
             location = feature.get("location", {})
             start = self._location_value(location.get("start"))
             end = self._location_value(location.get("end"))
             if not start or not end:
+                continue
+            if sequence_length is not None and (start > sequence_length or end > sequence_length):
                 continue
             description = feature.get("description")
             raw_type = feature.get("type", "UNKNOWN")
@@ -276,6 +287,16 @@ class UniProtClient:
             "disulfide_bond": "DISULFID",
             "glycosylation": "CARBOHYD",
             "modified_residue": "MOD_RES",
+            # OA-018: without these the stored type was PROPEPTIDE/LIPIDATION
+            # while pipeline.py and topology.py test PROPEP/LIPID, so the
+            # propeptide fallback never fired.
+            "propeptide": "PROPEP",
+            "lipidation": "LIPID",
+            "peptide": "PEPTIDE",
+            "chain": "CHAIN",
+            "intramembrane": "INTRAMEM",
+            "transit_peptide": "TRANSIT",
+            "cross-link": "CROSSLNK",
         }
         return aliases.get(normalized, raw_type.upper().replace(" ", "_"))
 

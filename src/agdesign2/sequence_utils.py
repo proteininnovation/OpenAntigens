@@ -246,7 +246,17 @@ def map_query_region_to_subject(
     query_start: int,
     query_end: int,
     subject_sequence: str,
+    requested_length: int | None = None,
 ) -> tuple[int | None, int | None, str | None, list[str]]:
+    """Project a query range onto the subject through ``alignment``.
+
+    ``requested_length`` is how many residues were *asked for*. Without it the
+    coverage denominator is only the residues the alignment happens to contain,
+    so projecting a full-length construct through an ectodomain-only alignment
+    passed the 70% gate on the ectodomain's own length (OA-012: 422 human / 365
+    mouse reports, 2,834 constructs with under 70% of their span inside the
+    ectodomain).
+    """
     query_position = 0
     subject_position = 0
     mapped_positions: list[int] = []
@@ -271,11 +281,12 @@ def map_query_region_to_subject(
     if not mapped_positions:
         return None, None, None, ["No aligned residues mapped to the homolog ectodomain."]
 
-    coverage = len(mapped_positions) / query_residue_count if query_residue_count else 0.0
+    denominator = requested_length if requested_length else query_residue_count
+    coverage = len(mapped_positions) / denominator if denominator else 0.0
     if coverage < _MIN_BOUNDARY_MAPPING_COVERAGE:
         return None, None, None, [
             "Boundary projection rejected: "
-            f"{len(mapped_positions)}/{query_residue_count} query residues aligned to the homolog "
+            f"{len(mapped_positions)}/{denominator} query residues aligned to the homolog "
             f"({coverage:.1%} < {_MIN_BOUNDARY_MAPPING_COVERAGE:.1%} minimum)."
         ]
 

@@ -105,6 +105,12 @@ class FurinSite(Serializable):
     end: int
     motif: str
     suggestions: list[str]
+    # F32: when the motif sits on an annotated processing site, the protein is
+    # *meant* to be cleaved there. Abolishing it is a legitimate design goal —
+    # an uncleavable variant — but the page offered R210A/R213A over
+    # ADAM10's curated "Cleavage; by furin and PCSK7" site with no sign that
+    # the site is real and functional.
+    curated_annotation: str | None = None
 
 
 @dataclass(slots=True)

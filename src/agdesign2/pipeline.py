@@ -58,7 +58,13 @@ from .structure_utils import (
     split_domains_from_pae,
     summarize_construct_quality,
 )
-from .topology import TopologyResult, apply_surfy_topology_fallback, derive_ectodomain, replace_region
+from .topology import (
+    TopologyResult,
+    apply_surfy_topology_fallback,
+    derive_ectodomain,
+    feature_type as topology_feature_type,
+    replace_region,
+)
 from .uniprot import UniProtClient
 from .visualization import ConstructAssetGenerator
 
@@ -160,6 +166,22 @@ def _generic_number(value: str | None) -> float | None:
         return float(text)
     except ValueError:
         return None
+
+
+_DISORDER_REGION_TOKENS = ("disorder", "low complexity", "low-complexity")
+
+
+def _is_disorder_region(feature: Feature) -> bool:
+    if str(feature.type or "").upper() != "REGION":
+        return False
+    description = str(feature.description or "").lower()
+    return any(token in description for token in _DISORDER_REGION_TOKENS)
+
+
+def _construct_name_from_feature(feature: Feature) -> str:
+    base = (feature.description or feature.type or "region").lower().replace(" ", "_")
+    base = re.sub(r"[^a-z0-9_]+", "_", base).strip("_") or "region"
+    return f"{base}_{feature.start}_{feature.end}"
 
 
 def _curated_disulfides(features: list[Feature]) -> list[Feature]:
@@ -563,7 +585,7 @@ class AntigenAnalyzer:
 
         ligand_interactions = self._collect_ligand_interactions(features, topology.ectodomain)
         ptms = self._collect_ptm_annotations(features)
-        furin_sites = self._find_furin_sites(target.sequence, topology.ectodomain)
+        furin_sites = self._find_furin_sites(target.sequence, topology.ectodomain, features)
 
         self._progress("Building construct recommendations")
         constructs = self._suggest_constructs(
@@ -1137,7 +1159,8 @@ class AntigenAnalyzer:
             (
                 feature.end
                 for feature in features
-                if feature.type.upper() == "PROPEP" and 1 <= feature.start <= feature.end < sequence_length
+                if topology_feature_type(feature) == "PROPEP"
+                and 1 <= feature.start <= feature.end < sequence_length
             ),
             default=0,
         )
@@ -2368,15 +2391,30 @@ class AntigenAnalyzer:
                 if feature.type.upper() in {"DOMAIN", "REGION"}
                 and feature.start >= ectodomain.start
                 and feature.end <= ectodomain.end
+                # F14a: UniProt's REGION "Disordered" is a disorder prediction,
+                # not a curated domain, and 408 human / 365 mouse pages offered
+                # one as a construct under "Curated extracellular domain
+                # annotation from UniProt."
+                and not _is_disorder_region(feature)
             ]
             for feature in domain_features:
                 suggestions.append(
                     ConstructSuggestion(
-                        name=(feature.description or feature.type).lower().replace(" ", "_"),
+                        # Row 29: the name was the description alone, so two
+                        # spans sharing a description got one name on 1,068
+                        # human / 779 mouse pages — and the exports, the viewer
+                        # and the construct images all key on it.
+                        name=_construct_name_from_feature(feature),
                         start=feature.start,
                         end=feature.end,
                         score=80.0,
-                        rationale="Curated extracellular domain annotation from UniProt.",
+                        # OA-020: say which feature type it came from.
+                        rationale=(
+                            "Curated extracellular domain annotation from UniProt."
+                            if feature.type.upper() == "DOMAIN"
+                            else "UniProt REGION annotation inside the design region; "
+                            "not a curated domain."
+                        ),
                         evidence=["UniProt domain annotation"],
                     )
                 )
@@ -4183,7 +4221,12 @@ class AntigenAnalyzer:
             ),
         )
 
-    def _find_furin_sites(self, sequence: str, ectodomain: Region | None) -> list[FurinSite]:
+    def _find_furin_sites(
+        self,
+        sequence: str,
+        ectodomain: Region | None,
+        features: list[Feature] | None = None,
+    ) -> list[FurinSite]:
         if not ectodomain:
             return []
         ectodomain_sequence = slice_sequence(sequence, ectodomain.start, ectodomain.end)
@@ -4195,8 +4238,44 @@ class AntigenAnalyzer:
                 f"{motif[0]}{absolute_start}A",
                 f"{motif[-1]}{absolute_end}A",
             ]
-            sites.append(FurinSite(start=absolute_start, end=absolute_end, motif=motif, suggestions=suggestions))
+            sites.append(
+                FurinSite(
+                    start=absolute_start,
+                    end=absolute_end,
+                    motif=motif,
+                    suggestions=suggestions,
+                    curated_annotation=self._curated_cleavage_annotation(
+                        absolute_start, absolute_end, features or []
+                    ),
+                )
+            )
         return sites
+
+    def _curated_cleavage_annotation(
+        self, start: int, end: int, features: list[Feature]
+    ) -> str | None:
+        """Name the annotation that says this site is a real processing site.
+
+        Two signals: a UniProt SITE whose description mentions cleavage, and the
+        junction between a PROPEPTIDE and the mature CHAIN. Measured over both
+        snapshots: 45 human / 27 mouse pages have a motif on a cleavage SITE,
+        189 / 158 on either signal.
+        """
+        for feature in features:
+            if str(feature.type or "").upper() != "SITE":
+                continue
+            description = str(feature.description or "")
+            if "cleav" not in description.lower():
+                continue
+            if feature.start <= end and feature.end >= start:
+                return f"UniProt SITE {feature.start}-{feature.end}: {description}"
+        for feature in features:
+            kind = str(feature.type or "").upper()
+            if kind in {"PROPEP", "PROPEPTIDE"} and start - 1 <= feature.end <= end + 1:
+                return f"End of UniProt PROPEPTIDE {feature.start}-{feature.end}"
+            if kind in {"CHAIN", "PEPTIDE"} and feature.start > 1 and start - 1 <= feature.start - 1 <= end + 1:
+                return f"Start of UniProt {kind} {feature.start}-{feature.end}"
+        return None
 
     def _collect_ptm_annotations(self, features: list[Feature]) -> list[Feature]:
         ptms: list[Feature] = []
@@ -4674,6 +4753,11 @@ class AntigenAnalyzer:
                 query_start=relative_start,
                 query_end=relative_end,
                 subject_sequence=homolog_ecto_sequence,
+                # OA-012: the alignment covers the ectodomain only, so a
+                # construct that reaches outside it must be measured against
+                # what was asked for, not against the part that happens to be
+                # inside the alignment.
+                requested_length=construct.end - construct.start + 1,
             )
             if mapped_start is None or mapped_end is None or mapped_sequence is None:
                 homologs.append(
