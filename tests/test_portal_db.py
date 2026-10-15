@@ -186,10 +186,26 @@ class PortalDatabaseTests(unittest.TestCase):
                 "/3Dmol-min.js": static_root / "3Dmol-min.js",
                 "/structures/test_human.pdb": static_root / "structures" / "test_human.pdb",
             }
+            # download_manifest.json embeds a second-resolution generated_at,
+            # so the static build and the dynamic response differ whenever the
+            # two straddle a second boundary. Compare it without that field.
+            def _without_timestamp(payload: bytes) -> bytes:
+                data = json.loads(payload)
+                data.pop("generated_at", None)
+                data.pop("generated_at_utc", None)
+                return json.dumps(data, sort_keys=True).encode("utf-8")
+
             for route, static_path in checks.items():
                 response = client.get(route)
                 self.assertEqual(response.status_code, 200, route)
                 self.assertTrue(static_path.exists(), str(static_path))
+                if route.endswith("download_manifest.json"):
+                    self.assertEqual(
+                        _without_timestamp(response.content),
+                        _without_timestamp(static_path.read_bytes()),
+                        route,
+                    )
+                    continue
                 self.assertEqual(response.content, static_path.read_bytes(), route)
 
             with mock.patch("agdesign2.portal._THREEDMOL_SHA256", vendor_hash):

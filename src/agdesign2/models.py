@@ -299,6 +299,17 @@ class HomologyRecord(Serializable):
     extracellular_surface_aligned_positions: int | None = None
     available: bool = True
     notes: list[str] = field(default_factory=list)
+    # PR-8: "selected", or "withheld: <reason>" when the ortholog gate refused
+    # the row. PR-3's renderer turns this into the cell text instead of a
+    # blank; 207 human pages lose every species row under the gate.
+    selection_status: str | None = None
+    # SF2b/§5.5: where the primary source gives several co-orthologs, or where
+    # one accession is claimed by more than one human gene.
+    candidates: str | None = None
+    evidence_count: int | None = None
+    # What kind of accession `accession` is: the ortholog table resolves from
+    # reviewed UniProt, TrEMBL or RefSeq, and the column was named "refseq".
+    accession_source: str | None = None
 
 
 @dataclass(slots=True)

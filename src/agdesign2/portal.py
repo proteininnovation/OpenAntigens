@@ -3857,7 +3857,10 @@ def render_detail_page(
         homology_rows_list.append(
             "<tr><td>{species}</td><td>{entry}</td><td>{identity}</td><td>{surface_identity}</td><td>{coverage}</td><td>{links}</td></tr>".format(
                 species=escape(_species_display_label(item.get("species"))),
-                entry=escape(str(item.get("entry_name") or item.get("accession") or blank_reason)),
+                entry=(
+                    escape(str(item.get("entry_name") or item.get("accession") or blank_reason))
+                    + _homolog_entry_note(item)
+                ),
                 identity=escape(_fmt_pct_or_reason(item.get("identity"), blank_reason)),
                 surface_identity=escape(surface_identity or blank_reason),
                 coverage=escape(_fmt_pct_or_reason(item.get("coverage"), blank_reason)),
@@ -9721,6 +9724,25 @@ _HOMOLOG_BLANK_REASONS = {
     "unresolved": "no ortholog resolved",
     "unmapped": "boundaries could not be mapped confidently",
 }
+
+
+def _homolog_entry_note(item: dict[str, Any]) -> str:
+    """Co-orthologs and the accession's provenance, under the Entry cell.
+
+    §5.5: where the primary source gives several co-orthologs — MGI holds both
+    Akr1b8 and Akr1b10 for human AKR1B10 — the page must not hide them behind
+    the winner. For a cross-reactivity question two rows beat one.
+    """
+    parts: list[str] = []
+    candidates = str(item.get("candidates") or "").strip()
+    if candidates:
+        parts.append(f"also reported: {candidates}")
+    source = str(item.get("accession_source") or "").strip()
+    if source:
+        parts.append({"uniprot": "reviewed UniProt", "uniprot-trembl": "UniProt TrEMBL"}.get(source, source))
+    if not parts:
+        return ""
+    return f'<div class="muted">{escape("; ".join(parts))}</div>'
 
 
 def _homolog_cell_reason(item: dict[str, Any], report: dict[str, Any]) -> str:

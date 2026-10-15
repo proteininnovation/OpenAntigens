@@ -12,7 +12,12 @@ from .batch import BatchRow, _load_input_records
 from .http import _atomic_write
 from .ortholog_proteomes import OrthologProteomeResolver
 from .pipeline import AntigenAnalyzer
-from .sequence_utils import global_align, reportable_identity
+from .sequence_utils import (
+    global_align,
+    ortholog_gate_verdict,
+    primary_source_asserts_ortholog,
+    reportable_identity,
+)
 
 
 @dataclass(slots=True)
@@ -40,9 +45,28 @@ class OrthologTableRow:
     macaca_fascicularis_refseq_sequence: str | None
     mouse_identity_to_human: float | None
     macaca_fascicularis_identity_to_human: float | None
+    # PR-8. selection_status is "selected" or "withheld: <reason>"; the page
+    # renders the reason instead of a blank cell (SF4a). evidence_count and
+    # candidates say how the pick was made; accession_source says what kind of
+    # accession the column holds, because mouse_refseq_accession held a UniProt
+    # id on 5,004 of 5,004 rows.
     human_notes: str
     mouse_notes: str
     macaca_fascicularis_notes: str
+    # PR-8, all defaulted so existing constructions keep working.
+    # selection_status is "selected" or "withheld: <reason>"; the page renders
+    # the reason instead of a blank cell (SF4a). evidence_count and candidates
+    # say how the pick was made; accession_source says what kind of accession
+    # the column holds, because mouse_refseq_accession held a UniProt id on
+    # 5,004 of 5,004 rows.
+    mouse_selection_status: str | None = None
+    macaca_fascicularis_selection_status: str | None = None
+    mouse_evidence_count: int | None = None
+    macaca_fascicularis_evidence_count: int | None = None
+    mouse_candidates: str | None = None
+    macaca_fascicularis_candidates: str | None = None
+    mouse_accession_source: str | None = None
+    macaca_fascicularis_accession_source: str | None = None
 
 
 def build_ortholog_table_from_tsv(
@@ -263,11 +287,50 @@ def _build_table_row(
     mouse_sequence = mouse_protein.sequence if mouse_protein is not None else None
     macaca_sequence = macaca_protein.sequence if macaca_protein is not None else None
 
+    mouse_gate = _apply_ortholog_gate(
+        "mouse", human_sequence, mouse_sequence, human_gene_symbol, mouse_prediction
+    )
+    macaca_gate = _apply_ortholog_gate(
+        "macaca_fascicularis", human_sequence, macaca_sequence, human_gene_symbol, macaca_prediction
+    )
+    if mouse_gate is not None:
+        mouse_notes.append(f"Withheld: {mouse_gate}.")
+        # Blank the sequence and accession too, not just the identity:
+        # precomputed.py:289-291 and mouse_portal.py:732-740 read these by name
+        # and would otherwise keep shipping the wrong protein into
+        # ectodomain_homology and the per-construct TSV/FASTA exports.
+        mouse_sequence = None
+        mouse_protein = None
+    if macaca_gate is not None:
+        macaca_notes.append(f"Withheld: {macaca_gate}.")
+        macaca_sequence = None
+        macaca_protein = None
+
     row_data.update(
         {
             "human_gene_symbol": human_gene_symbol,
-            "mouse_gene_symbol": mouse_prediction.gene_symbol if mouse_prediction is not None else None,
-            "macaca_fascicularis_gene_symbol": macaca_prediction.gene_symbol if macaca_prediction is not None else None,
+            "mouse_gene_symbol": (
+                None if mouse_gate is not None
+                else (mouse_prediction.gene_symbol if mouse_prediction is not None else None)
+            ),
+            "macaca_fascicularis_gene_symbol": (
+                None if macaca_gate is not None
+                else (macaca_prediction.gene_symbol if macaca_prediction is not None else None)
+            ),
+            "mouse_selection_status": "withheld: " + mouse_gate if mouse_gate else "selected",
+            "macaca_fascicularis_selection_status": (
+                "withheld: " + macaca_gate if macaca_gate else "selected"
+            ),
+            "mouse_evidence_count": mouse_prediction.evidence_count if mouse_prediction is not None else None,
+            "macaca_fascicularis_evidence_count": (
+                macaca_prediction.evidence_count if macaca_prediction is not None else None
+            ),
+            "mouse_candidates": _candidate_summary(mouse_prediction),
+            "macaca_fascicularis_candidates": _candidate_summary(macaca_prediction),
+            "mouse_accession_source": mouse_protein.source if mouse_protein is not None else None,
+            "macaca_fascicularis_accession_source": (
+                macaca_protein.source if macaca_protein is not None else None
+            ),
             "canonical_family_accession": canonical_family.accession if canonical_family is not None else None,
             "canonical_family_name": canonical_family.name if canonical_family is not None else None,
             "human_refseq_accession": human_protein_accession,
@@ -296,6 +359,37 @@ _SOURCE_LABELS = {
 
 def _source_label(source: str) -> str:
     return _SOURCE_LABELS.get(source, source)
+
+
+def _apply_ortholog_gate(
+    species: str,
+    human_sequence: str | None,
+    ortholog_sequence: str | None,
+    human_symbol: str | None,
+    prediction,
+) -> str | None:
+    """``None`` to accept the ortholog, or the reason to withhold it."""
+    if not human_sequence or not ortholog_sequence:
+        return None
+    return ortholog_gate_verdict(
+        global_align(human_sequence, ortholog_sequence),
+        human_length=len(human_sequence),
+        ortholog_length=len(ortholog_sequence),
+        primary_source_asserted=primary_source_asserts_ortholog(
+            species,
+            human_symbol=human_symbol,
+            ortholog_symbol=getattr(prediction, "gene_symbol", None),
+            gene_symbol_source=getattr(prediction, "gene_symbol_source", None),
+            evidence_count=getattr(prediction, "evidence_count", None),
+        ),
+    )
+
+
+def _candidate_summary(prediction) -> str | None:
+    """The co-orthologs the primary source also gives (§5.5)."""
+    if prediction is None or not getattr(prediction, "alternatives", None):
+        return None
+    return "; ".join(prediction.alternatives[:5])
 
 
 def _sequence_identity(query_sequence: str | None, subject_sequence: str | None) -> float | None:

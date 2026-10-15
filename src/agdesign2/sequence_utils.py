@@ -192,6 +192,100 @@ def reportable_identity(alignment: AlignmentResult, subject_length: int) -> floa
     return alignment.identity
 
 
+# The ortholog acceptance gate, measured over all 20,801 cached HCOP candidates
+# under the honest metric (plan §3 "F08 — ortholog selection and the gate").
+#
+# Two earlier shapes were refuted. A length-ratio band and a flat
+# "identity >= 70% AND coverage >= 70%" both kill VEGFA, FGF2 and CDH23,
+# because coverage is aligned/len(human) and a shorter ortholog can never pass
+# it; and the 70% identity floor is a macaque number (mouse p25 = 74.2,
+# p10 = 63.0), so it withholds 777 exact-symbol MGI orthologs including
+# CD274/PD-L1 at 69.9%.
+_GATE_MIN_COVERAGE_OF_SHORTER = 0.70
+_GATE_MIN_ALIGNED_LENGTH = 50
+_GATE_MIN_COVERAGE_OF_HUMAN = 0.25
+_GATE_MIN_IDENTITY_ASSERTED = 40.0
+_GATE_MIN_IDENTITY_UNASSERTED = 70.0
+# A curated model-organism database per species, and how much evidence it must
+# carry before its assertion relaxes the identity floor.
+PRIMARY_ORTHOLOG_SOURCES = {"mouse": {"MGI"}, "macaca_fascicularis": {"VGNC"}}
+PRIMARY_SOURCE_MIN_EVIDENCE = 5
+
+
+def primary_source_asserts_ortholog(
+    species: str,
+    *,
+    human_symbol: str | None,
+    ortholog_symbol: str | None,
+    gene_symbol_source: str | None,
+    evidence_count: int | None,
+) -> bool:
+    """Did a curated source assert this ortholog, rather than a name match?"""
+    human = str(human_symbol or "").strip().upper()
+    if human and human == str(ortholog_symbol or "").strip().upper():
+        return True
+    sources = PRIMARY_ORTHOLOG_SOURCES.get(species, set())
+    return (
+        str(gene_symbol_source or "").strip() in sources
+        and int(evidence_count or 0) >= PRIMARY_SOURCE_MIN_EVIDENCE
+    )
+
+
+def ortholog_gate_verdict(
+    alignment: AlignmentResult,
+    *,
+    human_length: int,
+    ortholog_length: int,
+    primary_source_asserted: bool,
+) -> str | None:
+    """``None`` to accept the ortholog, or the reason to withhold it.
+
+    ``primary_source_asserted`` relaxes the identity floor from 70% to 40%,
+    because a curated assertion that two genes are orthologs is evidence the
+    sequence identity does not have to carry on its own.
+
+    The plan phrased that condition as "the symbol matches", but a literal
+    symbol test does not meet the plan's own acceptance criterion. Measured
+    over the cached HCOP candidates: mouse IL6R's ortholog is **Il6ra** (MGI,
+    12 evidence sources, 56.4% identity) and DEFB124's is **Defb25** (MGI, 10
+    sources, 64.8%). Both are genuine, both are named by the plan as orthologs
+    that must survive, and a literal symbol test withholds both. The condition
+    the data supports is "the species' curated model-organism database asserted
+    it" — which an exact symbol match also satisfies.
+
+    Measured with the PR-8 ranking: mouse 236 withheld of 4,997 pairs, macaque
+    430 of 4,587. All eight named short orthologs survive (VEGFA, FGF2, CDH23,
+    IL6R, DEFB124, TFF3, GNRH1, PYY) and so does CD274/PD-L1 at 69.9%, while
+    the macaque ABCB6→ATG9A, A2M→PRPF40B and KLK2→TRPM7 rows are withheld.
+    """
+    shorter = min(human_length, ortholog_length)
+    if shorter <= 0 or alignment.aligned_positions == 0:
+        return "no aligned residues"
+    if alignment.aligned_positions < _GATE_MIN_ALIGNED_LENGTH:
+        return f"only {alignment.aligned_positions} aligned residues"
+    coverage_shorter = alignment.aligned_positions / shorter
+    if coverage_shorter < _GATE_MIN_COVERAGE_OF_SHORTER:
+        return f"{coverage_shorter:.0%} of the shorter sequence aligned"
+    coverage_human = alignment.aligned_positions / human_length if human_length else 0.0
+    if coverage_human < _GATE_MIN_COVERAGE_OF_HUMAN:
+        return f"{coverage_human:.0%} of the human sequence aligned"
+    floor = (
+        _GATE_MIN_IDENTITY_ASSERTED
+        if primary_source_asserted
+        else _GATE_MIN_IDENTITY_UNASSERTED
+    )
+    if alignment.identity < floor:
+        return (
+            f"{alignment.identity:.1f}% identity, below the {floor:.0f}% floor for "
+            + (
+                "a curated ortholog assertion"
+                if primary_source_asserted
+                else "an ortholog with no curated assertion"
+            )
+        )
+    return None
+
+
 def find_furin_sites(sequence: str, pattern: str) -> list[tuple[int, int, str]]:
     matches: list[tuple[int, int, str]] = []
     expression = re.compile(pattern)
