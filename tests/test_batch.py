@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import tempfile
 import unittest
@@ -302,16 +303,22 @@ class PortalAlignmentTests(unittest.TestCase):
 
     def test_construct_card_and_builder_share_export_name_when_gene_symbol_differs(self) -> None:
         # PD-L1: gene CD274, UniProt entry PD1L1_*. Cards and builder must export the same region name.
+        def homolog(species: str, entry_name: str, end: int) -> dict[str, object]:
+            return {"species": species, "accession": entry_name, "entry_name": entry_name, "available": True,
+                    "start": 19, "end": end, "sequence": "A" * (end - 18)}
+
         cases = [
-            ({"entry_name": "PD1L1_HUMAN", "gene_symbol": "CD274", "organism": "Homo sapiens", "taxon_id": 9606}, "HUMAN"),
-            ({"entry_name": "PD1L1_MOUSE", "gene_symbol": "Cd274", "organism": "Mus musculus", "taxon_id": 10090}, "MOUSE"),
+            ({"entry_name": "PD1L1_HUMAN", "gene_symbol": "CD274", "organism": "Homo sapiens", "taxon_id": 9606}, "HUMAN",
+             [homolog("mouse", "PD1L1_MOUSE", 237), homolog("macaca_fascicularis", "PD1L1_MACFA", 238)]),
+            ({"entry_name": "PD1L1_MOUSE", "gene_symbol": "Cd274", "organism": "Mus musculus", "taxon_id": 10090}, "MOUSE",
+             [homolog("macaca_fascicularis", "PD1L1_MACFA", 240)]),
         ]
-        for target_fields, species_code in cases:
+        for target_fields, species_code, homologs in cases:
             with self.subTest(species=species_code), tempfile.TemporaryDirectory() as tmpdir:
                 root = Path(tmpdir)
                 target = {"accession": "P00001", "sequence": "AA", **target_fields}
                 card_html = _render_construct_card(
-                    {"name": "ecto", "start": 19, "end": 238, "length": 220, "sequence": "A" * 220, "homologs": []},
+                    {"name": "ecto", "start": 19, "end": 238, "length": 220, "sequence": "A" * 220, "homologs": homologs},
                     target=target,
                     batch_dir=root,
                     page_dir=root,
@@ -332,7 +339,12 @@ class PortalAlignmentTests(unittest.TestCase):
                     {"target": target, "ectodomain": {"start": 1, "end": 2}, "topology": {"topology_class": "single_pass"}},
                     batch_dir=root,
                 )
-                self.assertIn(f"<code>PD1L1_{species_code}_19-238</code>", card_html)
+                card_names = re.findall(r"<code>([A-Za-z0-9]+)_([A-Z]+)_\d+-\d+</code>", card_html)
+                self.assertEqual(
+                    {code for _, code in card_names},
+                    {species_code, *(("MOUSE", "MACFA") if species_code == "HUMAN" else ("MACFA",))},
+                )
+                self.assertEqual({symbol for symbol, _ in card_names}, {"PD1L1"})
                 self.assertIn('"nameSymbol":"PD1L1"', card_html.replace(" ", ""))
                 self.assertNotIn("CD274_", card_html)
                 self.assertIn('nameSymbol: "PD1L1"', widget_html)
