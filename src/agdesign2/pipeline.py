@@ -4287,7 +4287,13 @@ class AntigenAnalyzer:
     ) -> list[ConstructHomolog]:
         homologs: list[ConstructHomolog] = []
         human_construct_sequence = slice_sequence(target_sequence, construct.start, construct.end)
+        # F06a: _collect_species_matches already skips the target's own species
+        # (pipeline.py:1485), so for a mouse target this loop found nothing under
+        # "mouse" and emitted a "Mapping unavailable" row for the protein's own
+        # species on 4,359 of 4,702 mouse pages.
         for species in ("mouse", "macaca_fascicularis"):
+            if species == self.config.target_species:
+                continue
             info = homolog_context.get(species)
             if not info or not info.get("available"):
                 notes = info.get("notes", ["No same-name UniProt entry found for species."]) if info else [

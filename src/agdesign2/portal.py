@@ -1020,10 +1020,31 @@ def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = F
 """
 
 
+# Artifacts each portal publishes for itself. The agent guide's generic
+# "../" rewrite sent the mouse guide's data-access links to the human files —
+# the human index JSON starts at A1BG_HUMAN, the mouse one at A1BG_MOUSE — on
+# the very file an agent fetches first (F21).
+_PER_PORTAL_GUIDE_ARTIFACTS = (
+    "downloads.html",
+    "downloads/agdesign2_portal_index.json",
+    "downloads/agdesign2_portal_index.tsv",
+    "downloads/download_manifest.json",
+    "portal_metadata.json",
+)
+
+
 def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
-    human_prefix = "../" if portal_title == "OpenAntigens Mouse" else ""
+    is_mouse = portal_title == "OpenAntigens Mouse"
+    human_prefix = "../" if is_mouse else ""
     content = agent_guide_html().replace('href="https://openantigens.org/"', f'href="{human_prefix}index.html"')
     content = content.replace('href="https://openantigens.org/', f'href="{human_prefix}')
+    if is_mouse:
+        for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+            content = content.replace(f'href="../{artifact}"', f'href="{artifact}"')
+        content = content.replace(
+            "Human index paths are relative to https://openantigens.org/",
+            "Mouse index paths are relative to https://openantigens.org/mouse/",
+        )
     headings = re.findall(r"<h2>([^<]+)</h2>", content)
     links = []
     for heading in headings:
@@ -1998,14 +2019,14 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     target_universe_text = (
         "OpenAntigens Mouse contains unique mouse orthologs resolved from the OpenAntigens human target universe. "
         "Targets without a resolved mouse record are omitted, and duplicate mouse records are included once. "
-        "Each included target is analyzed against reviewed mouse UniProt data; the originating human target remains in report metadata."
+        "Most included targets are analyzed against reviewed mouse UniProt data; where no reviewed mouse entry covers the ortholog, the sequence comes from the RefSeq record named in the report's sequence source. The originating human target remains in report metadata."
         if is_mouse
         else "The human target universe is sourced from the refined cell-surface and secreted protein topology table under <code>data/inputs/</code>. "
         "That table combines public evidence from UniProt, Thera-SAbDab, the SURFY surfaceome publication, and the Uhlén secretome publication. "
         "The active portal includes proteins categorized as secreted, GPI-anchored, single-pass membrane, or multipass membrane."
     )
     target_resolution_text = (
-        "Mouse records are resolved through reviewed mouse UniProt entries. The build records skipped human targets, including missing mouse orthologs and duplicate mouse targets, in a separate manifest."
+        "Mouse records are resolved through reviewed mouse UniProt entries where one exists, and otherwise through the RefSeq sequence in the precomputed ortholog table; each report states which it used. The build records skipped human targets, including missing mouse orthologs and duplicate mouse targets, in a separate manifest."
         if is_mouse
         else "Each input row is resolved primarily through reviewed human UniProt records. Resolution prefers stable UniProt entry names or accessions when available and preserves the original input identifiers for traceability. Ambiguous or unresolved rows remain represented in batch outputs with explicit error status."
     )
@@ -4431,7 +4452,15 @@ def _render_construct_card(
     human_entry = construct.get("human_entry_name") or target.get("entry_name") or ""
     evidence = construct.get("evidence") or []
     warnings = construct.get("warnings") or []
-    homologs = construct.get("homologs") or []
+    # F06a: reports built before the pipeline fix carry a self-species homolog
+    # row. Drop it here and the HTML table, the TSV/FASTA export rows and the
+    # viewer's unavailableRows all lose it, since they derive from this list.
+    target_species_key = _target_species_key(target)
+    homologs = [
+        item
+        for item in (construct.get("homologs") or [])
+        if str(item.get("species") or "") != target_species_key
+    ]
     structural_metrics = construct.get("structural_metrics") or {}
     safe_name = _safe_filename(str(construct.get("name") or "construct"))
     assets_dir = batch_dir / f"{str(target.get('entry_name') or '').lower()}_report_assets"
