@@ -166,31 +166,88 @@ def _segment_from_group(name: str, residues: list[GPCRdbResidue]) -> GPCRdbSegme
     )
 
 
+# Which generic positions each motif occupies, and which residue each of those
+# positions must carry for the motif to be present. Positions mapped to None are
+# the "x" of the motif name and are unconstrained.
+#
+# F15: the old code set status="detected" whenever GPCRdb had *annotated* every
+# position, without ever looking at the residues — so a receptor whose 3.50 is
+# not an arginine still read "DRY / E/DRY activation motif: detected" on 724
+# human / 407 mouse pages. Position presence is not motif presence.
+MOTIF_DEFINITIONS: tuple[tuple[str, list[str]], ...] = (
+    ("DRY / E/DRY activation motif", ["3.49", "3.50", "3.51"]),
+    ("CWxP / toggle-switch motif", ["6.47", "6.48", "6.49", "6.50"]),
+    ("NPxxY / helix-7 motif", ["7.49", "7.50", "7.51", "7.52", "7.53"]),
+    ("Na+ pocket / class-A D2.50 position", ["2.50"]),
+    ("Class-A N1.50 position", ["1.50"]),
+)
+
+MOTIF_EXPECTED_RESIDUES: dict[str, dict[str, frozenset[str]]] = {
+    "DRY / E/DRY activation motif": {
+        "3.49": frozenset("DE"),
+        "3.50": frozenset("R"),
+        "3.51": frozenset("Y"),
+    },
+    "CWxP / toggle-switch motif": {
+        "6.47": frozenset("C"),
+        "6.48": frozenset("W"),
+        "6.50": frozenset("P"),
+    },
+    "NPxxY / helix-7 motif": {
+        "7.49": frozenset("N"),
+        "7.50": frozenset("P"),
+        "7.53": frozenset("Y"),
+    },
+    "Na+ pocket / class-A D2.50 position": {"2.50": frozenset("D")},
+    "Class-A N1.50 position": {"1.50": frozenset("N")},
+}
+
+
+def motif_status(name: str, residues: dict[str, str], all_positions_present: bool) -> str:
+    """``matched`` / ``variant`` / ``partial`` for one conserved motif.
+
+    ``residues`` maps canonical generic number to the one-letter residue GPCRdb
+    reports at that position. A position the motif does not constrain (the "x")
+    is ignored.
+    """
+    expected = MOTIF_EXPECTED_RESIDUES.get(name) or {}
+    mismatches = [
+        generic
+        for generic, allowed in expected.items()
+        if generic in residues and residues[generic].upper() not in allowed
+    ]
+    if mismatches:
+        return "variant at " + ", ".join(sorted(mismatches))
+    if not all_positions_present:
+        return "partial"
+    if any(generic not in residues for generic in expected):
+        return "partial"
+    return "matched"
+
+
 def _conserved_motifs(residues: list[GPCRdbResidue]) -> list[GPCRdbMotif]:
     by_generic: dict[str, GPCRdbResidue] = {}
     for residue in residues:
         generic = _canonical_generic(residue.display_generic_number)
         if generic:
             by_generic[generic] = residue
-    motifs = [
-        ("DRY / E/DRY activation motif", ["3.49", "3.50", "3.51"]),
-        ("CWxP / toggle-switch motif", ["6.47", "6.48", "6.49", "6.50"]),
-        ("NPxxY / helix-7 motif", ["7.49", "7.50", "7.51", "7.52", "7.53"]),
-        ("Na+ pocket / class-A D2.50 position", ["2.50"]),
-        ("Class-A N1.50 position", ["1.50"]),
-    ]
     detected: list[GPCRdbMotif] = []
-    for name, generics in motifs:
+    for name, generics in MOTIF_DEFINITIONS:
         members = [by_generic[generic] for generic in generics if generic in by_generic]
         if not members:
             continue
+        found = {
+            generic: by_generic[generic].amino_acid
+            for generic in generics
+            if generic in by_generic
+        }
         detected.append(
             GPCRdbMotif(
                 name=name,
                 positions=[item.sequence_number for item in members],
                 generic_numbers=[item.display_generic_number or "" for item in members],
                 sequence="".join(item.amino_acid for item in members),
-                status="detected" if len(members) == len(generics) else "partial",
+                status=motif_status(name, found, len(members) == len(generics)),
             )
         )
     return detected

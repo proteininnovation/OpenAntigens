@@ -1267,7 +1267,7 @@ class PipelineTests(unittest.TestCase):
             cysteine_analysis=[],
             interpro_annotations=[],
         )
-        pdb_construct = next(construct for construct in constructs if construct.name == "pdb_6abc_a_b")
+        pdb_construct = next(construct for construct in constructs if construct.name == "pdb_6abc_a_b_45_360")
         self.assertEqual((pdb_construct.start, pdb_construct.end), (45, 360))
         self.assertEqual(pdb_construct.classification, "membrane_expression")
         self.assertTrue(any("PDB 6ABC" in item for item in pdb_construct.evidence))
@@ -1304,9 +1304,9 @@ class PipelineTests(unittest.TestCase):
         )
         names = {construct.name: construct for construct in constructs}
         self.assertIn("membrane_expression_full_length", names)
-        self.assertIn("pdb_7ful_a", names)
+        self.assertIn("pdb_7ful_a_1_190", names)
         self.assertEqual((names["membrane_expression_full_length"].start, names["membrane_expression_full_length"].end), (1, 190))
-        self.assertEqual((names["pdb_7ful_a"].start, names["pdb_7ful_a"].end), (1, 190))
+        self.assertEqual((names["pdb_7ful_a_1_190"].start, names["pdb_7ful_a_1_190"].end), (1, 190))
 
     def test_mixed_multipass_target_keeps_soluble_and_membrane_pdb_constructs(self) -> None:
         config = AnalysisConfig(min_construct_length=50, generate_assets=False, prefer_precomputed_references=False)
@@ -1345,8 +1345,8 @@ class PipelineTests(unittest.TestCase):
         )
         names = {construct.name: construct for construct in constructs}
         self.assertEqual(topology.topology.topology_class, "multipass_mixed")
-        self.assertNotEqual(names["pdb_1ecd_e"].classification, "membrane_expression")
-        self.assertEqual(names["pdb_7mem_m"].classification, "membrane_expression")
+        self.assertNotEqual(names["pdb_1ecd_e_30_175"].classification, "membrane_expression")
+        self.assertEqual(names["pdb_7mem_m_25_260"].classification, "membrane_expression")
 
     def test_non_multipass_pdb_constructs_still_require_design_region_overlap(self) -> None:
         config = AnalysisConfig(min_construct_length=2, generate_assets=False, prefer_precomputed_references=False)

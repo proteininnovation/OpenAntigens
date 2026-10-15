@@ -296,7 +296,7 @@ class PrecomputedReferenceStore:
                 match = HomologyRecord(
                     species=species,
                     accession=accession,
-                    entry_name=accession,
+                    entry_name=None,
                     ectodomain_start=None,
                     ectodomain_end=None,
                     available=False,
@@ -308,6 +308,9 @@ class PrecomputedReferenceStore:
                 continue
             homolog_target = TargetRecord(
                 accession=accession,
+                # No entry name exists in the ortholog table (SF10); TargetRecord
+                # requires the field, so carry the accession here but do not let
+                # it reach the rendered payload as an entry name.
                 entry_name=accession,
                 gene_symbol=gene_symbol,
                 protein_name=gene_symbol or accession,
@@ -334,7 +337,7 @@ class PrecomputedReferenceStore:
             match = HomologyRecord(
                 species=species,
                 accession=homolog_target.accession,
-                entry_name=homolog_target.entry_name,
+                entry_name=None,
                 ectodomain_start=homolog_ectodomain.start if homolog_ectodomain else None,
                 ectodomain_end=homolog_ectodomain.end if homolog_ectodomain else None,
                 available=True,
@@ -346,7 +349,7 @@ class PrecomputedReferenceStore:
                     HomologyRecord(
                         species=species,
                         accession=homolog_target.accession,
-                        entry_name=homolog_target.entry_name,
+                        entry_name=None,
                         ectodomain_start=homolog_ectodomain.start,
                         ectodomain_end=homolog_ectodomain.end,
                         identity=round(query_to_subject.identity, 2),

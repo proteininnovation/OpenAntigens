@@ -22,6 +22,7 @@ from .cache import FileCache
 from .blast import extract_accession, extract_entry_name
 from .af3 import is_af3_artifact
 from .config import AnalysisConfig
+from .gpcrdb import MOTIF_DEFINITIONS, motif_status
 from .http import HttpClient, _atomic_write
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align, slice_sequence
@@ -3499,20 +3500,34 @@ def _render_obligatory_partner_warning(requirements: list[dict[str, Any]]) -> st
     """
 
 
+NO_DESIGN_REGION_LABEL = "No Extracellular Design Region"
+
+
+def _has_design_region(report: dict[str, Any]) -> bool:
+    ectodomain = report.get("ectodomain") or {}
+    return ectodomain.get("start") is not None and ectodomain.get("end") is not None
+
+
 def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
     bucket = str(entry.get("topology_bucket") or entry.get("track") or "").strip().lower()
     if bucket:
+        # F13B/OA-017: the catalogue bucket is an inclusion rationale, not a
+        # finding about this record. Where the analysed record has no design
+        # region, a bucket-derived heading printed "Extracellular Region" over
+        # an empty Boundary/Label/Source on 133 human / 229 mouse pages. The
+        # multipass branch already consulted the record and keeps its own
+        # answer ("Full-Length Membrane Protein" is a real scope, not an empty
+        # one); the other three did not.
+        if "multi" in bucket:
+            return "Extracellular Region" if _has_design_region(report) else "Full-Length Membrane Protein"
+        if not _has_design_region(report):
+            return NO_DESIGN_REGION_LABEL
         if "gpi" in bucket:
             return "GPI-Anchored Extracellular Region"
         if "secret" in bucket:
             return "Secreted Region"
         if "single" in bucket:
             return "Extracellular Region"
-        if "multi" in bucket:
-            ectodomain = report.get("ectodomain") or {}
-            if ectodomain.get("start") is not None and ectodomain.get("end") is not None:
-                return "Extracellular Region"
-            return "Full-Length Membrane Protein"
 
     topology = report.get("topology")
     track = " ".join(
@@ -3539,6 +3554,8 @@ def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
 
 def _soluble_construct_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
     bucket = str(entry.get("topology_bucket") or entry.get("track") or "").strip().lower()
+    if not _has_design_region(report) and "multi" not in bucket:
+        return "Soluble Constructs"
     if "gpi" in bucket:
         return "Soluble GPI-Anchored Extracellular-region Constructs"
     if "secret" in bucket:
@@ -3553,10 +3570,24 @@ def _soluble_construct_label(entry: dict[str, Any], report: dict[str, Any]) -> s
     return "Soluble Design-region Constructs"
 
 
-def _render_entry_track(entry: dict[str, Any]) -> str:
+def _render_entry_track(entry: dict[str, Any], report: dict[str, Any] | None = None) -> str:
     track = str(entry.get("topology_bucket") or entry.get("track") or "").strip()
     if not track:
         return ""
+    # Name the source. On the F13B pages the catalogue track and the analysed
+    # record disagree, and the page used to show only the track.
+    if (
+        report is not None
+        and not _has_design_region(report)
+        and "multi" not in track.lower()
+    ):
+        topology_class = str((report.get("topology") or {}).get("topology_class") or "")
+        detail = f"; analysed record: {topology_class}" if topology_class else ""
+        return (
+            f"<dt>Track</dt><dd>{escape(track)} "
+            f"<span class=\"muted\">(target-universe inclusion rationale{escape(detail)}; "
+            "no extracellular design region was derived for this record)</span></dd>"
+        )
     return f"<dt>Track</dt><dd>{escape(track)}</dd>"
 
 
@@ -3676,6 +3707,29 @@ def _interpro_empty_reason(report: dict[str, Any]) -> str:
     )
 
 
+def _motif_status_from_stored(motif: dict[str, Any]) -> str:
+    """Recompute a conserved motif's status from the residues the report stores.
+
+    F15: reports built before the producer fix carry ``status="detected"``,
+    which only ever meant "GPCRdb annotated every position". The stored
+    ``generic_numbers`` and ``sequence`` are enough to check the residues, so
+    the pages already built read correctly on re-render.
+    """
+    generics = [str(item or "") for item in (motif.get("generic_numbers") or [])]
+    sequence = str(motif.get("sequence") or "")
+    name = str(motif.get("name") or "")
+    if not generics or len(generics) != len(sequence):
+        return str(motif.get("status") or "")
+    residues = {
+        generic.split("x", 1)[0].strip(): residue
+        for generic, residue in zip(generics, sequence)
+        if generic
+    }
+    definition = dict(MOTIF_DEFINITIONS).get(name)
+    all_present = definition is not None and len(residues) == len(definition)
+    return motif_status(name, residues, all_present)
+
+
 def _dedupe_notes(notes: Any) -> list[Any]:
     """Collapse repeated notes for display.
 
@@ -3766,15 +3820,35 @@ def render_detail_page(
     soluble_constructs, membrane_constructs = _partition_construct_dicts(constructs)
 
     homology_rows_list: list[str] = []
+    has_design_region = bool(report.get("ectodomain"))
+    # SF5: the page carries four identity numbers computed four ways and the
+    # column was headed just "Identity". Name the reference and the region.
+    homology_species = _species_display_label(_target_species_key(target))
+    homology_identity_header = f"Identity to this {homology_species} protein"
+    homology_scope_note = escape(
+        f"Identity and coverage compare each species record with this {homology_species} "
+        + (
+            f"protein over the {design_region_lower} ({_format_region(ectodomain)}), "
+            if has_design_region
+            else "protein over its full length, "
+        )
+        + "aligned positions only. The BLAST, construct and family-context tables on this "
+        "page use different references and denominators, so their numbers are not "
+        "directly comparable."
+    )
     for item in homology:
         homolog_target = _fetch_homolog_target(item, batch_dir=batch_dir) or {}
+        blank_reason = _homolog_cell_reason(item, report)
+        # F24: an accessible-identity number on a page that has no
+        # extracellular region is meaningless (86 human / 67 mouse pages).
+        surface_identity = _fmt_surface_identity(item) if has_design_region else ""
         homology_rows_list.append(
             "<tr><td>{species}</td><td>{entry}</td><td>{identity}</td><td>{surface_identity}</td><td>{coverage}</td><td>{links}</td></tr>".format(
                 species=escape(_species_display_label(item.get("species"))),
-                entry=escape(str(item.get("entry_name") or item.get("accession") or "")),
-                identity=escape(_fmt_pct(item.get("identity"))),
-                surface_identity=escape(_fmt_surface_identity(item)),
-                coverage=escape(_fmt_pct(item.get("coverage"))),
+                entry=escape(str(item.get("entry_name") or item.get("accession") or blank_reason)),
+                identity=escape(_fmt_pct_or_reason(item.get("identity"), blank_reason)),
+                surface_identity=escape(surface_identity or blank_reason),
+                coverage=escape(_fmt_pct_or_reason(item.get("coverage"), blank_reason)),
                 links=_render_resource_links(
                     accession=str(homolog_target.get("accession") or item.get("accession") or ""),
                     entry_name=str(homolog_target.get("entry_name") or item.get("entry_name") or ""),
@@ -3800,6 +3874,7 @@ def render_detail_page(
             cross_hits,
             batch_dir=batch_dir,
             query_label=query_species_label,
+            query_origin=int(ectodomain.get("start") or 1),
         )
         if cross_hits
         else ""
@@ -4130,7 +4205,7 @@ def render_detail_page(
           <dt>Sequence length</dt><dd>{len(target.get('sequence') or '')} aa</dd>
           {human_source_html}
           <dt>Sequence analyzed</dt><dd>UniProt canonical{(' (' + escape(str(target['canonical_isoform_id'])) + ')') if target.get('canonical_isoform_id') else ''}</dd>
-          {_render_entry_track(entry)}
+          {_render_entry_track(entry, report)}
           {target_aliases_html}
           <dt>Status</dt><dd>{escape(str(entry.get('status') or ''))}</dd>
           <dt>Links</dt><dd>{target_links_html}</dd>
@@ -4175,8 +4250,9 @@ def render_detail_page(
 
     <section class="card" id="homology" data-report-section="Homology">
       <h2>Homology</h2>
+      <p class="section-note">{homology_scope_note}</p>
       <table>
-        <thead><tr><th>Species</th><th>Entry</th><th>Identity</th><th>Extracellular accessible identity</th><th>Coverage</th><th>Links</th></tr></thead>
+        <thead><tr><th>Species</th><th>Entry</th><th>{escape(homology_identity_header)}</th><th>Extracellular accessible identity</th><th>Coverage</th><th>Links</th></tr></thead>
         <tbody>{homology_rows}</tbody>
       </table>
     </section>
@@ -5090,7 +5166,17 @@ def _render_cross_reactivity_rows(
     *,
     batch_dir: Path,
     query_label: str = "human",
+    query_origin: int = 1,
 ) -> str:
+    """Render BLAST hits.
+
+    ``query_origin`` is the protein position the query sequence started at. The
+    design-region search is run on the ectodomain slice, so BLAST reports
+    ``query_start``/``query_end`` relative to that slice; printed unconverted
+    and unlabelled they read as protein positions and are wrong by
+    ``ectodomain.start - 1`` on every design-region hit (OA-002: 3,333 human /
+    2,874 mouse pages). The full-length search has origin 1.
+    """
     rows: list[str] = []
     for index, item in enumerate(hits, start=1):
         cross_target = _fetch_cross_reactivity_target(item, batch_dir=batch_dir) or {}
@@ -5098,6 +5184,7 @@ def _render_cross_reactivity_rows(
             item,
             rank=index,
             query_label=query_label,
+            query_origin=query_origin,
         )
         hit_links = _render_resource_links(
             accession=str(cross_target.get("accession") or extract_accession(str(item.get("subject_id") or "")) or ""),
@@ -5404,7 +5491,7 @@ def _render_gpcr_annotation_section(annotation: dict[str, Any] | None) -> str:
             positions=escape(", ".join(str(item) for item in motif.get("positions") or [])),
             generic=escape(", ".join(str(item) for item in motif.get("generic_numbers") or [])),
             sequence=escape(str(motif.get("sequence") or "")),
-            status=escape(str(motif.get("status") or "")),
+            status=escape(_motif_status_from_stored(motif)),
         )
         for motif in annotation.get("conserved_motifs") or []
     ) or '<tr><td colspan="5">No conserved motif positions detected from GPCRdb numbering.</td></tr>'
@@ -5734,10 +5821,14 @@ def _construct_workbench_js() -> str:
           builder.replaceChildren(header, shell);
 
           function findConstructSources() {
-            const titles = new Set([
-              "Precomputed Construct Summary",
-              "GPCR Expression and Stabilization Strategy",
-            ]);
+            // OA-019: the workbench re-slices the CANONICAL sequence for the
+            // row's boundary, so a GPCR engineering variant picked here would
+            // export the unmodified native loop under the fusion's name. The
+            // fusion sequences live on their own cards, which carry the real
+            // cassette; only native constructs belong in this picker. The
+            // variant rows keep their own "View in 3D" button, which only
+            // highlights and never exports.
+            const titles = new Set(["Precomputed Construct Summary"]);
             return Array.from(document.querySelectorAll("section.card")).filter(
               (section) => titles.has(section.querySelector(":scope > h2")?.textContent.trim()),
             );
@@ -8770,6 +8861,7 @@ def _render_cross_reactivity_alignment(
     *,
     rank: int,
     query_label: str = "human",
+    query_origin: int = 1,
 ) -> str:
     query_alignment = str(hit.get("query_alignment") or "")
     subject_alignment = str(hit.get("subject_alignment") or "")
@@ -8781,7 +8873,11 @@ def _render_cross_reactivity_alignment(
         subject_end = hit.get("subject_end")
         range_text = "n/a"
         if None not in (query_start, query_end, subject_start, subject_end):
-            range_text = f"{query_label} {query_start}-{query_end} | hit {subject_start}-{subject_end}"
+            offset = int(query_origin) - 1
+            range_text = (
+                f"{query_label} {int(query_start) + offset}-{int(query_end) + offset} "
+                f"| hit {subject_start}-{subject_end}"
+            )
         return (
             f"<div class=\"alignment-meta\"><span><strong>Rank:</strong> {escape(str(rank))}</span>"
             f"<span><strong>Bit score:</strong> {escape(_fmt_number(hit.get('bitscore')))}</span>"
@@ -9550,6 +9646,36 @@ def _fmt_pct(value: Any) -> str:
         return f"{float(value):.2f}%"
     except Exception:
         return str(value)
+
+
+_HOMOLOG_BLANK_REASONS = {
+    "withheld": "withheld: no confident ortholog",
+    "no_region": "no extracellular region",
+    "unresolved": "no ortholog resolved",
+}
+
+
+def _homolog_cell_reason(item: dict[str, Any], report: dict[str, Any]) -> str:
+    """Why a Homology cell has no number.
+
+    SF4a: ``_fmt_pct(None)`` rendered an empty cell, so 92 human / 1,681 mouse
+    pages printed a species row whose identity and coverage were simply blank,
+    with no reason. Three causes, and PR-8 adds a fourth by withholding rows
+    that fail the ortholog gate (207 human pages lose every species row).
+    """
+    status = str(item.get("selection_status") or "").strip().lower()
+    if status and status != "selected":
+        return _HOMOLOG_BLANK_REASONS.get(status, f"withheld: {status}")
+    if not (item.get("entry_name") or item.get("accession")):
+        return _HOMOLOG_BLANK_REASONS["unresolved"]
+    if not report.get("ectodomain"):
+        return _HOMOLOG_BLANK_REASONS["no_region"]
+    return "n/a"
+
+
+def _fmt_pct_or_reason(value: Any, reason: str) -> str:
+    formatted = _fmt_pct(value)
+    return formatted if formatted else reason
 
 
 def _fmt_surface_identity(item: dict[str, Any]) -> str:

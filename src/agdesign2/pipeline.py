@@ -2340,7 +2340,11 @@ class AntigenAnalyzer:
     def _pdb_construct_name(self, construct: ExperimentalConstruct, chain: Region) -> str:
         chain_label = str(chain.metadata.get("chain") or chain.label or "x").lower()
         chain_label = re.sub(r"[^a-z0-9]+", "_", chain_label).strip("_") or "x"
-        return f"pdb_{construct.pdb_id.lower()}_{chain_label}"
+        # The boundary is part of the id: one PDB chain can back several
+        # non-overlapping constructs (acm5_human has 6OL9 chain A at both
+        # 21-224 and 431-532), and without it 113 human / 7 mouse pages gave two
+        # different sequences the same name, which the exports key on.
+        return f"pdb_{construct.pdb_id.lower()}_{chain_label}_{chain.start}_{chain.end}"
 
     def _suggest_membrane_expression_constructs(
         self,
