@@ -162,6 +162,36 @@ def _alignment_from_strings(query_text: str, subject_text: str, *, query_length:
     )
 
 
+# An identity over aligned positions is only a statement about the sequences if
+# the aligned stretch is a real part of them.
+#
+# Free end gaps (PR-4) made this bite: the optimum is free to trim to a tiny
+# high-scoring core, so matches/aligned_positions goes *up* for exactly the
+# wrong-gene pairs the metric fix was about. Measured on the macaque ortholog
+# table, 126 of 4,593 rows aligned fewer than 10 residues and OR8J3 against
+# guanine deaminase would have published "100.00% identity" off one residue.
+#
+# The rule is proportional, with no absolute floor: a genuinely short protein
+# that aligns end to end has an honest identity, and an absolute floor would
+# blank it.
+_MIN_REPORTABLE_ALIGNED_FRACTION = 0.30
+
+
+def reportable_identity(alignment: AlignmentResult, subject_length: int) -> float | None:
+    """Identity, or ``None`` where the alignment is too thin to mean anything.
+
+    For consumers that publish the number on its own, with no coverage beside
+    it to qualify it. A consumer that shows coverage next to identity can use
+    ``alignment.identity`` directly.
+    """
+    shorter = min(alignment.query_covered, subject_length)
+    if shorter <= 0 or alignment.aligned_positions == 0:
+        return None
+    if alignment.aligned_positions / shorter < _MIN_REPORTABLE_ALIGNED_FRACTION:
+        return None
+    return alignment.identity
+
+
 def find_furin_sites(sequence: str, pattern: str) -> list[tuple[int, int, str]]:
     matches: list[tuple[int, int, str]] = []
     expression = re.compile(pattern)

@@ -55,6 +55,22 @@ FIXTURES = ROOT / "tests" / "golden" / "fixtures"
 PORTAL_TITLES = ("OpenAntigens", "OpenAntigens Mouse")
 
 
+def _identity_cell(html: str) -> str:
+    """The Homology table's Identity cell, not "somewhere on the page".
+
+    The reason also reaches the Entry and accessible-identity cells, so a test
+    that greps the whole page passes even with the identity fix reverted.
+    """
+    import re
+
+    section = re.search(r'id="homology".*?</section>', html, re.S)
+    assert section, "no Homology section"
+    row = re.search(r"<tbody>(.*?)</tbody>", section.group(0), re.S)
+    assert row, "no Homology rows"
+    cells = re.findall(r"<td>(.*?)</td>", row.group(1), re.S)
+    return cells[2].strip()
+
+
 def _report(name: str = "sfta3_human") -> dict:
     return json.loads((FIXTURES / f"{name}_report.json").read_text(encoding="utf-8"))
 
@@ -193,18 +209,34 @@ class HomologyCellTests(unittest.TestCase):
                     ectodomain=None,
                 )
                 html = _render(report, title)
-                self.assertIn("no extracellular region", html)
+                self.assertEqual(_identity_cell(html), "no extracellular region")
 
-    def test_a_row_with_an_entry_and_a_region_but_no_number_reads_n_a(self) -> None:
+    def test_a_projected_row_with_no_number_reads_n_a(self) -> None:
         for title in PORTAL_TITLES:
             with self.subTest(portal_title=title):
                 report = self._with_rows(
                     [{"species": "mouse", "accession": "P00001", "identity": None,
-                      "coverage": None}],
+                      "coverage": None, "ectodomain_start": 24, "ectodomain_end": 719}],
                     ectodomain={"start": 1},
                 )
                 html = _render(report, title)
-                self.assertIn("<td>n/a</td>", html)
+                self.assertEqual(_identity_cell(html), "n/a")
+
+    def test_a_failed_boundary_projection_says_so(self) -> None:
+        """The cause behind all 92 human pages the plan counted: the ortholog
+        resolved and the target has a region, but the projection failed the
+        0.70 coverage gate. They all read "n/a" before."""
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = self._with_rows(
+                    [{"species": "mouse", "accession": "P00001", "identity": None,
+                      "coverage": None, "ectodomain_start": None, "ectodomain_end": None}],
+                    ectodomain={"start": 1},
+                )
+                html = _render(report, title)
+                self.assertEqual(
+                    _identity_cell(html), "boundaries could not be mapped confidently"
+                )
 
     def test_entryless_row_says_no_ortholog_resolved(self) -> None:
         for title in PORTAL_TITLES:
@@ -214,7 +246,7 @@ class HomologyCellTests(unittest.TestCase):
                     ectodomain={"start": 1},
                 )
                 html = _render(report, title)
-                self.assertIn("no ortholog resolved", html)
+                self.assertEqual(_identity_cell(html), "no ortholog resolved")
 
     def test_withheld_row_says_so(self) -> None:
         # PR-8 writes selection_status; PR-3 renders it. Until the rebuild the
@@ -227,7 +259,7 @@ class HomologyCellTests(unittest.TestCase):
                     ectodomain={"start": 1},
                 )
                 html = _render(report, title)
-                self.assertIn("withheld: no confident ortholog", html)
+                self.assertEqual(_identity_cell(html), "withheld: no confident ortholog")
 
     def test_identity_header_names_the_reference(self) -> None:
         for title in PORTAL_TITLES:
@@ -306,6 +338,92 @@ class PdbConstructIdTests(unittest.TestCase):
             analyzer._pdb_construct_name(construct, second),
         )
         self.assertEqual(analyzer._pdb_construct_name(construct, first), "pdb_6ol9_a_21_224")
+
+
+class EntryNameTests(unittest.TestCase):
+    """SF10 — the ortholog table has an accession and a gene symbol, never a
+    UniProt entry name, so entry_name=accession asserted something untrue.
+
+    Nothing covered this: reverting all three sites left the whole suite green,
+    golden manifest included, because the fixtures never reach the precomputed
+    homology path.
+    """
+
+    def test_table_sourced_homology_rows_carry_no_entry_name(self) -> None:
+        import re
+
+        source = (ROOT / "src" / "agdesign2" / "precomputed.py").read_text(encoding="utf-8")
+        constructions = re.findall(r"HomologyRecord\((.*?)\n\s*\)", source, re.S)
+        self.assertTrue(constructions, "no HomologyRecord constructions found")
+        for block in constructions:
+            with self.subTest(block=block.strip().splitlines()[0]):
+                self.assertIn("entry_name=None", block)
+
+    def test_the_display_falls_back_to_the_accession(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _report("itb5_human")
+                report["ectodomain_homology"] = [
+                    {"species": "mouse", "accession": "NP_001.1", "entry_name": None,
+                     "identity": 90.0, "coverage": 95.0,
+                     "ectodomain_start": 24, "ectodomain_end": 719}
+                ]
+                html = _render(report, title)
+                self.assertIn("NP_001.1", html)
+
+    def test_the_markdown_report_falls_back_too(self) -> None:
+        """SF10 emptied the Markdown Entry column: _render_homology_table has
+        no accession column to fall back to."""
+        from agdesign2.models import HomologyRecord
+        from agdesign2.reporting import _render_homology_table
+
+        rows = _render_homology_table(
+            [
+                HomologyRecord(
+                    species="mouse", accession="NP_001.1", entry_name=None,
+                    ectodomain_start=1, ectodomain_end=10, available=True,
+                )
+            ]
+        )
+        self.assertIn("NP_001.1", "\n".join(rows))
+
+
+class CrossReactivityProducerTests(unittest.TestCase):
+    """OA-002's producer half.
+
+    BLAST's query_alignment starts at hit.query_start WITHIN the queried
+    sequence, not at the region origin, so the accessible-identity position set
+    was shifted by query_start - 1 on 117,043 of the 148,231 stored values.
+    """
+
+    def _annotate(self, query_start: int, positions: set[int]):
+        from agdesign2.config import AnalysisConfig
+        from agdesign2.models import BlastHit
+        from agdesign2.pipeline import AntigenAnalyzer
+
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
+        hit = BlastHit(
+            subject_id="sp|P1|X_MOUSE", description="", species="mouse",
+            identity=100.0, coverage=100.0, alignment_length=9,
+            evalue=0.0, bitscore=10.0,
+            query_start=query_start, query_end=query_start + 8,
+            subject_start=1, subject_end=9,
+            query_alignment="ACDEFGHIK", subject_alignment="ACDEFGHIW",
+        )
+        return analyzer._annotate_blast_hits_with_surface_identity(
+            [hit], query_region_start=101, extracellular_surface_positions=positions
+        )[0]
+
+    def test_the_offset_inside_the_region_is_applied(self) -> None:
+        # Region starts at 101; the alignment starts 4 residues into it, so the
+        # first aligned residue is protein position 105.
+        self.assertEqual(self._annotate(5, {105, 106, 107}).extracellular_surface_matches, 3)
+
+    def test_an_alignment_at_the_region_start_is_unchanged(self) -> None:
+        self.assertEqual(self._annotate(1, {101, 102, 103}).extracellular_surface_matches, 3)
+
+    def test_the_old_unshifted_positions_no_longer_match(self) -> None:
+        self.assertEqual(self._annotate(5, {101, 102, 103}).extracellular_surface_matches, 0)
 
 
 if __name__ == "__main__":

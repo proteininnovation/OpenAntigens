@@ -12,7 +12,7 @@ from .batch import BatchRow, _load_input_records
 from .http import _atomic_write
 from .ortholog_proteomes import OrthologProteomeResolver
 from .pipeline import AntigenAnalyzer
-from .sequence_utils import global_align
+from .sequence_utils import global_align, reportable_identity
 
 
 @dataclass(slots=True)
@@ -299,9 +299,18 @@ def _source_label(source: str) -> str:
 
 
 def _sequence_identity(query_sequence: str | None, subject_sequence: str | None) -> float | None:
+    """Full-length identity for the shipped TSV.
+
+    The table has no coverage or alignment-length column, so the number travels
+    alone; an identity computed over a handful of aligned residues would read as
+    a claim about the whole protein. Blank is the honest answer there.
+    """
     if not query_sequence or not subject_sequence:
         return None
-    return round(global_align(query_sequence, subject_sequence).identity, 2)
+    identity = reportable_identity(
+        global_align(query_sequence, subject_sequence), len(subject_sequence)
+    )
+    return round(identity, 2) if identity is not None else None
 
 
 def _write_row_checkpoint(output_json: Path, row: OrthologTableRow) -> None:

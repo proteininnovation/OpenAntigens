@@ -10,7 +10,11 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from agdesign2.sequence_utils import global_align, map_query_region_to_subject
+from agdesign2.sequence_utils import (
+    global_align,
+    map_query_region_to_subject,
+    reportable_identity,
+)
 
 AMINO_ACIDS = "ACDEFGHIKLMNPQRSTVWY"
 
@@ -98,13 +102,18 @@ class IdentityMetricGuardTests(unittest.TestCase):
                     # The directional-matrix value (matches / row length).
                     self.assertLess(100.0 * alignment.matches / len(query), 30.0)
 
-    def test_equal_length_unrelated_pairs_stay_low(self) -> None:
+    def test_equal_length_unrelated_pairs_do_not_align_end_to_end(self) -> None:
+        # The old scheme already scored 300 vs 300 at ~14.6% identity, so an
+        # identity threshold here could never have caught F33. Coverage is what
+        # the scheme change moves: the old scheme forced the whole query into
+        # the alignment (coverage ~100%), free end gaps let the aligner stop.
         rng = random.Random(1)
         for _ in range(10):
             query = "".join(rng.choices(AMINO_ACIDS, k=300))
             subject = "".join(rng.choices(AMINO_ACIDS, k=300))
             alignment = global_align(query, subject)
-            self.assertLess(100.0 * alignment.matches / len(query), 25.0)
+            self.assertLess(alignment.coverage, 50.0)
+            self.assertLess(100.0 * alignment.matches / len(query), 15.0)
 
     def test_a_contained_sequence_scores_100_percent_over_its_own_length(self) -> None:
         """The semantics tests/test_hgnc.py's directional matrix relies on."""
@@ -140,7 +149,24 @@ class IdentityMetricGuardTests(unittest.TestCase):
         row, column = ectodomain("gpr63"), ectodomain("lgr4")
         self.assertEqual((len(row), len(column)), (87, 520), "fixture drifted")
         alignment = global_align(row, column)
-        self.assertLess(100.0 * alignment.matches / len(row), 50.0)
+        # Measured: shipped 79.31%, BLOSUM62 WITHOUT free end gaps 37.93%, with
+        # them 17.24%. A threshold of 50 would not notice the end gaps going
+        # away, which is the part that removes the artefact.
+        self.assertLess(100.0 * alignment.matches / len(row), 25.0)
+
+    def test_free_end_gaps_are_present_not_just_blosum62(self) -> None:
+        """The part of the scheme a loose threshold would not notice.
+
+        With ordinary end gaps a short query is still dragged across a long
+        subject; with free end gaps the aligner stops paying for alignment it
+        cannot justify, and coverage falls instead of pinning at 100%.
+        """
+        rng = random.Random(3)
+        query = "".join(rng.choices(AMINO_ACIDS, k=83))
+        subject = "".join(rng.choices(AMINO_ACIDS, k=550))
+        alignment = global_align(query, subject)
+        self.assertLess(alignment.coverage, 95.0)
+        self.assertLess(alignment.aligned_positions, len(query))
 
     def test_characters_outside_blosum62_are_scored_as_unknown_not_crashed(self) -> None:
         # Selenocysteine (U), pyrrolysine (O) and J are outside BLOSUM62's
@@ -148,6 +174,35 @@ class IdentityMetricGuardTests(unittest.TestCase):
         alignment = global_align("MKUOJWVT", "MKUOJWVT")
         self.assertEqual(alignment.matches, 8)
         self.assertEqual(alignment.identity, 100.0)
+
+
+class ReportableIdentityTests(unittest.TestCase):
+    """Free end gaps let the optimum trim to a tiny high-scoring core, so
+    matches/aligned_positions goes *up* for exactly the wrong-gene pairs the
+    metric fix was about. 126 of the 4,593 macaque ortholog rows aligned fewer
+    than 10 residues, and OR8J3 against guanine deaminase would have published
+    "100.00% identity to human" off a single residue, in a TSV with no coverage
+    column to qualify it."""
+
+    def test_a_sliver_alignment_is_not_reportable(self) -> None:
+        rng = random.Random(4)
+        query = "".join(rng.choices(AMINO_ACIDS, k=315))
+        subject = "".join(rng.choices(AMINO_ACIDS, k=454))
+        alignment = global_align(query, subject)
+        self.assertLess(alignment.aligned_positions / min(len(query), len(subject)), 0.30)
+        self.assertIsNone(reportable_identity(alignment, len(subject)))
+
+    def test_a_full_alignment_is_reportable(self) -> None:
+        rng = random.Random(5)
+        query = "".join(rng.choices(AMINO_ACIDS, k=200))
+        alignment = global_align(query, query)
+        self.assertEqual(reportable_identity(alignment, len(query)), 100.0)
+
+    def test_a_short_protein_aligned_end_to_end_is_reportable(self) -> None:
+        # The rule is proportional on purpose: an absolute floor would blank a
+        # genuinely short protein that aligns completely.
+        alignment = global_align("MAAACCC", "MAAACCG")
+        self.assertIsNotNone(reportable_identity(alignment, 7))
 
 
 if __name__ == "__main__":

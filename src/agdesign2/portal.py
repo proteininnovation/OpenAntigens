@@ -3547,6 +3547,10 @@ def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
             topology.get("topology_class") if isinstance(topology, dict) else "",
         )
     )
+    if not _has_design_region(report):
+        # Reachable: mouse_portal._topology_bucket returns "" for any topology
+        # class that is not secreted/gpi/single/multi.
+        return "Full-Length Membrane Protein" if "multi" in track else NO_DESIGN_REGION_LABEL
     if "gpi" in track or "single" in track or "multi" in track or "membrane" in track or "surface" in track:
         return "Extracellular Region"
     if "secret" in track:
@@ -9710,6 +9714,7 @@ _HOMOLOG_BLANK_REASONS = {
     "withheld": "withheld: no confident ortholog",
     "no_region": "no extracellular region",
     "unresolved": "no ortholog resolved",
+    "unmapped": "boundaries could not be mapped confidently",
 }
 
 
@@ -9728,6 +9733,11 @@ def _homolog_cell_reason(item: dict[str, Any], report: dict[str, Any]) -> str:
         return _HOMOLOG_BLANK_REASONS["unresolved"]
     if not report.get("ectodomain"):
         return _HOMOLOG_BLANK_REASONS["no_region"]
+    if item.get("ectodomain_start") is None or item.get("ectodomain_end") is None:
+        # The ortholog resolved and the target has a region, but projecting the
+        # boundary onto the homolog failed the 0.70 coverage gate
+        # (sequence_utils._MIN_BOUNDARY_MAPPING_COVERAGE).
+        return _HOMOLOG_BLANK_REASONS["unmapped"]
     return "n/a"
 
 

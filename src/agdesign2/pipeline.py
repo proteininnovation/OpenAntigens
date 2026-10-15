@@ -1336,6 +1336,15 @@ class AntigenAnalyzer:
         query_region_start: int,
         extracellular_surface_positions: set[int],
     ) -> list:
+        """Annotate BLAST hits with identity over the accessible residue subset.
+
+        ``query_region_start`` is where the *queried sequence* starts in the
+        protein. BLAST's ``query_alignment`` does not start there: it starts at
+        ``hit.query_start`` **within** that sequence. Passing the region origin
+        alone shifted the position set by ``query_start - 1`` on 117,043 of the
+        148,231 stored accessible-identity values — the producer half of
+        OA-002, which the renderer fix in PR-3 did not reach.
+        """
         if not extracellular_surface_positions:
             return hits
         annotated = []
@@ -1343,17 +1352,18 @@ class AntigenAnalyzer:
             if not hit.query_alignment or not hit.subject_alignment:
                 annotated.append(hit)
                 continue
+            alignment_origin = query_region_start + max(int(hit.query_start or 1), 1) - 1
             alignment = type("BlastAlignment", (), {})()
             alignment.aligned_query = hit.query_alignment
             alignment.aligned_subject = hit.subject_alignment
             surface_result = identity_for_query_positions(
                 alignment,
-                query_region_start=query_region_start,
+                query_region_start=alignment_origin,
                 query_positions=extracellular_surface_positions,
             )
             annotation = self._blast_query_alignment_annotation(
                 hit.query_alignment,
-                query_region_start=query_region_start,
+                query_region_start=alignment_origin,
                 extracellular_surface_positions=extracellular_surface_positions,
             )
             annotated.append(
