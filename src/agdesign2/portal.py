@@ -8429,7 +8429,12 @@ def _build_index_entry(
             "ectodomain_end": ectodomain.get("end"),
             "detail_page": f"{_safe_filename(str(entry_name).lower())}.html",
             "has_family_context": bool(report_data.get("family_context")),
-            "has_assembly_requirements": bool(report_data.get("assembly_requirements")),
+            # Row 41: count what the page shows — obligatory requirements
+            # only. Non-obligatory SUBUNIT rows made this true on 1,771 mouse
+            # rows against 26 human, contradicting the page.
+            "has_assembly_requirements": any(
+                item.get("obligatory") for item in (report_data.get("assembly_requirements") or [])
+            ),
             "has_alphafold_structure": has_alphafold,
             "structure_source": _structure_source_label(alphafold_path) if has_alphafold and alphafold_path is not None else "",
             "has_pdb": has_pdb,

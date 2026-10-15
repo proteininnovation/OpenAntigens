@@ -289,6 +289,11 @@ def build_open_targets_associations_from_bulk_downloads(
     target_rows_from_summary = _summary_target_rows(summary_file, batch_dir)
     target_lookup = _load_open_targets_bulk_targets(release_dir / "target")
     disease_lookup = _load_open_targets_bulk_diseases(release_dir / "disease")
+    therapeutic_area_ids = {
+        str(area)
+        for record in disease_lookup.values()
+        for area in (record.get("therapeuticAreas") or [])
+    }
     ensembl_ids = {
         target_lookup[str(row.get("gene_symbol") or "").upper()]["ensembl_id"]
         for row in target_rows_from_summary
@@ -373,7 +378,7 @@ def build_open_targets_associations_from_bulk_downloads(
             disease_rows=disease_rows,
         )
         _sort_and_rank_associations(associations)
-        top = associations[0] if associations else {}
+        top = _top_specific_association(associations, therapeutic_area_ids)
         disease_names = sorted({str(item.get("disease_name") or "") for item in associations if item.get("disease_name")}, key=str.lower)
         target_rows.append(
             {
@@ -1052,6 +1057,22 @@ def _safe_float(value: Any) -> float:
 
 def _blank_if_none(value: Any) -> Any:
     return "" if value is None else value
+
+
+def _top_specific_association(
+    associations: list[dict[str, Any]], therapeutic_area_ids: set[str]
+) -> dict[str, Any]:
+    """The highest-ranked association that is a disease, not a disease area.
+
+    Row 41: indirect association scores propagate up the ontology, so a root
+    therapeutic-area node always outscores the diseases under it. The index's
+    "top disease" was one on 5,189 of 5,328 human rows. Falls back to the plain
+    top row when every association is a therapeutic area.
+    """
+    for row in associations:
+        if str(row.get("disease_id") or "") not in therapeutic_area_ids:
+            return row
+    return associations[0] if associations else {}
 
 
 def _sort_and_rank_associations(rows: list[dict[str, Any]]) -> None:
