@@ -58,7 +58,7 @@ from .structure_utils import (
     split_domains_from_pae,
     summarize_construct_quality,
 )
-from .topology import TopologyResult, apply_surfy_topology_fallback, derive_ectodomain
+from .topology import TopologyResult, apply_surfy_topology_fallback, derive_ectodomain, replace_region
 from .uniprot import UniProtClient
 from .visualization import ConstructAssetGenerator
 
@@ -122,6 +122,123 @@ class _TerminalTrimDecision:
     evidence: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     blocked_reason: str | None = None
+
+
+# The ICL3-fusion window, in GPCRdb generic numbering.
+#
+# F02-A: the only guard on a fusion window was overlap with UniProt TRANSMEM.
+# GPCRdb's own helices run well past the membrane core — for A2A, TM5 is
+# 173-213 (5.34x36 -> 5.74x74) and TM6 is 219-259 (6.21x21 -> 6.61x61) — so a
+# window that clears UniProt can still remove ~14 residues of TM5 and ~16 of
+# TM6. 683 human / 261 mouse pages published such a window.
+#
+# "Any overlap with an annotated segment" is the wrong rule: GPCRdb's NAR 2021
+# paper notes the cytosolic ends of TM5 and TM6 are distorted by the very
+# fusion proteins used to crystallise these receptors, so the canonical
+# constructs *do* cut inside the annotated helices. The rule is therefore a
+# band in generic numbers relative to the conserved x.50 positions.
+#
+# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window. The
+# crystallisation construct replaces Lys209-Gly218 and the original insertion
+# work cut between L208 and R222; through GPCRdb's own segment table (one
+# residue = 0.01 generic units in both helices) that is 5.70 on the TM5 side
+# and 6.24 on the TM6 side. Cuts outside this window are blocked.
+GPCR_ICL3_FUSION_WINDOW: dict[str, tuple[float, float]] = {
+    # helix -> (earliest allowed generic number, latest allowed generic number)
+    "5": (5.70, 9.99),
+    "6": (-9.99, 6.24),
+}
+
+
+def _generic_number(value: str | None) -> float | None:
+    """Parse a GPCRdb display generic number such as ``5.63x63`` -> 5.63."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    text = text.split("x", 1)[0]
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+# Protein-name and InterPro-family tokens that identify a GPCR positively.
+#
+# F01: GPCR advice was gated on `tm_count >= 7`, which is a proxy, not a
+# classification: 536 human and 508 mouse non-GPCRs — ABC and SLC transporters,
+# CNG and TRP channels, Na+/H+ exchangers, adenylate cyclases, PAQR receptors —
+# were handed a "Conservative 7TM expression series", an ICL loop screen and, on
+# 329 human / 295 mouse pages, a generated BRIL/T4L fusion sequence.
+#
+# The owner's decision (plan §5.1) is to keep known GPCRs: the list therefore
+# carries the family names whose protein names lack the generic "G
+# protein-coupled receptor" string — olfactory and odorant, vomeronasal, taste,
+# opsins, and the named ligand families — so the 222 GPCR-named reports with no
+# GPCRdb entry keep their advice. The tokens were derived from the protein names
+# actually shipped in the two snapshots, not from memory.
+_GPCR_NAME_TOKENS: tuple[str, ...] = (
+    "g protein-coupled receptor", "g-protein coupled receptor", "gpcr",
+    "olfactory receptor", "odorant receptor", "vomeronasal",
+    "taste receptor", "opsin", "rhodopsin",
+    "frizzled", "smoothened homolog", "adhesion g",
+    "trace amine-associated receptor", "mas-related",
+    "chemokine receptor", "metabotropic glutamate receptor",
+    "adrenergic receptor", "muscarinic acetylcholine receptor",
+    "hydroxytryptamine receptor", "dopamine receptor",
+    "somatostatin receptor", "leukotriene",
+    "lysophosphatidic acid receptor", "sphingosine 1-phosphate receptor",
+    "neuropeptide", "prostaglandin e2 receptor", "prostacyclin receptor",
+    "thromboxane", "angiotensin", "bradykinin receptor",
+    "melanocortin receptor", "histamine h", "cannabinoid receptor",
+    "relaxin receptor", "orexin receptor", "apelin receptor",
+    "free fatty acid receptor", "succinate receptor",
+    "hydroxycarboxylic acid receptor", "formyl peptide receptor",
+    "complement component c3a receptor", "c5a anaphylatoxin",
+    "platelet-activating factor receptor", "gastrin",
+    "secretin receptor", "glucagon receptor", "calcitonin receptor",
+    "parathyroid hormone", "corticotropin-releasing factor receptor",
+    "vasoactive intestinal", "pituitary adenylate cyclase-activating",
+    "growth hormone-releasing hormone receptor",
+    "gonadotropin-releasing hormone receptor",
+    "thyrotropin", "lutropin", "follitropin",
+    "oxytocin receptor", "vasopressin", "galanin receptor",
+    "motilin receptor", "ghrelin receptor", "bombesin receptor",
+    "neuromedin", "tachykinin", "endothelin receptor",
+    "purinergic receptor p2y", "p2y purinoceptor",
+    "calcium-sensing receptor", "gamma-aminobutyric acid type b receptor",
+    "melatonin receptor", "cysteinyl leukotriene",
+    "chemerin", "prokineticin receptor", "cholecystokinin receptor",
+    "urotensin-2 receptor", "prolactin-releasing peptide receptor",
+    "pyroglutamylated rfamide peptide receptor",
+)
+
+# Names that contain a token above but are not GPCRs. Without these the token
+# list keeps advice on LMBRD2 ("G protein-coupled receptor-associated protein"),
+# on the P2X purinoceptors (ligand-gated ion channels, not the P2Y GPCRs) and on
+# 5-HT3 (a Cys-loop channel, unlike every other 5-HT receptor).
+_NON_GPCR_NAME_TOKENS: tuple[str, ...] = (
+    "g protein-coupled receptor-associated",
+    "modulator of smoothened",
+    "p2x purinoceptor",
+    "hydroxytryptamine receptor 3",
+)
+
+
+def is_gpcr_by_name(target, interpro_annotations: list[DomainAnnotation]) -> bool:
+    """Positive GPCR classification from the protein name and InterPro families.
+
+    Gene symbols are deliberately not searched: GPR108, GPR137C and GPR180 are
+    not GPCRs, and a bare "gpr" token would keep advice on all of them.
+    """
+    text = " ".join(
+        [
+            str(getattr(target, "protein_name", "") or ""),
+            " ".join(annotation.name for annotation in interpro_annotations),
+        ]
+    ).lower()
+    if any(token in text for token in _NON_GPCR_NAME_TOKENS):
+        return False
+    return any(token in text for token in _GPCR_NAME_TOKENS)
 
 
 class AntigenAnalyzer:
@@ -241,6 +358,7 @@ class AntigenAnalyzer:
             interpro_annotations=interpro_annotations,
             notes=notes,
         )
+        self._clip_ectodomain_to_gpcrdb_tm1(topology, gpcr_annotation, notes)
 
         structural_regions: list[Region] = []
         cysteine_analysis: list[CysteineFinding] = []
@@ -1809,7 +1927,8 @@ class AntigenAnalyzer:
             )
             return None
         if annotation is None:
-            if topology is not None and len(topology.transmembrane_regions) >= self.config.multipass_gpcr_like_tm_count:
+            # Only worth saying on a target we actually classify as a GPCR.
+            if is_gpcr_by_name(target, interpro_annotations):
                 notes.append(
                     AnalysisNote(
                         severity="warning",
@@ -2810,14 +2929,25 @@ class AntigenAnalyzer:
             return []
         tm_count = len(topology.transmembrane_regions)
         suggestions: list[MembraneEngineeringSuggestion] = []
-        is_gpcr = gpcr_annotation is not None or tm_count >= self.config.multipass_gpcr_like_tm_count
+        is_gpcr = gpcr_annotation is not None or is_gpcr_by_name(target, interpro_annotations)
         if is_gpcr:
-            internal_cytoplasmic_loops = self._find_internal_cytoplasmic_loops(topology)
-            longest_loop = max(
-                internal_cytoplasmic_loops,
-                key=lambda region: (region.end - region.start + 1, region.start),
-                default=None,
+            # One loop source, and the same blockers as the fusion variants.
+            longest_loop, _loop_source = self._select_gpcr_engineering_loop(topology, gpcr_annotation)
+            advisory_blockers = (
+                self._gpcr_loop_engineering_blockers(
+                    loop=longest_loop,
+                    topology=topology,
+                    features=features,
+                    ligand_interactions=[],
+                    ptms=[],
+                    gpcr_annotation=gpcr_annotation,
+                    domains=features,
+                )
+                if longest_loop is not None
+                else ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
             )
+            if advisory_blockers:
+                longest_loop = None
             tail = topology.cytoplasmic_tail_region
             gpcr_evidence = []
             if gpcr_annotation is not None:
@@ -2848,6 +2978,27 @@ class AntigenAnalyzer:
                     end=topology.membrane_core_region.end,
                 )
             )
+            if longest_loop is None and advisory_blockers:
+                suggestions.append(
+                    MembraneEngineeringSuggestion(
+                        category="gpcr_loop_engineering_blocked",
+                        title="No intracellular-loop engineering site",
+                        summary=(
+                            "No intracellular loop on this receptor can carry a fusion cassette "
+                            "without cutting into structure the page also annotates."
+                        ),
+                        rationale=list(advisory_blockers),
+                        suggested_actions=[
+                            "Screen the native full-length and trimmed membrane constructs instead.",
+                        ],
+                        evidence=gpcr_evidence,
+                        warnings=[
+                            "Advisory only; this is the absence of a recommendation, not a prediction of failure.",
+                        ],
+                        start=topology.membrane_core_region.start,
+                        end=topology.membrane_core_region.end,
+                    )
+                )
             if longest_loop is not None and (longest_loop.end - longest_loop.start + 1) >= 15:
                 loop_length = longest_loop.end - longest_loop.start + 1
                 suggestions.append(
@@ -2976,7 +3127,7 @@ class AntigenAnalyzer:
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
         tm_count = len(topology.transmembrane_regions)
-        if gpcr_annotation is None and tm_count < self.config.multipass_gpcr_like_tm_count:
+        if gpcr_annotation is None and not is_gpcr_by_name(target, []):
             return []
         registry = load_gpcr_engineering_registry(self.config.gpcr_engineering_cassette_registry_path)
         variants: list[GPCREngineeringVariant] = []
@@ -2990,6 +3141,8 @@ class AntigenAnalyzer:
             features=features,
             ligand_interactions=ligand_interactions,
             ptms=ptms,
+            gpcr_annotation=gpcr_annotation,
+            domains=features,
         )
         loop_length = (loop.end - loop.start + 1) if loop is not None else 0
         if loop is not None and not blockers:
@@ -3136,6 +3289,54 @@ class AntigenAnalyzer:
         loop = max(internal_loops, key=lambda region: (region.end - region.start + 1, -region.start))
         return loop, "topology-derived internal cytoplasmic loop"
 
+    def _gpcr_band_blockers(
+        self,
+        *,
+        loop: Region,
+        gpcr_annotation: GPCRdbAnnotation | None,
+    ) -> list[str]:
+        """Block a fusion window that cuts deeper than the published one.
+
+        With no GPCRdb generic numbering (class B, C and F receptors), fall back
+        to the strictly conservative rule: do not cut inside an annotated TM
+        segment at all. That is the owner's decision of 2026-10-15.
+        """
+        if gpcr_annotation is None:
+            return []
+        blockers: list[str] = []
+        for segment in gpcr_annotation.segments:
+            name = str(segment.name or "").strip().upper()
+            if not (name.startswith("TM") or name == "H8"):
+                continue
+            if loop.start > segment.end or loop.end < segment.start:
+                continue
+            helix = name[2:] if name.startswith("TM") else ""
+            window = GPCR_ICL3_FUSION_WINDOW.get(helix)
+            start_generic = _generic_number(segment.generic_start)
+            end_generic = _generic_number(segment.generic_end)
+            if window is None or start_generic is None or end_generic is None or segment.end == segment.start:
+                blockers.append(
+                    f"Selected loop overlaps GPCRdb {name} ({segment.start}-{segment.end}); "
+                    "no generic numbering is available, so no cut inside an annotated "
+                    "transmembrane segment is allowed."
+                )
+                continue
+            # One residue is (end_generic - start_generic) / (end - start) units.
+            step = (end_generic - start_generic) / (segment.end - segment.start)
+            low, high = window
+            for residue in (loop.start, loop.end):
+                if not (segment.start <= residue <= segment.end):
+                    continue
+                generic = start_generic + (residue - segment.start) * step
+                if generic < low or generic > high:
+                    blockers.append(
+                        f"Selected loop cuts GPCRdb {name} at generic {generic:.2f}, outside the "
+                        f"published ICL3-fusion window {GPCR_ICL3_FUSION_WINDOW['5'][0]:.2f}-"
+                        f"{GPCR_ICL3_FUSION_WINDOW['6'][1]:.2f}."
+                    )
+                    break
+        return blockers
+
     def _gpcr_loop_engineering_blockers(
         self,
         *,
@@ -3144,6 +3345,8 @@ class AntigenAnalyzer:
         features: list[Feature],
         ligand_interactions: list[Feature],
         ptms: list[Feature],
+        gpcr_annotation: GPCRdbAnnotation | None = None,
+        domains: list[Feature] | None = None,
     ) -> list[str]:
         if loop is None:
             return ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
@@ -3157,6 +3360,18 @@ class AntigenAnalyzer:
             blockers.append("Selected loop overlaps a membrane-spanning region.")
         if self._regions_overlap_any(loop.start, loop.end, topology.extracellular_regions):
             blockers.append("Selected loop overlaps extracellular topology annotation.")
+        blockers.extend(self._gpcr_band_blockers(loop=loop, gpcr_annotation=gpcr_annotation))
+        # OA-009: a cassette replacing part of an annotated DOMAIN removes
+        # structure the fusion cannot restore.
+        for feature in domains or []:
+            if str(feature.type or "").upper() != "DOMAIN":
+                continue
+            if feature.start <= loop.end and feature.end >= loop.start:
+                blockers.append(
+                    f"Selected loop overlaps DOMAIN annotation {feature.start}-{feature.end}"
+                    + (f" ({feature.description})." if feature.description else ".")
+                )
+                break
         for feature in ligand_interactions:
             feature_kind = str(feature.metadata.get("raw_type") or feature.type or "").upper()
             feature_text = f"{feature.type} {feature.description or ''}".lower()
@@ -3228,6 +3443,46 @@ class AntigenAnalyzer:
                 continue
             loops.append(region)
         return loops
+
+    def _clip_ectodomain_to_gpcrdb_tm1(
+        self,
+        topology,
+        gpcr_annotation: GPCRdbAnnotation | None,
+        notes: list[AnalysisNote],
+    ) -> None:
+        """F17-3: trim a design region that runs into GPCRdb TM1.
+
+        The region is derived from UniProt TRANSMEM, whose helix boundaries sit
+        later than GPCRdb's structure-based ones: against UniProt only 1 human
+        and 1 mouse region overlaps a helix, but 80 human / 71 mouse overlap a
+        GPCRdb TM segment, median 8-9 residues. The owner's decision of
+        2026-10-15 is that GPCRdb is primary and UniProt the fallback, so where
+        a GPCRdb annotation exists its boundary wins.
+        """
+        if gpcr_annotation is None or topology.ectodomain is None:
+            return
+        tm1 = self._gpcr_segment(gpcr_annotation, "TM1")
+        if tm1 is None:
+            return
+        region = topology.ectodomain
+        if region.end < tm1.start or region.start >= tm1.start:
+            return
+        clipped_end = tm1.start - 1
+        if clipped_end <= region.start:
+            return
+        removed = region.end - clipped_end
+        topology.ectodomain = replace_region(region, end=clipped_end)
+        notes.append(
+            AnalysisNote(
+                severity="info",
+                message=(
+                    f"Design region trimmed by {removed} residue(s) to end at {clipped_end}: "
+                    f"GPCRdb places TM1 at {tm1.start}-{tm1.end}, earlier than the UniProt "
+                    "transmembrane boundary. GPCRdb is the primary source for annotated receptors."
+                ),
+                source="GPCRdb",
+            )
+        )
 
     def _gpcr_segment(self, annotation: GPCRdbAnnotation, name: str) -> GPCRdbSegment | None:
         normalized = name.strip().lower()

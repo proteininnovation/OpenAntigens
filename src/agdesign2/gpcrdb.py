@@ -11,6 +11,17 @@ GPCRDB_BASE = "https://gpcrdb.org"
 GPCRDB_SERVICES = f"{GPCRDB_BASE}/services"
 
 
+def _is_not_found(exc: Exception) -> bool:
+    """A 404 means GPCRdb has no entry; anything else is a failure.
+
+    F01/OA-003: ``except Exception: return None`` made a transient network error
+    indistinguishable from "not a GPCR". 19 of the 28 mouse GPCR-named reports
+    with no annotation return HTTP 200 from GPCRdb today, so some of those
+    absences were swallowed failures and the code gave no way to tell.
+    """
+    return "HTTP error" in str(exc) and "404" in str(exc)
+
+
 class GPCRdbClient:
     def __init__(self, http: HttpClient) -> None:
         self.http = http
@@ -69,8 +80,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"protein:{entry_name}",
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            if _is_not_found(exc):
+                return None
+            raise
         return payload if isinstance(payload, dict) and payload.get("entry_name") else None
 
     def _fetch_protein_by_accession(self, accession: str) -> dict[str, Any] | None:
@@ -80,8 +93,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"protein_accession:{accession}",
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            if _is_not_found(exc):
+                return None
+            raise
         return payload if isinstance(payload, dict) and payload.get("entry_name") else None
 
     def _fetch_residues(self, entry_name: str) -> list[GPCRdbResidue]:
@@ -91,8 +106,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"residues:{entry_name}",
             )
-        except Exception:
-            return []
+        except Exception as exc:
+            if _is_not_found(exc):
+                return []
+            raise
         if not isinstance(payload, list):
             return []
         residues: list[GPCRdbResidue] = []

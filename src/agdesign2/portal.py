@@ -5635,6 +5635,33 @@ def _public_gpcr_variant(variant: dict[str, Any]) -> dict[str, Any]:
 def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) -> str:
     if not variants:
         return ""
+    # F02-A: on the pages where every variant is blocked the section would
+    # otherwise be a list of refusals with no statement of what happened.
+    if all(
+        str(variant.get("category") or "") == "gpcr_loop_fusion_skipped"
+        for variant in variants
+    ):
+        reasons = _dedupe_notes(
+            [
+                {"severity": "", "message": warning, "source": ""}
+                for variant in variants
+                for warning in (variant.get("warnings") or [])
+            ]
+        )
+        reason_items = "".join(
+            f"<li>{escape(str(item['message']))}</li>" for item in reasons
+        ) or "<li>No eligible intracellular loop was found.</li>"
+        return f"""
+    <section class="card" id="gpcr-engineering" data-report-section="GPCR Engineering">
+      <h2>GPCR Expression and Stabilization Strategy</h2>
+      <p class="section-note">No loop-fusion variant is offered for this receptor. Every candidate
+      intracellular loop would place the cassette outside the published ICL3-fusion window, or would
+      cut through an annotation this page also carries:</p>
+      <ul>{reason_items}</ul>
+      <p class="section-note">This is the absence of a recommendation, not a prediction that a fusion
+      construct would fail. Screen the native full-length and trimmed membrane constructs instead.</p>
+    </section>
+    """
     rows: list[str] = []
     cards: list[str] = []
     for variant in variants:

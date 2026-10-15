@@ -443,7 +443,56 @@ def apply_surfy_topology_fallback(
     if not topology.transmembrane_regions:
         topology.transmembrane_regions.extend(region for kind, region in segments if kind == "TM")
         changed = changed or bool(topology.transmembrane_regions)
+    if changed:
+        # F02-B. These segments arrive AFTER _build_topology_annotation has
+        # already computed the tail and the loops, so without this the tail
+        # stays None (84 human / 227 mouse reports) and a C-terminal SURFY
+        # segment is then offered as an internal cytoplasmic loop. SURFY
+        # segments also straddle UniProt helices, which is how a fusion window
+        # reached inside TM7 on or10ac1_mouse.
+        _clip_regions_to_transmembrane(
+            topology.cytoplasmic_regions, topology.transmembrane_regions
+        )
+        _clip_regions_to_transmembrane(
+            topology.extracellular_regions, topology.transmembrane_regions
+        )
+        topology.cytoplasmic_tail_region = _select_cytoplasmic_tail_region(
+            cytoplasmic_regions=topology.cytoplasmic_regions,
+            tm_regions=topology.transmembrane_regions,
+        )
     return changed
+
+
+def _clip_regions_to_transmembrane(regions: list[Region], tm_regions: list[Region]) -> None:
+    """Trim each region so it does not reach inside a transmembrane helix.
+
+    A region that a helix splits in two is replaced by the longer half; one
+    entirely inside a helix is dropped.
+    """
+    if not tm_regions:
+        return
+    clipped: list[Region] = []
+    for region in regions:
+        pieces = [(region.start, region.end)]
+        for helix in tm_regions:
+            next_pieces: list[tuple[int, int]] = []
+            for start, end in pieces:
+                if end < helix.start or start > helix.end:
+                    next_pieces.append((start, end))
+                    continue
+                if start < helix.start:
+                    next_pieces.append((start, helix.start - 1))
+                if end > helix.end:
+                    next_pieces.append((helix.end + 1, end))
+            pieces = next_pieces
+        if not pieces:
+            continue
+        start, end = max(pieces, key=lambda piece: piece[1] - piece[0])
+        if (start, end) == (region.start, region.end):
+            clipped.append(region)
+        else:
+            clipped.append(replace_region(region, start=start, end=end))
+    regions[:] = clipped
 
 
 def _parse_surfy_topology_segments(
