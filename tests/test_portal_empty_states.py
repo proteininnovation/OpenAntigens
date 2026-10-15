@@ -84,8 +84,8 @@ class BlastEmptyStateTests(unittest.TestCase):
                 html = _render(report, title)
                 self.assertNotIn("The completed BLAST search returned no sequence similarity hits.", html)
                 self.assertIn("no region-restricted BLAST search was run", html)
-                # The sidebar card must count the search that actually ran.
-                self.assertIn("<dt>BLAST sequence similarity hits</dt><dd>3</dd>", html)
+                # The sidebar card must count — and name — the search that ran.
+                self.assertIn("<dt>Full-length BLAST sequence similarity hits</dt><dd>3</dd>", html)
 
     def test_design_region_with_a_true_zero_keeps_the_completed_negative(self) -> None:
         # Counter-case: where the search did run, the honest negative stays.
@@ -171,6 +171,36 @@ class AssemblyEmptyStateTests(unittest.TestCase):
                 self.assertNotIn("No assembly requirements reported.", html)
                 self.assertIn("only evaluated for canonical integrin chains", html)
 
+    def test_a_populated_table_is_not_followed_by_an_empty_result_claim(self) -> None:
+        # 26 human pages do list an obligatory requirement; the scope sentence
+        # contradicted the table immediately above it.
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _base_report()
+                report["assembly_requirements"] = [
+                    {"classification": "obligatory_partner_requirement", "obligatory": True,
+                     "confidence": "high", "summary": "Heterodimer", "partners": ["ITGB3"]}
+                ]
+                html = _render(report, title)
+                self.assertIn("ITGB3", html)
+                self.assertNotIn("an empty result here does not rule out", html)
+
+    def test_non_obligatory_annotations_are_declared_not_denied(self) -> None:
+        # 1,771 mouse reports carry non-obligatory SUBUNIT rows the table does
+        # not show; claiming nothing was evaluated would be false for them.
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _base_report()
+                report["assembly_requirements"] = [
+                    {"classification": "interaction_context", "obligatory": False,
+                     "confidence": "medium", "summary": "Interacts with X", "partners": ["X"]},
+                    {"classification": "heteromeric_assembly", "obligatory": False,
+                     "confidence": "medium", "summary": "Heterodimer with Y", "partners": ["Y"]},
+                ]
+                html = _render(report, title)
+                self.assertIn("2 non-obligatory interaction annotation(s) are recorded", html)
+                self.assertNotIn("only evaluated for canonical integrin chains", html)
+
     def test_mouse_says_complex_portal_was_not_queried(self) -> None:
         report = _base_report()
         report["assembly_requirements"] = []
@@ -202,6 +232,28 @@ class CysteineEmptyStateTests(unittest.TestCase):
                 html = _render(report, title)
                 self.assertIn("The analyzed region contains no cysteines.", html)
 
+    def test_structure_skipped_is_not_reported_as_no_cysteines(self) -> None:
+        # The note the pipeline actually writes (pipeline.py:419) says
+        # "skipped", not "failed". Reports in this state DO have cysteines in
+        # the region — celr1_human has 81 — so the third branch would be false.
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["cysteine_analysis"] = []
+                report["notes"] = [
+                    {
+                        "severity": "warning",
+                        "source": "AlphaFold",
+                        "message": (
+                            "Structure-driven analyses were skipped: No AlphaFold model "
+                            "matches the canonical UniProt sequence for Q9NYQ6."
+                        ),
+                    }
+                ]
+                html = _render(report, title)
+                self.assertNotIn("The analyzed region contains no cysteines.", html)
+                self.assertIn("Structure-driven analyses were skipped", html)
+
     def test_structure_failure_says_so(self) -> None:
         for title in PORTAL_TITLES:
             with self.subTest(portal_title=title):
@@ -215,11 +267,109 @@ class CysteineEmptyStateTests(unittest.TestCase):
                     }
                 ]
                 html = _render(report, title)
-                self.assertIn("No structure could be loaded", html)
+                self.assertIn("Structure-driven analyses were skipped", html)
+
+
+class FurinEmptyStateTests(unittest.TestCase):
+    """The furin scan covers the design region only.
+
+    ``_find_furin_sites`` returns [] immediately when there is no ectodomain
+    (``pipeline.py:3865-3867``), so the predicate is the design region — the
+    same one F03 uses — not the presence of a sequence. Every report in both
+    snapshots has a sequence, so a sequence-based branch would be dead code.
+    """
+
+    def test_no_design_region_says_no_scan_was_run(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _base_report()
+                report["ectodomain"] = None
+                report["furin_sites"] = []
+                html = _render(report, title)
+                self.assertNotIn("No candidate furin-like motifs found", html)
+                self.assertIn("no furin-like motif search was run", html)
+
+    def test_design_region_names_the_region_not_the_sequence(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["furin_sites"] = []
+                html = _render(report, title)
+                self.assertIn("No candidate furin-like motif was found in the design region.", html)
+                # The markdown report says "in the ectodomain"; the HTML must not
+                # claim a wider scope than the scan actually has.
+                self.assertNotIn("in the analyzed sequence", html)
+
+
+class CrossReactivityCardLabelTests(unittest.TestCase):
+    """The card's number must name which search it counts.
+
+    ``_index_cross_reactivity_count`` returns the full-length count for
+    multipass targets even when they have a design region and region hits, so
+    an unlabelled number contradicted the region table below it on 263 human /
+    244 mouse pages.
+    """
+
+    def test_multipass_card_says_full_length(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["topology"] = {"topology_class": "multipass_mixed"}
+                report["cross_reactivity_hits"] = [{"accession": "P1"}]
+                report["full_length_cross_reactivity_hits"] = [{"accession": f"P{i}"} for i in range(6)]
+                html = _render(report, title)
+                self.assertIn("<dt>Full-length BLAST sequence similarity hits</dt><dd>6</dd>", html)
+
+    def test_single_pass_card_names_the_design_region(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["cross_reactivity_hits"] = [{"accession": f"P{i}"} for i in range(4)]
+                report["full_length_cross_reactivity_hits"] = [{"accession": f"Q{i}"} for i in range(9)]
+                html = _render(report, title)
+                self.assertIn("BLAST sequence similarity hits</dt><dd>4</dd>", html)
+                self.assertNotIn("<dt>Full-length BLAST sequence similarity hits</dt>", html)
 
 
 class NonePlaceholderTests(unittest.TestCase):
     """F27 — a bare "None" reads as a finding; say whose checks found nothing."""
+
+    def test_every_placeholder_site_is_covered(self) -> None:
+        """Render a construct card whose evidence, warnings, PTM, metrics and
+        GPCRdb-segment lists are all empty at once.
+
+        The fixture-driven test below does not reach three of these sites, so
+        reverting any one of them to the bare "None" left it green.
+        """
+        from tempfile import TemporaryDirectory
+
+        from agdesign2.portal import _render_construct_card
+
+        construct = {
+            "name": "full_ectodomain",
+            "start": 25,
+            "end": 180,
+            "sequence": "A" * 156,
+            "evidence": [],
+            "warnings": [],
+            "ptms": [],
+            "structural_metrics": {},
+            "homologs": [],
+            "gpcr_segments": [],
+            "gpcr_generic_range": {"start": "5.50", "end": "6.50"},
+        }
+        target = {"entry_name": "IL7_HUMAN", "gene_symbol": "IL7",
+                  "accession": "P10168", "taxon_id": "9606"}
+        with TemporaryDirectory() as tmp:
+            html = _render_construct_card(
+                construct, target=target, batch_dir=Path(tmp), page_dir=Path(tmp),
+                furin_sites=[], ptms=[],
+            )
+        self.assertNotIn("<li>None</li>", html)
+        self.assertIn("None recorded by this report", html)          # evidence + warnings
+        self.assertIn("No annotated PTM lies inside this construct.", html)
+        self.assertIn("No structural metric was computed for this construct.", html)
+        self.assertIn("No GPCRdb segment overlaps this construct.", html)
 
     def test_no_bare_none_list_item_survives(self) -> None:
         for title in PORTAL_TITLES:

@@ -3632,8 +3632,16 @@ def _cysteine_empty_reason(report: dict[str, Any]) -> str:
         if not isinstance(note, dict):
             continue
         message = str(note.get("message") or "").lower()
-        if "structure" in message and ("fail" in message or "unavailable" in message or "error" in message):
-            return "No structure could be loaded, so no cysteine analysis was run."
+        # The note that fires most often is "Structure-driven analyses were
+        # skipped: No AlphaFold model matches the canonical UniProt sequence"
+        # (pipeline.py:419) — no "failed", no "error".
+        if "structure" in message and any(
+            word in message for word in ("skip", "fail", "unavailable", "error")
+        ):
+            return (
+                "Structure-driven analyses were skipped for this report, so no cysteine "
+                "analysis was run; see Notes."
+            )
     return "The analyzed region contains no cysteines."
 
 
@@ -3850,8 +3858,7 @@ def render_detail_page(
         <h3>Full-length BLAST sequence similarity hits</h3>
         <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
         """
-    elif not region_blast_ran:
-        # No region search ran either, so this is the only search the page has.
+    else:
         full_length_cross_html = """
         <h3>Full-length BLAST sequence similarity hits</h3>
         <p class="section-note">The completed full-length BLAST search returned no sequence similarity hits.</p>
@@ -3876,11 +3883,12 @@ def render_detail_page(
         )
         for item in (report.get("furin_sites") or [])
     ) or (
-        "<tr><td colspan=\"3\">No candidate furin-like motifs found in the analyzed "
+        "<tr><td colspan=\"3\">No candidate furin-like motif was found in the design "
+        "region.</td></tr>"
+        if region_blast_ran
+        else "<tr><td colspan=\"3\">No design region was defined, so no furin-like motif "
+        "search was run. The search covers the design region only, never the full "
         "sequence.</td></tr>"
-        if report.get("target", {}).get("sequence")
-        else "<tr><td colspan=\"3\">No sequence was available, so no furin-like motif "
-        "search was run.</td></tr>"
     )
 
     ptm_rows = _render_ptm_rows(ptms)
@@ -3921,11 +3929,22 @@ def render_detail_page(
     # portal does not query Complex Portal at all (mouse_portal.py:157), so the
     # bare negative stood on all 4,702 mouse pages — 588 of them twins of a
     # human page that does list curated complexes.
-    assembly_scope_note = (
-        '<p class="section-note">Obligate assembly requirements are only evaluated for '
-        "canonical integrin chains; an empty result here does not rule out an obligate "
-        "partner.</p>"
-    )
+    non_obligatory_count = len(assembly_requirements) - len(obligatory_assembly_requirements)
+    if obligatory_assembly_requirements:
+        assembly_scope_note = ""
+    elif non_obligatory_count:
+        assembly_scope_note = (
+            '<p class="section-note">'
+            f"{non_obligatory_count} non-obligatory interaction annotation(s) are recorded "
+            "for this target and are not shown here; this section lists obligate assembly "
+            "requirements only.</p>"
+        )
+    else:
+        assembly_scope_note = (
+            '<p class="section-note">Obligate assembly requirements are only evaluated for '
+            "canonical integrin chains; an empty result here does not rule out an obligate "
+            "partner.</p>"
+        )
     if portal_title == "OpenAntigens Mouse":
         assembly_scope_note += (
             '<p class="section-note">Complex Portal is not queried for mouse targets; '
@@ -4126,7 +4145,7 @@ def render_detail_page(
           <dt>Label</dt><dd>{escape(str(ectodomain.get('label') or ''))}</dd>
           <dt>Source</dt><dd>{escape(str(ectodomain.get('source') or ''))}</dd>
           <dt>Constructs</dt><dd>{len(constructs)}</dd>
-          <dt>BLAST sequence similarity hits</dt><dd>{_index_cross_reactivity_count(report)}</dd>
+          <dt>{escape(_cross_reactivity_count_label(report, design_region_label))}</dt><dd>{_index_cross_reactivity_count(report)}</dd>
         </dl>
       </article>
     </section>
@@ -8277,6 +8296,20 @@ def _index_family_name(report_data: dict[str, Any]) -> str:
         if cleaned:
             return cleaned
     return ""
+
+
+def _cross_reactivity_count_label(report_data: dict[str, Any], design_region_label: str) -> str:
+    """Name which BLAST search the card is counting.
+
+    ``_index_cross_reactivity_count`` returns the full-length count for
+    multipass targets and for targets with no design region. On a multipass
+    page that does have a region and region hits, the unlabelled number
+    contradicted the region table right below it.
+    """
+    topology = report_data.get("topology") or {}
+    if str(topology.get("topology_class") or "").startswith("multipass") or report_data.get("ectodomain") is None:
+        return "Full-length BLAST sequence similarity hits"
+    return f"{design_region_label} BLAST sequence similarity hits"
 
 
 def _index_cross_reactivity_count(report_data: dict[str, Any]) -> int:
