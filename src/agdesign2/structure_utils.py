@@ -15,6 +15,7 @@ from .models import (
     ConstructSplitDiagnostic,
     ConstructStructuralMetrics,
     CysteineFinding,
+    Feature,
     Region,
 )
 
@@ -236,13 +237,56 @@ def split_domains_from_pae(
     return _split_region(region.start, region.end, pae_stats, config, residue_plddt, depth=0)
 
 
+INTERCHAIN_DISULFIDE_WARNING = (
+    "Interchain disulfide (UniProt); the partner is on another chain."
+)
+
+
+def _curated_disulfide_partners(
+    features: list[Feature] | None,
+) -> tuple[dict[int, int], set[int]]:
+    """Map each curated disulfide endpoint to its partner.
+
+    UniProt writes an interchain bond as ``DISULFID n-n``; those are returned
+    separately because they have no in-monomer partner.
+    """
+    partners: dict[int, int] = {}
+    interchain: set[int] = set()
+    for feature in features or []:
+        if str(feature.type or "").upper() != "DISULFID":
+            continue
+        start, end = feature.start, feature.end
+        if start is None or end is None:
+            continue
+        if start == end:
+            interchain.add(int(start))
+            continue
+        partners[int(start)] = int(end)
+        partners[int(end)] = int(start)
+    return partners, interchain
+
+
 def analyze_cysteines(
     atoms: dict[int, dict[str, tuple[float, float, float]]],
     residue_names: dict[int, str],
     construct_start: int,
     construct_end: int,
     surface_exposure: dict[int, bool | None] | None = None,
+    curated_disulfides: list[Feature] | None = None,
 ) -> list[CysteineFinding]:
+    """Pair cysteines, curated annotation first.
+
+    F12-A: pairing was geometry-only, so a curated UniProt DISULFID whose two
+    sulfurs sit further than 2.4 A apart in the AlphaFold model was reported
+    "unpaired" and both ends were offered for Cys->Ser. 428 human / 324 mouse
+    pages, and on 545 / 218 the model paired a *different* partner than the
+    curated annotation. The 2.4 A cutoff is deliberately not relaxed: that would
+    create false pairs where no annotation exists.
+
+    An interchain bond (UniProt writes it ``n-n``) stays unpaired, because it is
+    unpaired in a monomer, but it is labelled so it does not reach Cys->Ser.
+    """
+    curated_partner, interchain = _curated_disulfide_partners(curated_disulfides)
     cysteines = [
         residue
         for residue, name in residue_names.items()
@@ -263,6 +307,17 @@ def analyze_cysteines(
     for residue, partners in candidates.items():
         if len(partners) == 1 and len(candidates[partners[0]]) == 1:
             paired[residue] = partners[0]
+    in_range = set(cysteines)
+    outside_partner: dict[int, int] = {}
+    for residue in cysteines:
+        partner = curated_partner.get(residue)
+        if partner is None:
+            continue
+        if partner in in_range:
+            paired[residue] = partner
+        else:
+            paired.pop(residue, None)
+            outside_partner[residue] = partner
 
     unpaired_cysteines = [residue for residue in cysteines if residue not in paired]
     closest_unpaired = {
@@ -278,7 +333,14 @@ def analyze_cysteines(
             else _is_surface_exposed(residue, atoms)
         )
         warning = None
-        if pair is None and candidates[residue]:
+        if residue in interchain:
+            warning = INTERCHAIN_DISULFIDE_WARNING
+        elif residue in outside_partner:
+            warning = (
+                f"Curated disulfide partner C{outside_partner[residue]} lies outside "
+                "this range."
+            )
+        elif pair is None and candidates[residue]:
             warning = "Ambiguous cysteine pairing: competing sulfur contacts."
         elif pair is None and exposed:
             warning = "Unpaired cysteine appears surface exposed."
@@ -289,6 +351,7 @@ def analyze_cysteines(
                 paired_with=pair,
                 surface_exposed=exposed,
                 warning=warning,
+                partner_outside_range=outside_partner.get(residue),
                 closest_unpaired_cysteine=closest[0] if closest else None,
                 closest_unpaired_cysteine_distance=round(closest[1], 2) if closest else None,
                 closest_unpaired_cysteine_distance_atom=closest[2] if closest else None,

@@ -2155,7 +2155,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         </table>
       </div>
       <p>The pipeline also calculates SASA within PAE blocks to inspect residues that may be hidden by uncertain packing between blocks. Recomputing SASA within a block shows how its calculated accessibility changes when other blocks are removed; it does not establish accessibility in solution or on cells.</p>
-      <p>SASA calculations use the target-chain model and selected structural blocks, without partner chains. The pipeline does not reconstruct biological homo-oligomeric assemblies or incorporate their interfaces into boundary selection. A residue exposed in the model may be buried against another subunit, including an identical copy, in the biological assembly.</p>
+      <p>SASA calculations use the target-chain model and selected structural blocks, without partner chains. The pipeline does not reconstruct biological homo-oligomeric assemblies or incorporate their interfaces into boundary selection. A residue exposed in the model may be buried against another subunit, including an identical copy, in the biological assembly. No solvent-exposure call is made inside a transmembrane or intramembrane span: solvent accessibility is undefined there without a membrane model, and lipid-facing cannot be told from bundle-facing in a monomer. Curated UniProt disulfides take precedence over model geometry when both ends lie in the analyzed range.</p>
       <p>The extracellular accessible identity reported in homolog, family, and BLAST sections is calculated only over aligned primary-target residues that are both extracellular and classified as exposed or conditional.</p>
     </section>
 
@@ -4285,7 +4285,7 @@ def render_detail_page(
     <section class="stack">
       <article class="card" id="cysteines" data-report-section="Cysteines">
         <h2>Cysteines</h2>
-        <p class="section-note">Exposure is calculated from the target-chain model and selected structural blocks, without partner chains. A residue exposed here may be buried against another subunit, including an identical copy. Review <a class="inline-link" href="#interactions-assembly">Interactions / Assembly</a> when interpreting exposure.</p>
+        <p class="section-note">Exposure is calculated from the target-chain model and selected structural blocks, without partner chains. A residue exposed here may be buried against another subunit, including an identical copy. Review <a class="inline-link" href="#interactions-assembly">Interactions / Assembly</a> when interpreting exposure. No solvent-exposure call is made inside a transmembrane or intramembrane span: solvent accessibility is undefined there without a membrane model, and lipid-facing cannot be told from bundle-facing in a monomer. Curated UniProt disulfides take precedence over model geometry when both ends lie in the analyzed range.</p>
         <table>
           <thead><tr><th>Residue</th><th>Paired with</th><th>Surface exposed</th><th>Closest unpaired cysteine</th><th>Warning</th></tr></thead>
           <tbody>{cysteine_rows}</tbody>
@@ -4749,7 +4749,7 @@ def _render_construct_card(
             int(finding.get("position"))
             for finding in (construct.get("cysteine_analysis") or [])
             if finding.get("position") is not None and finding.get("paired_with") is None
-            and not str(finding.get("warning") or "").startswith("Ambiguous")
+            and not str(finding.get("warning") or "").startswith(_NO_CYS_TO_SER_WARNING_PREFIXES)
         }
     )
     construct_start = construct.get("start")
@@ -7332,11 +7332,13 @@ def _render_structure_widget(
           );
         }}
 
+        const NO_CYS_TO_SER_PREFIXES = {_js_json(list(_NO_CYS_TO_SER_WARNING_PREFIXES))};
+
         function selectionMutationCandidatePositions(start, end) {{
           const cysteines = viewerData.cysteineAnalysis || [];
           return cysteines
             .filter((finding) => Number(finding.position) >= start && Number(finding.position) <= end)
-            .filter((finding) => !String(finding.warning || '').startsWith('Ambiguous'))
+            .filter((finding) => !NO_CYS_TO_SER_PREFIXES.some((prefix) => String(finding.warning || '').startsWith(prefix)))
             .filter((finding) => finding.paired_with === null || finding.paired_with === undefined || Number(finding.paired_with) < start || Number(finding.paired_with) > end)
             .map((finding) => Number(finding.position))
             .filter((value) => Number.isFinite(value))
@@ -8731,6 +8733,16 @@ def _scientific_region_text(value: Any) -> str:
 
 def _rcsb_structure_url(pdb_id: str) -> str:
     return f"https://www.rcsb.org/structure/{quote(pdb_id.strip().upper())}"
+
+
+# Warnings whose cysteine must not be offered for Cys->Ser. "Ambiguous" means
+# the model could not tell which partner; the interchain prefix means UniProt
+# says the partner is on another chain, so the residue is only "unpaired"
+# because the model is a monomer (F12-C, 207 human / 159 mouse pages).
+_NO_CYS_TO_SER_WARNING_PREFIXES: tuple[str, ...] = (
+    "Ambiguous",
+    "Interchain disulfide",
+)
 
 
 def _construct_name_html(construct: dict[str, Any]) -> str:

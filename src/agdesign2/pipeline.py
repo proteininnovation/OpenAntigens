@@ -162,6 +162,10 @@ def _generic_number(value: str | None) -> float | None:
         return None
 
 
+def _curated_disulfides(features: list[Feature]) -> list[Feature]:
+    return [feature for feature in features if str(feature.type or "").upper() == "DISULFID"]
+
+
 # Protein-name and InterPro-family tokens that identify a GPCR positively.
 #
 # F01: GPCR advice was gated on `tm_count >= 7`, which is a proxy, not a
@@ -461,10 +465,14 @@ class AntigenAnalyzer:
                         if self.config.sasa_target_accessibility_only
                         else None,
                     )
-                    surface_exposure = {
-                        residue: result.surface_exposed
-                        for residue, result in surface_accessibility.items()
-                    }
+                    surface_exposure = self._withhold_membrane_exposure(
+                        {
+                            residue: result.surface_exposed
+                            for residue, result in surface_accessibility.items()
+                        },
+                        sequence_length=len(target.sequence),
+                        topology=topology.topology,
+                    )
                     residue_annotations = self._build_residue_annotations(
                         sequence=target.sequence,
                         topology=topology.topology,
@@ -477,6 +485,7 @@ class AntigenAnalyzer:
                         topology.ectodomain.start,
                         topology.ectodomain.end,
                         surface_exposure=surface_exposure,
+                        curated_disulfides=_curated_disulfides(features),
                     )
                     self._progress(
                         f"Derived {len(structural_regions)} structural regions and {len(cysteine_analysis)} cysteine findings"
@@ -503,10 +512,14 @@ class AntigenAnalyzer:
                         if self.config.sasa_target_accessibility_only
                         else None,
                     )
-                    surface_exposure = {
-                        residue: result.surface_exposed
-                        for residue, result in surface_accessibility.items()
-                    }
+                    surface_exposure = self._withhold_membrane_exposure(
+                        {
+                            residue: result.surface_exposed
+                            for residue, result in surface_accessibility.items()
+                        },
+                        sequence_length=len(target.sequence),
+                        topology=topology.topology,
+                    )
                     residue_annotations = self._build_residue_annotations(
                         sequence=target.sequence,
                         topology=topology.topology,
@@ -519,6 +532,7 @@ class AntigenAnalyzer:
                         1,
                         len(target.sequence),
                         surface_exposure=surface_exposure,
+                        curated_disulfides=_curated_disulfides(features),
                     )
                     notes.append(
                         AnalysisNote(
@@ -1163,7 +1177,14 @@ class AntigenAnalyzer:
                     position=position,
                     amino_acid=amino_acid,
                     topology_location=locations.get(position, "unknown"),
-                    surface_exposed=accessibility.surface_exposed if accessibility is not None else None,
+                    # F11, second producer: this payload feeds the 3D viewer
+                    # (portal.py:8967), so without the same rule the viewer
+                    # still calls a membrane cysteine exposed.
+                    surface_exposed=(
+                        None
+                        if locations.get(position) == "membrane" or accessibility is None
+                        else accessibility.surface_exposed
+                    ),
                     surface_accessibility=accessibility.classification if accessibility is not None else None,
                     surface_accessibility_reason=accessibility.reason if accessibility is not None else None,
                     full_model_sasa=accessibility.full_model_sasa if accessibility is not None else None,
@@ -1175,6 +1196,37 @@ class AntigenAnalyzer:
                 )
             )
         return annotations
+
+    def _withhold_membrane_exposure(
+        self,
+        surface_exposure: dict[int, bool | None],
+        *,
+        sequence_length: int,
+        topology: TopologyAnnotation | None,
+    ) -> dict[int, bool | None]:
+        """No solvent-exposure call inside a membrane span.
+
+        F11 (1,473 human / 1,263 mouse pages): a residue inside a TM or
+        intramembrane span was being called "surface exposed" and, when
+        unpaired, carried "Unpaired cysteine appears surface exposed." 71% of
+        those calls are an artefact of computing SASA on an isolated helix
+        (a helix alone is always exposed); the other 29% come from an
+        AlphaFold monomer with no membrane, where lipid-facing and bundle-facing
+        cannot be told apart. Solvent accessibility is undefined there, so the
+        honest answer is no call.
+
+        The owner's decision (plan §5.2) scopes this to membrane spans only:
+        intracellular cysteines (1,310 human / 980 mouse pages) keep their call.
+
+        The value must be an explicit ``None``, not a missing key:
+        ``analyze_cysteines`` falls back to a second heuristic
+        (``structure_utils._is_surface_exposed``) for a residue that is absent.
+        """
+        locations = self._topology_location_by_residue(sequence_length, topology)
+        return {
+            residue: (None if locations.get(residue) == "membrane" else value)
+            for residue, value in surface_exposure.items()
+        }
 
     def _topology_location_by_residue(
         self,
@@ -4298,13 +4350,27 @@ class AntigenAnalyzer:
                     construct.start,
                     construct.end,
                     surface_exposure=surface_exposure,
+                    # DISULFID is one of _PTM_FEATURE_TYPES, so the curated
+                    # pairs are already in `ptms`.
+                    curated_disulfides=ptms,
                 )
-                unpaired = [finding.position for finding in construct_cysteines if finding.paired_with is None]
-                if unpaired:
+                # F12-D: a cysteine inside a SIGNAL span is cleaved off the
+                # mature protein, so listing it as an expression liability is
+                # noise (124 human / 118 mouse pages).
+                signal_spans = [
+                    (feature.start, feature.end)
+                    for feature in ptms
+                    if str(feature.type or "").upper() == "SIGNAL"
+                ]
+                reportable = [
+                    finding
+                    for finding in construct_cysteines
+                    if finding.paired_with is None
+                    and not any(start <= finding.position <= end for start, end in signal_spans)
+                ]
+                if reportable:
                     positions = ", ".join(
-                        self._unpaired_cysteine_warning_label(finding)
-                        for finding in construct_cysteines
-                        if finding.paired_with is None
+                        self._unpaired_cysteine_warning_label(finding) for finding in reportable
                     )
                     construct_warnings.append(f"Contains unpaired cysteine(s): {positions}.")
             details.append(
@@ -4338,6 +4404,10 @@ class AntigenAnalyzer:
 
     def _unpaired_cysteine_warning_label(self, finding: CysteineFinding) -> str:
         label = f"C{finding.position}"
+        if finding.partner_outside_range is not None:
+            # F12-B: the page table pairs these; only this construct cuts
+            # between the two. "nearest unpaired" named the curated partner.
+            return f"{label} (curated partner C{finding.partner_outside_range} is outside this construct)"
         if finding.closest_unpaired_cysteine is None or finding.closest_unpaired_cysteine_distance is None:
             return label
         atom = finding.closest_unpaired_cysteine_distance_atom or "distance"

@@ -113,6 +113,10 @@ class CysteineFinding(Serializable):
     paired_with: int | None
     surface_exposed: bool | None
     warning: str | None = None
+    # F12-B: a curated partner outside the analysed range. The residue stays
+    # unpaired (it is, in this construct), but "unpaired" alone read as "no
+    # partner exists" on 74 human / 53 mouse pages.
+    partner_outside_range: int | None = None
     closest_unpaired_cysteine: int | None = None
     closest_unpaired_cysteine_distance: float | None = None
     closest_unpaired_cysteine_distance_atom: str | None = None
