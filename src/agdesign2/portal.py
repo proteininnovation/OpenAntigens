@@ -998,7 +998,7 @@ def _citation_section() -> str:
 def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = False) -> str:
     site = "https://openantigens.org/mouse/" if portal_title == "OpenAntigens Mouse" else "https://openantigens.org/"
     prompt = (
-        "Before using OpenAntigens, read https://openantigens.org/llms.txt. "
+        f"Before using OpenAntigens, read {site}llms.txt. "
         f"Start at {site}index.html. Confirm each target's species and accession, preserve its residue numbering, "
         "distinguish predicted from experimental evidence, and cite the inspected report and release. "
         "For research use, include the OpenAntigens preprint citation given in the guide.\n\nMy question: "
@@ -1071,9 +1071,28 @@ def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
 def _write_site_documents(portal_dir: Path, *, portal_title: str = "OpenAntigens") -> None:
     _write_text_atomic(portal_dir / "agent-guide.html", render_agent_guide_page(portal_title=portal_title))
     for name, content in site_document_files().items():
+        if name == "llms.txt" and portal_title == "OpenAntigens Mouse":
+            content = mouse_llms_txt(content)
         destination = portal_dir / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         _write_text_atomic(destination, content)
+
+
+def mouse_llms_txt(human: str) -> str:
+    """The mouse portal's own llms.txt.
+
+    Points the per-portal artifacts at /mouse/ and names the mouse index root.
+    Shared links — the human portal itself, the citation — stay where they are.
+    """
+    content = human
+    for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+        content = content.replace(
+            f"https://openantigens.org/{artifact}", f"https://openantigens.org/mouse/{artifact}"
+        )
+    return content.replace(
+        "Human index paths are relative to https://openantigens.org/",
+        "Mouse index paths are relative to https://openantigens.org/mouse/",
+    )
 
 
 def render_index_page(
@@ -1638,7 +1657,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
           <tbody>
             <tr><td>Report is pending or failed</td><td>The target could not be completed for the current release because of source-data limitations, structure mismatch, or processing failure.</td><td>Inspect the release index error field. The target may be resolved in a future release.</td></tr>
             <tr><td>AlphaFold is missing</td><td>No canonical AlphaFold model was found or the available model did not match the canonical UniProt sequence.</td><td>Review available PDB and domain evidence. A new analysis or release is needed to incorporate a later structure.</td></tr>
-            <tr><td>Homolog sequence is missing</td><td>A usable reference sequence or alignment was unavailable when the report was built.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually.</td></tr>
+            <tr><td>Homolog sequence is missing</td><td>A usable reference sequence or alignment was unavailable when the report was built, or the ortholog was withheld because it failed the acceptance gate (too little of either sequence aligned, or identity below the floor for its evidence). The table cell says which.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually. A withheld ortholog is deliberately not exported.</td></tr>
             <tr><td>Family matrix is absent</td><td>No canonical family was identified, the family exceeded the configured size limit, or precomputed paralog data are unavailable.</td><td>Review BLAST local similarity and InterPro domain annotations for specificity context.</td></tr>
             <tr><td>BLAST hit list is long</td><td>The query region is highly conserved, contains common domains, or the full-length track captured broad family similarity.</td><td>Inspect the list, which is ranked by bit score, and check which alignments overlap the selected construct.</td></tr>
             <tr><td>Construct looks biologically wrong</td><td>Automated heuristics can miss ligand sites, partner requirements, topology edge cases, or literature-specific constraints.</td><td>Use the builder to adjust boundaries and check Methods for the exact evidence sources and limitations.</td></tr>
@@ -2211,7 +2230,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
           <tbody>
             <tr><td>Bit score</td><td>BLAST alignment score normalized for database-independent comparison.</td><td>Primary ranking field. Higher values indicate stronger sequence similarity.</td></tr>
             <tr><td>E-value</td><td>Expected number of alignments of similar quality by chance.</td><td>Lower values indicate more statistically significant alignments.</td></tr>
-            <tr><td>Identity</td><td>Fraction of identical residues across the aligned region.</td><td>Useful for local similarity, but must be interpreted with coverage.</td></tr>
+            <tr><td>Identity</td><td>Fraction of identical residues across the aligned region, from a BLOSUM62 alignment (gap open 11, extend 1) with free end gaps, so a short sequence is not dragged across a long one to collect chance matches.</td><td>Useful for local similarity, but must be interpreted with coverage. Where too little of either sequence aligns, no identity is reported rather than a number that would read as a claim about the whole protein.</td></tr>
             <tr><td>Coverage</td><td>Aligned query span divided by query length, capped at 100%.</td><td>Distinguishes full-region similarity from short conserved motifs.</td></tr>
             <tr><td>Alignment text</td><td>Original BLAST alignment block.</td><td>Inspect this to determine whether similarity overlaps the selected construct or only a small motif.</td></tr>
           </tbody>
@@ -4007,7 +4026,7 @@ def render_detail_page(
         "sequence.</td></tr>"
     )
 
-    ptm_rows = _render_ptm_rows(ptms)
+    ptm_rows = _render_ptm_rows(ptms, report)
 
     obligatory_assembly_requirements = [
         item for item in assembly_requirements if item.get("obligatory")
@@ -4574,6 +4593,27 @@ def _render_construct_tabs(
     )
 
 
+# Row 46: constructs up to 14,451 aa (MUC16's full ectodomain) were offered with
+# no comment on size. The threshold is a judgement, not a published limit: it
+# sits just above the 99th percentile of every construct in both snapshots
+# (1,436 aa), so the warning stays rare enough to mean something — 759
+# constructs on 421 pages.
+CONSTRUCT_SIZE_WARNING_AA = 1500
+
+
+def _construct_size_warning(construct: dict[str, Any]) -> str:
+    try:
+        length = int(construct.get("end")) - int(construct.get("start")) + 1
+    except (TypeError, ValueError):
+        return ""
+    if length <= CONSTRUCT_SIZE_WARNING_AA:
+        return ""
+    return (
+        f"Very large construct ({length:,} aa): expression and purification at this size are "
+        "rarely routine. Consider a smaller domain-bounded construct from this page."
+    )
+
+
 def _render_construct_card(
     construct: dict[str, Any],
     *,
@@ -4587,7 +4627,10 @@ def _render_construct_card(
 ) -> str:
     human_entry = construct.get("human_entry_name") or target.get("entry_name") or ""
     evidence = construct.get("evidence") or []
-    warnings = construct.get("warnings") or []
+    warnings = list(construct.get("warnings") or [])
+    size_warning = _construct_size_warning(construct)
+    if size_warning:
+        warnings.insert(0, size_warning)
     # F06a: reports built before the pipeline fix carry a self-species homolog
     # row. Drop it here and the HTML table, the TSV/FASTA export rows and the
     # viewer's unavailableRows all lose it, since they derive from this list.
@@ -5256,7 +5299,14 @@ def _render_cross_reactivity_rows(
 def _report_ptms(report: dict[str, Any]) -> list[dict[str, Any]]:
     explicit = report.get("ptms")
     if explicit:
-        return list(explicit)
+        return [
+            item
+            for item in explicit
+            if not (
+                str(item.get("type") or "").upper() == "SITE"
+                and str(item.get("description") or "").lower().startswith(("not ", "no "))
+            )
+        ]
     return [feature for feature in (report.get("features") or []) if _is_ptm_feature_dict(feature)]
 
 
@@ -5276,6 +5326,8 @@ def _is_ptm_feature_dict(feature: dict[str, Any]) -> bool:
         "CHAIN",
     }:
         return True
+    if feature_type == "SITE" and description.startswith(("not ", "no ")):
+        return False  # F28: a negative annotation is not a PTM.
     return feature_type == "SITE" and any(
         keyword in description
         for keyword in ("cleavage", "glycosyl", "phospho", "acetyl", "methyl", "ubiquitin", "sumoyl", "lipid")
@@ -5340,7 +5392,37 @@ def _ptm_display_label(feature: dict[str, Any]) -> str:
     return f"{start}-{end}"
 
 
-def _render_ptm_rows(ptms: list[dict[str, Any]]) -> str:
+_PTM_TYPES_NEVER_IN_A_MEMBRANE = {"CARBOHYD", "DISULFID"}
+
+
+def _membrane_spans(report: dict[str, Any]) -> list[tuple[int, int]]:
+    topology = report.get("topology") or {}
+    spans: list[tuple[int, int]] = []
+    for key in ("transmembrane_regions", "intramembrane_regions"):
+        for region in topology.get(key) or []:
+            if region.get("start") is not None and region.get("end") is not None:
+                spans.append((int(region["start"]), int(region["end"])))
+    return spans
+
+
+def _ptm_membrane_conflict(feature: dict[str, Any], spans: list[tuple[int, int]]) -> str:
+    if str(feature.get("type") or "").upper() not in _PTM_TYPES_NEVER_IN_A_MEMBRANE:
+        return ""
+    try:
+        position = int(feature.get("start"))
+    except (TypeError, ValueError):
+        return ""
+    for start, end in spans:
+        if start <= position <= end:
+            return (
+                f"Sits inside an annotated transmembrane span ({start}-{end}); "
+                "the topology boundary and this annotation cannot both be right."
+            )
+    return ""
+
+
+def _render_ptm_rows(ptms: list[dict[str, Any]], report: dict[str, Any] | None = None) -> str:
+    spans = _membrane_spans(report or {})
     rows = []
     for feature in sorted(ptms, key=lambda item: (int(item.get("start") or 0), int(item.get("end") or 0), str(item.get("type") or ""))):
         rows.append(
@@ -5350,7 +5432,13 @@ def _render_ptm_rows(ptms: list[dict[str, Any]]) -> str:
                 type=escape(str(feature.get("type") or "")),
                 category=escape(_ptm_category(feature)),
                 description=escape(str(feature.get("description") or "")),
-                warning=escape(_ptm_warning(feature)),
+                warning=escape(
+                    " ".join(
+                        part
+                        for part in (_ptm_warning(feature), _ptm_membrane_conflict(feature, spans))
+                        if part
+                    )
+                ),
             )
         )
     return "".join(rows) or "<tr><td colspan=\"6\">No curated UniProt PTM annotations available.</td></tr>"

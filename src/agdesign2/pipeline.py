@@ -4327,6 +4327,9 @@ class AntigenAnalyzer:
         description = (feature.description or "").lower()
         if feature_type in _PTM_FEATURE_TYPES:
             return True
+        if feature_type == "SITE" and description.startswith(("not ", "no ")):
+            # F28: a negative annotation ("Not glycosylated") is not a PTM.
+            return False
         if feature_type == "SITE" and any(
             keyword in description
             for keyword in ("cleavage", "glycosyl", "phospho", "acetyl", "methyl", "ubiquitin", "sumoyl", "lipid")
