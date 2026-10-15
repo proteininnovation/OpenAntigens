@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 
 
-_ALIGNMENT_BACKEND_ENV = "AGDESIGN2_ALIGNMENT_BACKEND"
-_PARASAIL_ALPHABET = "ARNDCQEGHILKMFPSTWYVBZXJUO*arn dcqeghilkmfpstwyvbzxjuo".replace(" ", "")
 _MIN_BOUNDARY_MAPPING_COVERAGE = 0.70
 
 
@@ -45,62 +42,78 @@ class PositionSubsetIdentity:
         return 100.0 * self.matches / self.aligned_positions
 
 
-def global_align(query: str, subject: str) -> AlignmentResult:
-    return _global_align_cached(query, subject, _alignment_backend())
+# BLOSUM62 with affine gaps 11/1 and FREE END GAPS.
+#
+# F33: the previous scheme scored match +1, **mismatch 0**, gap -1 in all three
+# backends. Mismatches being free lets a short query cherry-pick matches out of
+# a long subject: 20 seeded random pairs of 83 vs 550 aa averaged 75.6%
+# identity at 100% coverage, and 200 vs 1,866 aa averaged 86.9%. That is why a
+# wrong-gene macaque row read 79.7%, and why the mouse family matrix put GPR63
+# at 79.31% to LGR4 (87 aa vs 520 aa; honestly ~38% over the row).
+#
+# mismatch = -1 is not enough (83 vs 550 still scores 77%), and BLOSUM62 with
+# ordinary end gaps still opens ~15 gaps and reaches 38-44%. Free end gaps are
+# the part that removes the artefact: the same pairs then score 14% and 11%.
+#
+# One backend, not three. The parasail and pure-python backends disagreed with
+# Biopython by up to 0.8 points on real rows, which makes any pinned number
+# fragile, and a silent fallback between scoring schemes is exactly how this
+# defect survived. Biopython is a hard dependency (pyproject.toml:16).
+_GAP_OPEN = -11.0
+_GAP_EXTEND = -1.0
 
 
-def _alignment_backend() -> str:
-    backend = os.environ.get(_ALIGNMENT_BACKEND_ENV, "auto").strip().lower()
-    return backend if backend in {"auto", "parasail", "python"} else "auto"
-
-
-@lru_cache(maxsize=1024)
-def _global_align_cached(query: str, subject: str, backend: str) -> AlignmentResult:
-    if backend in {"auto", "parasail"}:
-        try:
-            return _parasail_global_align(query, subject)
-        except Exception:
-            if backend == "parasail":
-                raise
-    if backend == "auto":
-        try:
-            return _biopython_global_align(query, subject)
-        except Exception:
-            pass
-    return _python_global_align(query, subject)
-
-
-def _parasail_global_align(query: str, subject: str) -> AlignmentResult:
-    if not query or not subject:
-        return _python_global_align(query, subject)
-    if set(query) - set(_PARASAIL_ALPHABET) or set(subject) - set(_PARASAIL_ALPHABET):
-        return _python_global_align(query, subject)
-
-    import parasail  # type: ignore[import-not-found]
-
-    matrix = parasail.matrix_create(_PARASAIL_ALPHABET, 1, 0)
-    result = parasail.nw_trace_striped_16(query, subject, 1, 1, matrix)
-    traceback = result.traceback
-    aligned_query = str(traceback.query)
-    aligned_subject = str(traceback.ref)
-    if not aligned_query or not aligned_subject or len(aligned_query) != len(aligned_subject):
-        raise ValueError("parasail returned an invalid traceback alignment")
-    return _alignment_from_strings(aligned_query, aligned_subject, query_length=len(query))
-
-
-def _biopython_global_align(query: str, subject: str) -> AlignmentResult:
-    if not query or not subject:
-        return _python_global_align(query, subject)
-
-    from Bio.Align import PairwiseAligner  # type: ignore[import-not-found]
+@lru_cache(maxsize=1)
+def _aligner():  # pragma: no cover - exercised through global_align
+    from Bio.Align import PairwiseAligner, substitution_matrices
 
     aligner = PairwiseAligner()
     aligner.mode = "global"
-    aligner.match_score = 1
-    aligner.mismatch_score = 0
-    aligner.open_gap_score = -1
-    aligner.extend_gap_score = -1
-    alignment = aligner.align(query, subject)[0]
+    aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
+    aligner.open_gap_score = _GAP_OPEN
+    aligner.extend_gap_score = _GAP_EXTEND
+    # Free end gaps: a length difference at either terminus costs nothing, so
+    # the aligner stops paying for alignment it cannot justify.
+    aligner.end_insertion_score = 0.0
+    aligner.end_deletion_score = 0.0
+    return aligner
+
+
+@lru_cache(maxsize=1)
+def _scoring_alphabet() -> frozenset[str]:
+    from Bio.Align import substitution_matrices
+
+    return frozenset(substitution_matrices.load("BLOSUM62").alphabet)
+
+
+def _scoring_sequence(sequence: str) -> str:
+    """Map residues BLOSUM62 does not define onto its wildcard.
+
+    BLOSUM62's alphabet is ARNDCQEGHILKMFPSTWYVBZX*; selenocysteine (U),
+    pyrrolysine (O), the ambiguity code J and any placeholder letter in a test
+    fixture are outside it. X is the matrix's own "unknown residue" and scores
+    -1 against everything, which is the honest answer. The ORIGINAL characters
+    are kept in the aligned strings and in the identity count, so a placeholder
+    still matches itself.
+    """
+    alphabet = _scoring_alphabet()
+    return "".join(residue if residue in alphabet else "X" for residue in sequence)
+
+
+def global_align(query: str, subject: str) -> AlignmentResult:
+    return _global_align_cached(query, subject)
+
+
+@lru_cache(maxsize=1024)
+def _global_align_cached(query: str, subject: str) -> AlignmentResult:
+    if not query or not subject:
+        return _alignment_from_strings(
+            query + "-" * len(subject),
+            "-" * len(query) + subject,
+            query_length=len(query),
+        )
+
+    alignment = _aligner().align(_scoring_sequence(query), _scoring_sequence(subject))[0]
     coordinates = alignment.coordinates
 
     aligned_query_parts: list[str] = []
@@ -129,54 +142,6 @@ def _biopython_global_align(query: str, subject: str) -> AlignmentResult:
     if len(aligned_query) != len(aligned_subject):
         raise ValueError("Biopython returned an invalid traceback alignment")
     return _alignment_from_strings(aligned_query, aligned_subject, query_length=len(query))
-
-
-def _python_global_align(query: str, subject: str) -> AlignmentResult:
-    rows = len(query) + 1
-    cols = len(subject) + 1
-    score = [[0] * cols for _ in range(rows)]
-    trace = [[""] * cols for _ in range(rows)]
-
-    for i in range(1, rows):
-        score[i][0] = -i
-        trace[i][0] = "U"
-    for j in range(1, cols):
-        score[0][j] = -j
-        trace[0][j] = "L"
-
-    for i in range(1, rows):
-        for j in range(1, cols):
-            match_score = 1 if query[i - 1] == subject[j - 1] else 0
-            diag = score[i - 1][j - 1] + match_score
-            up = score[i - 1][j] - 1
-            left = score[i][j - 1] - 1
-            best = max(diag, up, left)
-            score[i][j] = best
-            trace[i][j] = "D" if best == diag else "U" if best == up else "L"
-
-    aligned_query: list[str] = []
-    aligned_subject: list[str] = []
-    i = len(query)
-    j = len(subject)
-    while i > 0 or j > 0:
-        direction = trace[i][j] if i >= 0 and j >= 0 else ""
-        if direction == "D":
-            aligned_query.append(query[i - 1])
-            aligned_subject.append(subject[j - 1])
-            i -= 1
-            j -= 1
-        elif direction == "U":
-            aligned_query.append(query[i - 1])
-            aligned_subject.append("-")
-            i -= 1
-        else:
-            aligned_query.append("-")
-            aligned_subject.append(subject[j - 1])
-            j -= 1
-
-    aligned_query.reverse()
-    aligned_subject.reverse()
-    return _alignment_from_strings("".join(aligned_query), "".join(aligned_subject), query_length=len(query))
 
 
 def _alignment_from_strings(query_text: str, subject_text: str, *, query_length: int) -> AlignmentResult:
