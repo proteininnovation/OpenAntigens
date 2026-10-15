@@ -3595,6 +3595,30 @@ def _target_aliases(target: dict[str, Any], *, entry: dict[str, Any] | None = No
     return names
 
 
+def _dedupe_notes(notes: Any) -> list[Any]:
+    """Collapse repeated notes for display.
+
+    Mouse reports built before the idempotency fix carry every note twice; this
+    keeps those already-built pages honest without a rebuild.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    out: list[Any] = []
+    for note in notes or []:
+        if not isinstance(note, dict):
+            out.append(note)
+            continue
+        key = (
+            str(note.get("severity") or ""),
+            str(note.get("message") or ""),
+            str(note.get("source") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(note)
+    return out
+
+
 def _blast_search_unavailable(report: dict[str, Any], *, full_length: bool) -> bool:
     for note in report.get("notes") or []:
         if not isinstance(note, dict):
@@ -3645,7 +3669,7 @@ def render_detail_page(
     experimental_constructs = report.get("experimental_constructs") or []
     interpro_annotations = report.get("interpro_annotations") or []
     ptms = _report_ptms(report)
-    notes = report.get("notes") or []
+    notes = _dedupe_notes(report.get("notes"))
     has_matching_alphafold = bool(entry.get("has_alphafold_structure"))
     report_json_path = _resolve_existing_path(entry.get("json_report"), batch_dir)
     report_md_path = _resolve_existing_path(entry.get("markdown_report"), batch_dir)

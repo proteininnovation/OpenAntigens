@@ -1,0 +1,1040 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "NEO1",
+        "BMP2",
+        "BMP4"
+      ],
+      "rationale": [
+        "Interacts with NEO1, BMP2 and BMP4"
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    }
+  ],
+  "canonical_family": null,
+  "complex_portal_complexes": [],
+  "construct_details": [
+    {
+      "classification": "structured_region",
+      "clipped_domain_annotations": [],
+      "complete_domain_annotations": [],
+      "cysteine_analysis": [],
+      "domain_summary": "No complete InterPro/Pfam domain match; treat as structure-led region.",
+      "end": 454,
+      "evidence": [
+        "Topology-derived ectodomain"
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "macaca_fascicularis",
+          "start": null
+        }
+      ],
+      "human_entry_name": "RGMA_MOUSE",
+      "length": 407,
+      "ligand_interactions": [],
+      "name": "full_ectodomain",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 115,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 115,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "",
+          "end": 227,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 146,
+          "type": "DISULFID"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 160,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 160,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "",
+          "end": 316,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 164,
+          "type": "DISULFID"
+        },
+        {
+          "description": "Cleavage; by autolysis",
+          "end": 170,
+          "metadata": {
+            "ptm_category": "cleavage site",
+            "raw_type": "Site"
+          },
+          "source": "UniProt",
+          "start": 169,
+          "type": "SITE"
+        },
+        {
+          "description": "Repulsive guidance molecule A",
+          "end": 427,
+          "metadata": {
+            "feature_id": "PRO_0000030389",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 170,
+          "type": "CHAIN"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 388,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 388,
+          "type": "CARBOHYD"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "Complete extracellular domain based on topology annotations.",
+      "score": 90.0,
+      "sequence": "CKILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQILLGTIPLLVLLPVLW",
+      "split_diagnostics": [],
+      "start": 48,
+      "structural_metrics": null,
+      "structure_image": null,
+      "warnings": [
+        "Contains processing/cleavage annotation 169-170: Cleavage; by autolysis."
+      ]
+    }
+  ],
+  "construct_recommendations": [
+    {
+      "classification": "structured_region",
+      "end": 454,
+      "evidence": [
+        "Topology-derived ectodomain"
+      ],
+      "name": "full_ectodomain",
+      "pdb_id": null,
+      "rationale": "Complete extracellular domain based on topology annotations.",
+      "score": 90.0,
+      "start": 48,
+      "warnings": []
+    }
+  ],
+  "cross_reactivity_hits": [
+    {
+      "alignment_length": 393,
+      "alignment_source": "BLAST",
+      "bitscore": 725.0,
+      "coverage": 96.06879606879608,
+      "description": "sp|Q96B86|RGMA_HUMAN Repulsive guidance molecule A OS=Homo sapiens OX=9606 GN=RGMA PE=1 SV=4",
+      "evalue": 0.0,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 91.603,
+      "query_alignment": "CKILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAE--SPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQ",
+      "query_alignment_annotation": null,
+      "query_end": 391,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "CKILKCNSEFWSATS-GSHAPASDDTPEFCAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLRTLPPAGDSQERSDSPEICHYEKSFHKHSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNAEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGRAAAG------LPLAPR",
+      "subject_end": 433,
+      "subject_id": "sp|Q96B86|RGMA_HUMAN",
+      "subject_start": 48
+    },
+    {
+      "alignment_length": 400,
+      "alignment_source": "Canonical remap",
+      "bitscore": 714.0,
+      "coverage": 98.28,
+      "description": "GN=RGMA repulsive guidance molecule A isoform X1 [Macaca fascicularis]",
+      "evalue": 0.0,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 92.25,
+      "query_alignment": "------------------------------------------------C------------------------------KILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESP--RRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQILLGT-IPLLVLLPVLW",
+      "query_alignment_annotation": null,
+      "query_end": 407,
+      "query_start": 1,
+      "species": "Macaca fascicularis",
+      "subject_alignment": "MWRLLQFKVKPAPEKQTDFSKVTGQVSGLDRSAEAPFPPWRPPRPALGCDARGWISQLVCWPLSPGIHVETSAAATSPCKILKCNSEFWSATS-GSHAPASDDTPEFCAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLHTLPPAGDSQERSDSPEICHYEKSFHKHSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNTEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGR-AAAGL-----PLAPQPLLGALILLLALFPVFC",
+      "subject_end": 481,
+      "subject_id": "XP_065404559",
+      "subject_start": 49
+    },
+    {
+      "alignment_length": 379,
+      "alignment_source": "BLAST",
+      "bitscore": 393.0,
+      "coverage": 89.92628992628993,
+      "description": "sp|Q6NW40|RGMB_HUMAN Repulsive guidance molecule B OS=Homo sapiens OX=9606 GN=RGMB PE=1 SV=3",
+      "evalue": 5.79e-135,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 54.09,
+      "query_alignment": "CKILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAA----------PNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANA---ESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLF",
+      "query_alignment_annotation": null,
+      "query_end": 366,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "CRIQKCTTDFVSLTSHLNSAVDGFD-SEFCKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTS----------------STNPEVTHDPCNYHSHAGAREHRRGDQNPPSYLFCGLFGDPHLRTFKDNFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKITIIFKAHHECTDQKVYQAVTDDLPAAFVDGTTSGGDS-DAKSLRIVERESGHYVEMHARYIGTTVFVRQVGRYLTLAIRMPEDLAMSYE--ESQDLQLCVNGCPLSERIDDGQGQVSAILGHSLPRTSLVQAWP----GYTLETANTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIF",
+      "subject_end": 408,
+      "subject_id": "sp|Q6NW40|RGMB_HUMAN",
+      "subject_start": 54
+    },
+    {
+      "alignment_length": 387,
+      "alignment_source": "BLAST",
+      "bitscore": 387.0,
+      "coverage": 91.64619164619165,
+      "description": "sp|Q7TQ33|RGMB_MOUSE Repulsive guidance molecule B OS=Mus musculus OX=10090 GN=Rgmb PE=1 SV=1",
+      "evalue": 1.06e-132,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 52.455,
+      "query_alignment": "CKILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAA----------PNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERT----RELP",
+      "query_alignment_annotation": null,
+      "query_end": 373,
+      "query_start": 1,
+      "species": "Mus musculus",
+      "subject_alignment": "CRIQKCTTDFVALTAHLNSAADGFD-SEFCKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTS----------------STNPEVTHDPCNYHSHGGVREHGGGDQRPPNYLFCGLFGDPHLRTFKDHFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKVTIIFKAQHECTDQKVYQAVTDDLPAAFVDGTTSGGDGD-VKSLHIVEKESGRYVEMHARYIGTTVFVRQLGRYLTLAIRMPEDLAMSYE--ESQDLQLCVNGCPMSECIDDGQGQVSAILGHSLPHTTSVQAWP-GYTLETASTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIFPSSCGGCRDLP",
+      "subject_end": 422,
+      "subject_id": "sp|Q7TQ33|RGMB_MOUSE",
+      "subject_start": 57
+    },
+    {
+      "alignment_length": 421,
+      "alignment_source": "BLAST",
+      "bitscore": 375.0,
+      "coverage": 100.0,
+      "description": "sp|Q7TQ32|RGMC_MOUSE Hemojuvelin OS=Mus musculus OX=10090 GN=Hjv PE=1 SV=1",
+      "evalue": 2.72e-128,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 48.931,
+      "query_alignment": "CKILKCNSEFWSATSSGSHAPASDDVPEF-----------CAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVR--TLPPAGDSQERSDSPEICHYEKSFHK-HSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQILLGTIPLLVLLPVLW",
+      "query_alignment_annotation": null,
+      "query_end": 407,
+      "query_start": 1,
+      "species": "Mus musculus",
+      "subject_alignment": "CKILRCNAEYVSSTLS-LRGGGSPDTPRGGGRGGLASGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPARGPALPGAGPAPL---TPDPCDYEARFSRLHGRAPGFLHCASFGDPHVRSFHNQFHTCRVQGAWPLLDNDFLFVQATSSPVSSGANATTIRKITIIFKNMQECIDQKVYQAEVDNLPAAFEDGSINGGDRPGGSSLSIQTANLGSHVEIRAAYIGTTIIIRQTAGQLSFSIRVAEDVARAFSAE--QDLQLCVGGCPPSQRL------SRSERNRRGAIA-----------IDTARRLCKEGLPVEDAYFQSCVFDVSVSGDPNFTVAAQTALDDARIFLTDLENLHLFP--------------SDAGPPLSPAICL--VPLLSALFVLW",
+      "subject_end": 415,
+      "subject_id": "sp|Q7TQ32|RGMC_MOUSE",
+      "subject_start": 34
+    },
+    {
+      "alignment_length": 424,
+      "alignment_source": "BLAST",
+      "bitscore": 349.0,
+      "coverage": 100.0,
+      "description": "sp|Q6ZVN8|RGMC_HUMAN Hemojuvelin OS=Homo sapiens OX=9606 GN=HJV PE=1 SV=1",
+      "evalue": 6.78e-118,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 48.113,
+      "query_alignment": "CKILKCNSEFWSATSS--------------GSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPP--AGDSQERSDSPEICHYEKSFHK-HSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQILLGTIPLLVLLPVLW",
+      "query_alignment_annotation": null,
+      "query_end": 407,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "CKILRCNAEYVSSTLSLRGGGSSGALRGGGGGGRGGGVGSGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPPRGPALPGAGSGLP---APDPCDYEGRFSRLHGRPPGFLHCASFGDPHVRSFHHHFHTCRVQGAWPLLDNDFLFVQATSSPMALGANATATRKLTIIFKNMQECIDQKVYQAEVDNLPVAFEDGSINGGDRPGGSSLSIQTANPGNHVEIQAAYIGTTIIIRQTAGQLSFSIKVAEDVAMAFSAE--QDLQLCVGGCPPSQRL------SRSERNRRGA-----------ITIDTARRLCKEGLPVEDAYFHSCVFDVLISGDPNFTVAAQAALEDARAFLPDLEKLHLFP--------------SDAGVPLSSATLLA--PLLSGLFVLW",
+      "subject_end": 422,
+      "subject_id": "sp|Q6ZVN8|RGMC_HUMAN",
+      "subject_start": 37
+    }
+  ],
+  "cysteine_analysis": [],
+  "ectodomain": {
+    "confidence": 0.8,
+    "end": 454,
+    "label": "Secreted mature chain",
+    "metadata": {},
+    "source": "topology",
+    "start": 48
+  },
+  "ectodomain_homology": [],
+  "experimental_constructs": [],
+  "family_context": {
+    "coverage_matrix": [
+      [
+        100.0,
+        93.12,
+        91.89
+      ],
+      [
+        97.68,
+        100.0,
+        95.88
+      ],
+      [
+        96.39,
+        95.88,
+        100.0
+      ]
+    ],
+    "coverage_matrix_labels": [
+      "RGMA_MOUSE",
+      "RGMB_MOUSE",
+      "RGMC_MOUSE"
+    ],
+    "family_names": [
+      "Repulsive guidance molecule"
+    ],
+    "gene_symbol": "Rgma",
+    "identity_matrix": [
+      [
+        100.0,
+        51.11,
+        50.12
+      ],
+      [
+        53.61,
+        100.0,
+        42.27
+      ],
+      [
+        52.58,
+        42.27,
+        100.0
+      ]
+    ],
+    "identity_matrix_labels": [
+      "RGMA_MOUSE",
+      "RGMB_MOUSE",
+      "RGMC_MOUSE"
+    ],
+    "members": [
+      {
+        "accession": "Q6PCX7",
+        "ectodomain_end": 454,
+        "ectodomain_length": 407,
+        "ectodomain_start": 48,
+        "entry_name": "RGMA_MOUSE",
+        "gene_name": "Repulsive guidance molecule A",
+        "gene_symbol": "Rgma",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 454
+      },
+      {
+        "accession": "Q7TQ33",
+        "ectodomain_end": 436,
+        "ectodomain_length": 388,
+        "ectodomain_start": 49,
+        "entry_name": "RGMB_MOUSE",
+        "gene_name": "Repulsive guidance molecule B",
+        "gene_symbol": "Rgmb",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 436
+      },
+      {
+        "accession": "Q7TQ32",
+        "ectodomain_end": 420,
+        "ectodomain_length": 388,
+        "ectodomain_start": 33,
+        "entry_name": "RGMC_MOUSE",
+        "gene_name": "Hemojuvelin",
+        "gene_symbol": "Hjv",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 420
+      }
+    ],
+    "metadata": {
+      "candidate_source_counts": {
+        "ensembl": 0,
+        "hgnc": 0,
+        "interpro_family": 3
+      },
+      "canonical_family_accession": "IPR040287",
+      "coverage_denominator": "row mouse ectodomain sequence length",
+      "coverage_matrix_note": "Directional matrix: each cell reports the percent of the row ectodomain aligned to the column ectodomain.",
+      "identity_denominator": "row mouse ectodomain sequence length",
+      "identity_matrix_note": "Directional matrix: each cell reports row protein -> column protein identity, normalized by the row ectodomain length.",
+      "matrix_scope": "ectodomain",
+      "mouse_ortholog_matrix_caveat": "Only mouse proteins whose human OpenAntigens family members have resolved mouse orthologs in this mouse build are included.",
+      "pairwise_alignments": [
+        {
+          "aligned_positions": 383,
+          "aligned_query": "--CK------ILKCNSEFWSATSGSHAPASDDTP-EFCAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLRTLPPAGDSQERSDSPEICHYEKSFHKHSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNAEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGRAAAGLPLAPRPLLGALVPLLALLPVFC",
+          "aligned_subject": "GDCQQPAQCRIQKCTTDFVSLTSHLNS-AVDGFDSEFCKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTSS----TNPEVTHDPCNYHSHAGAR-EHRRGDQNP-PSYLFCGLFGDPHLRTFKDNFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKITIIFKAHHECTDQKVYQAVTDDLPAAFVDGTTSGGDSD-AKSLRIVERESGHYVEMHARYIGTTVFVRQVGRYLTLAIRMPEDLAMSYEE--SQDLQLCVNGCPLSERIDDGQGQVSAIL-GHS-LPRTSLVQAWPGYTL-ETANTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIFPSSGNGTPRG--GSDLSVS-L-G-LTCLI-LI-VFL",
+          "matches": 215,
+          "query_accession": "Q96B86",
+          "query_label": "RGMA_HUMAN",
+          "query_to_subject_coverage": 95.04,
+          "query_to_subject_identity": 53.35,
+          "subject_accession": "Q6NW40",
+          "subject_label": "RGMB_HUMAN",
+          "subject_to_query_identity": 54.85
+        },
+        {
+          "aligned_positions": 372,
+          "aligned_query": "-CKILKCNSEFWSAT-S--G--SH-APASDDTPEF---------CAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLRT--LPPAGDSQERSDSPEICHYEKSFHK-HSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNAEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGRAAAGLPLAPRPLLGALVPLLALLPVFC",
+          "aligned_subject": "QCKILRCNAEYVSSTLSLRGGGSSGALRGGGGGGRGGGVGSGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPPRGPALPGAGSGLPAPD-P--CDYEGRFSRLHGRPPGFLHCASFGDPHVRSFHHHFHTCRVQGAWPLLDNDFLFVQATSSPMALGANATATRKLTIIFKNMQECIDQKVYQAEVDNLPVAFEDGSINGGDRPGGSSLSIQTANPGNHVEIQAAYIGTTIIIRQTAGQLSFSIKVAEDVAMAFSAE--QDLQLCVGGCPPSQRLSRSER--N------RRGAI-----TID-T-----ARRLCKEGLPVEDAYFHSCVFDVLISGDPNFTVAAQAALEDARAFLPDLEKLHLFPSDAGVPLSSAT-L-LAPL-LSGLFV-LW-LCIQ--",
+          "matches": 209,
+          "query_accession": "Q96B86",
+          "query_label": "RGMA_HUMAN",
+          "query_to_subject_coverage": 92.31,
+          "query_to_subject_identity": 51.86,
+          "subject_accession": "Q6ZVN8",
+          "subject_label": "RGMC_HUMAN",
+          "subject_to_query_identity": 53.45
+        },
+        {
+          "aligned_positions": 374,
+          "aligned_query": "GDCQQPAQCRIQKCTTDFVSLTSH--LNSAVDGFD-----SEF-CKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTSSTNPEVTHDPCNYHSH-AGAR---EHR--RGDQNPPSYLFCGLFGDPHLRTFKDNFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKITIIFKAHHECTDQKVYQAVTDDLPAAFVDGTTSGGDSDAKS-LRIVERESGHYVEMHARYIGTTVFVRQVGRYLTLAIRMPEDLAMSYEESQDLQLCVNGCPLSERIDDGQGQVSAILGHSLPRTSLVQAWPGYTLETANTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIFPSSGNGTPRGGSDLSVSL--GLTCLILIVFL",
+          "aligned_subject": "QCKILRCNAEYVSSTLSLRGGGSSGALRGGGGGGRGGGVGSGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPPRGPALPGAGSGLPAPDPCDYEGRFSRLHGRPPGFLHCASFGDPHVRSFHHHFHTCRVQGAWPLLDNDFLFVQATSSPMALGANATATRKLTIIFKNMQECIDQKVYQAEVDNLPVAFEDGSINGGDRPGGSSLSIQTANPGNHVEIQAAYIGTTIIIRQTAGQLSFSIKVAEDVAMAFSAEQDLQLCVGGCPPSQRL-------SR----SE-RNRRG-AI---TIDTARRLCKEGLPVEDAYFHSCVFDVLISGDPNFTVAAQAALEDARAFLPDLEKLHLFPSDA-GVPLSSATLLAPLLSGLFVLWLCIQ-",
+          "matches": 176,
+          "query_accession": "Q6NW40",
+          "query_label": "RGMB_HUMAN",
+          "query_to_subject_coverage": 95.41,
+          "query_to_subject_identity": 44.9,
+          "subject_accession": "Q6ZVN8",
+          "subject_label": "RGMC_HUMAN",
+          "subject_to_query_identity": 45.01
+        }
+      ],
+      "precomputed_json_path": "/Users/Andre.Teixeira/Code/AgDesign2/snapshots/openantigen-2026-07-23/outputs/surfy_batch/paralogs/targets/rgma_human.json",
+      "target_extracellular_accessible_identity": [
+        {
+          "aligned_positions": 265,
+          "identity": 48.68,
+          "identity_denominator": "target extracellular accessible residues aligned to member",
+          "matches": 129,
+          "member_label": "RGMB_HUMAN",
+          "target_label": "RGMA_HUMAN"
+        },
+        {
+          "aligned_positions": 254,
+          "identity": 49.21,
+          "identity_denominator": "target extracellular accessible residues aligned to member",
+          "matches": 125,
+          "member_label": "RGMC_HUMAN",
+          "target_label": "RGMA_HUMAN"
+        }
+      ]
+    },
+    "source": "Mouse ortholog family matrix recalculated from human OpenAntigens family membership"
+  },
+  "features": [
+    {
+      "description": "in isoform 2",
+      "end": 16,
+      "metadata": {
+        "feature_id": "VSP_011316",
+        "raw_type": "Alternative sequence"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "ALTERNATIVE_SEQUENCE"
+    },
+    {
+      "description": "",
+      "end": 47,
+      "metadata": {
+        "raw_type": "Signal"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "SIGNAL"
+    },
+    {
+      "description": "Removed in mature form",
+      "end": 169,
+      "metadata": {
+        "feature_id": "PRO_0000030388",
+        "raw_type": "Propeptide"
+      },
+      "source": "UniProt",
+      "start": 48,
+      "type": "PROPEPTIDE"
+    },
+    {
+      "description": "Polar residues",
+      "end": 126,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 114,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Disordered",
+      "end": 141,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 114,
+      "type": "REGION"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 115,
+      "metadata": {
+        "feature_id": "",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 115,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "",
+      "end": 227,
+      "metadata": {
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 146,
+      "type": "DISULFID"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 160,
+      "metadata": {
+        "feature_id": "",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 160,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "",
+      "end": 316,
+      "metadata": {
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 164,
+      "type": "DISULFID"
+    },
+    {
+      "description": "Cleavage; by autolysis",
+      "end": 170,
+      "metadata": {
+        "raw_type": "Site"
+      },
+      "source": "UniProt",
+      "start": 169,
+      "type": "SITE"
+    },
+    {
+      "description": "Repulsive guidance molecule A",
+      "end": 427,
+      "metadata": {
+        "feature_id": "PRO_0000030389",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 170,
+      "type": "CHAIN"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 388,
+      "metadata": {
+        "feature_id": "",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 388,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "in Ref. 2; AAH23870",
+      "end": 424,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 424,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "GPI-anchor amidated alanine",
+      "end": 427,
+      "metadata": {
+        "raw_type": "Lipidation"
+      },
+      "source": "UniProt",
+      "start": 427,
+      "type": "LIPIDATION"
+    },
+    {
+      "description": "Removed in mature form",
+      "end": 454,
+      "metadata": {
+        "feature_id": "PRO_0000030390",
+        "raw_type": "Propeptide"
+      },
+      "source": "UniProt",
+      "start": 428,
+      "type": "PROPEPTIDE"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [],
+  "full_length_family_context": {
+    "coverage_matrix": [
+      [
+        100.0,
+        93.83,
+        91.63
+      ],
+      [
+        97.71,
+        100.0,
+        93.35
+      ],
+      [
+        99.05,
+        96.9,
+        100.0
+      ]
+    ],
+    "coverage_matrix_labels": [
+      "RGMA_MOUSE",
+      "RGMB_MOUSE",
+      "RGMC_MOUSE"
+    ],
+    "family_names": [
+      "Repulsive guidance molecule"
+    ],
+    "gene_symbol": "Rgma",
+    "identity_matrix": [
+      [
+        100.0,
+        48.24,
+        44.71
+      ],
+      [
+        50.23,
+        100.0,
+        41.06
+      ],
+      [
+        48.33,
+        42.62,
+        100.0
+      ]
+    ],
+    "identity_matrix_labels": [
+      "RGMA_MOUSE",
+      "RGMB_MOUSE",
+      "RGMC_MOUSE"
+    ],
+    "members": [
+      {
+        "accession": "Q6PCX7",
+        "ectodomain_end": null,
+        "ectodomain_length": null,
+        "ectodomain_start": null,
+        "entry_name": "RGMA_MOUSE",
+        "gene_name": "Repulsive guidance molecule A",
+        "gene_symbol": "Rgma",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 454
+      },
+      {
+        "accession": "Q7TQ33",
+        "ectodomain_end": null,
+        "ectodomain_length": null,
+        "ectodomain_start": null,
+        "entry_name": "RGMB_MOUSE",
+        "gene_name": "Repulsive guidance molecule B",
+        "gene_symbol": "Rgmb",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 436
+      },
+      {
+        "accession": "Q7TQ32",
+        "ectodomain_end": null,
+        "ectodomain_length": null,
+        "ectodomain_start": null,
+        "entry_name": "RGMC_MOUSE",
+        "gene_name": "Hemojuvelin",
+        "gene_symbol": "Hjv",
+        "notes": [
+          "Mouse ortholog substituted for the corresponding human family member; only mouse proteins with human orthologs in this OpenAntigens Mouse build are included."
+        ],
+        "sequence_length": 420
+      }
+    ],
+    "metadata": {
+      "candidate_source_counts": {
+        "ensembl": 0,
+        "hgnc": 0,
+        "interpro_family": 3
+      },
+      "canonical_family_accession": "IPR040287",
+      "coverage_denominator": "row mouse full-length sequence length",
+      "coverage_matrix_note": "Directional matrix: each cell reports the percent of the row ectodomain aligned to the column ectodomain.",
+      "identity_denominator": "row mouse full-length sequence length",
+      "identity_matrix_note": "Directional matrix: each cell reports row protein -> column protein identity, normalized by the row ectodomain length.",
+      "matrix_scope": "full_length",
+      "mouse_ortholog_matrix_caveat": "Only mouse proteins whose human OpenAntigens family members have resolved mouse orthologs in this mouse build are included.",
+      "pairwise_alignments": [
+        {
+          "aligned_positions": 383,
+          "aligned_query": "--CK------ILKCNSEFWSATSGSHAPASDDTP-EFCAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLRTLPPAGDSQERSDSPEICHYEKSFHKHSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNAEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGRAAAGLPLAPRPLLGALVPLLALLPVFC",
+          "aligned_subject": "GDCQQPAQCRIQKCTTDFVSLTSHLNS-AVDGFDSEFCKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTSS----TNPEVTHDPCNYHSHAGAR-EHRRGDQNP-PSYLFCGLFGDPHLRTFKDNFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKITIIFKAHHECTDQKVYQAVTDDLPAAFVDGTTSGGDSD-AKSLRIVERESGHYVEMHARYIGTTVFVRQVGRYLTLAIRMPEDLAMSYEE--SQDLQLCVNGCPLSERIDDGQGQVSAIL-GHS-LPRTSLVQAWPGYTL-ETANTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIFPSSGNGTPRG--GSDLSVS-L-G-LTCLI-LI-VFL",
+          "matches": 215,
+          "query_accession": "Q96B86",
+          "query_label": "RGMA_HUMAN",
+          "query_to_subject_coverage": 95.04,
+          "query_to_subject_identity": 53.35,
+          "subject_accession": "Q6NW40",
+          "subject_label": "RGMB_HUMAN",
+          "subject_to_query_identity": 54.85
+        },
+        {
+          "aligned_positions": 372,
+          "aligned_query": "-CKILKCNSEFWSAT-S--G--SH-APASDDTPEF---------CAALRSYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRLRT--LPPAGDSQERSDSPEICHYEKSFHK-HSATPNYTHCGLFGDPHLRTFTDRFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPAAFVDGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDWDSQGLYLCLRGCPLNQQIDFQAFHTNAEGTGARRLAAASPAPTAPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDVKMLHSNKDKLHLYERTRDLPGRAAAGLPLAPRPLLGALVPLLALLPVFC",
+          "aligned_subject": "QCKILRCNAEYVSSTLSLRGGGSSGALRGGGGGGRGGGVGSGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPPRGPALPGAGSGLPAPD-P--CDYEGRFSRLHGRPPGFLHCASFGDPHVRSFHHHFHTCRVQGAWPLLDNDFLFVQATSSPMALGANATATRKLTIIFKNMQECIDQKVYQAEVDNLPVAFEDGSINGGDRPGGSSLSIQTANPGNHVEIQAAYIGTTIIIRQTAGQLSFSIKVAEDVAMAFSAE--QDLQLCVGGCPPSQRLSRSER--N------RRGAI-----TID-T-----ARRLCKEGLPVEDAYFHSCVFDVLISGDPNFTVAAQAALEDARAFLPDLEKLHLFPSDAGVPLSSAT-L-LAPL-LSGLFV-LW-LCIQ--",
+          "matches": 209,
+          "query_accession": "Q96B86",
+          "query_label": "RGMA_HUMAN",
+          "query_to_subject_coverage": 92.31,
+          "query_to_subject_identity": 51.86,
+          "subject_accession": "Q6ZVN8",
+          "subject_label": "RGMC_HUMAN",
+          "subject_to_query_identity": 53.45
+        },
+        {
+          "aligned_positions": 374,
+          "aligned_query": "GDCQQPAQCRIQKCTTDFVSLTSH--LNSAVDGFD-----SEF-CKALRAYAGCTQRTSKACRGNLVYHSAVLGISDLMSQRNCSKDGPTSSTNPEVTHDPCNYHSH-AGAR---EHR--RGDQNPPSYLFCGLFGDPHLRTFKDNFQTCKVEGAWPLIDNNYLSVQVTNVPVVPGSSATATNKITIIFKAHHECTDQKVYQAVTDDLPAAFVDGTTSGGDSDAKS-LRIVERESGHYVEMHARYIGTTVFVRQVGRYLTLAIRMPEDLAMSYEESQDLQLCVNGCPLSERIDDGQGQVSAILGHSLPRTSLVQAWPGYTLETANTQCHEKMPVKDIYFQSCVFDLLTTGDANFTAAAHSALEDVEALHPRKERWHIFPSSGNGTPRGGSDLSVSL--GLTCLILIVFL",
+          "aligned_subject": "QCKILRCNAEYVSSTLSLRGGGSSGALRGGGGGGRGGGVGSGGLCRALRSYALCTRRTARTCRGDLAFHSAVHGIEDLMIQHNCSRQGPTAPPPPRGPALPGAGSGLPAPDPCDYEGRFSRLHGRPPGFLHCASFGDPHVRSFHHHFHTCRVQGAWPLLDNDFLFVQATSSPMALGANATATRKLTIIFKNMQECIDQKVYQAEVDNLPVAFEDGSINGGDRPGGSSLSIQTANPGNHVEIQAAYIGTTIIIRQTAGQLSFSIKVAEDVAMAFSAEQDLQLCVGGCPPSQRL-------SR----SE-RNRRG-AI---TIDTARRLCKEGLPVEDAYFHSCVFDVLISGDPNFTVAAQAALEDARAFLPDLEKLHLFPSDA-GVPLSSATLLAPLLSGLFVLWLCIQ-",
+          "matches": 176,
+          "query_accession": "Q6NW40",
+          "query_label": "RGMB_HUMAN",
+          "query_to_subject_coverage": 95.41,
+          "query_to_subject_identity": 44.9,
+          "subject_accession": "Q6ZVN8",
+          "subject_label": "RGMC_HUMAN",
+          "subject_to_query_identity": 45.01
+        }
+      ],
+      "precomputed_json_path": "/Users/Andre.Teixeira/Code/AgDesign2/snapshots/openantigen-2026-07-23/outputs/surfy_batch/paralogs/targets/rgma_human.json",
+      "target_extracellular_accessible_identity": [
+        {
+          "aligned_positions": 265,
+          "identity": 48.68,
+          "identity_denominator": "target extracellular accessible residues aligned to member",
+          "matches": 129,
+          "member_label": "RGMB_HUMAN",
+          "target_label": "RGMA_HUMAN"
+        },
+        {
+          "aligned_positions": 254,
+          "identity": 49.21,
+          "identity_denominator": "target extracellular accessible residues aligned to member",
+          "matches": 125,
+          "member_label": "RGMC_HUMAN",
+          "target_label": "RGMA_HUMAN"
+        }
+      ]
+    },
+    "source": "Mouse ortholog family matrix recalculated from human OpenAntigens family membership; full-length matrix recomputed locally"
+  },
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "metadata": {
+    "construct_identity_label": "Identity to mouse source",
+    "human_source_target": {
+      "accession": "Q96B86",
+      "entry_name": "RGMA_HUMAN",
+      "gene_symbol": "RGMA",
+      "protein_name": "Repulsive guidance molecule A"
+    },
+    "mouse_sequence_provenance": {
+      "alphafold_accession": "",
+      "alphafold_status": "",
+      "identifier_source": "uniprot_reviewed_mouse_gene_symbol",
+      "refseq_accession": "Q6PCX7",
+      "sequence_source": "uniprot_reviewed_mouse_gene_symbol"
+    },
+    "portal_species": "mouse",
+    "source_database": "mouse_openantigens_structure_analysis"
+  },
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "No transmembrane region detected; treating the mature secreted chain as the extracellular design region.",
+      "severity": "info",
+      "source": "topology"
+    },
+    {
+      "message": "UniProt topological-domain annotations did not define extracellular/cytoplasmic loops; using SURFY topology segments for residue-level extracellular accessibility annotation.",
+      "severity": "info",
+      "source": "SURFY"
+    },
+    {
+      "message": "InterPro/Pfam annotation lookup failed: Connection error for https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q6PCX7?page_size=200: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "InterPro"
+    },
+    {
+      "message": "Structure-driven analyses were skipped: All AlphaFold download URLs failed for Q6PCX7.pdb: https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v6.pdb: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v6.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v6.pdb.gz: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v6.pdb.gz: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v4.pdb: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v4.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v4.pdb.gz: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q6PCX7-F1-model_v4.pdb.gz: [Errno 8] nodename nor servname provided, or not known | https://alphafold.com/files/AF-Q6PCX7-F1-model_v6.pdb: Connection error for https://alphafold.com/files/AF-Q6PCX7-F1-model_v6.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.com/files/AF-Q6PCX7-F1-model_v6.pdb.gz: Connection error for https://alphafold.com/files/AF-Q6PCX7-F1-model_v6.pdb.gz: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "AlphaFold"
+    },
+    {
+      "message": "Species homolog lookup failed: Connection error for https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=protein&retmode=json&retmax=20&term=Rgma%5BGene%20Name%5D%20AND%20Macaca%20fascicularis%5BOrganism%5D%20AND%20srcdb_refseq%5Bprop%5D: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "UniProt"
+    },
+    {
+      "message": "Family context lookup failed: Connection error for https://rest.genenames.org/fetch/symbol/Rgma: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "HGNC"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: RGMA_HUMAN Q96B86.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: RGMA_HUMAN Q96B86.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "",
+      "end": 47,
+      "metadata": {
+        "ptm_category": "molecule processing",
+        "raw_type": "Signal"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "SIGNAL"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 115,
+      "metadata": {
+        "feature_id": "",
+        "ptm_category": "glycosylation",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 115,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "",
+      "end": 227,
+      "metadata": {
+        "ptm_category": "disulfide",
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 146,
+      "type": "DISULFID"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 160,
+      "metadata": {
+        "feature_id": "",
+        "ptm_category": "glycosylation",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 160,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "",
+      "end": 316,
+      "metadata": {
+        "ptm_category": "disulfide",
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 164,
+      "type": "DISULFID"
+    },
+    {
+      "description": "Cleavage; by autolysis",
+      "end": 170,
+      "metadata": {
+        "ptm_category": "cleavage site",
+        "raw_type": "Site"
+      },
+      "source": "UniProt",
+      "start": 169,
+      "type": "SITE"
+    },
+    {
+      "description": "Repulsive guidance molecule A",
+      "end": 427,
+      "metadata": {
+        "feature_id": "PRO_0000030389",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 170,
+      "type": "CHAIN"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 388,
+      "metadata": {
+        "feature_id": "",
+        "ptm_category": "glycosylation",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 388,
+      "type": "CARBOHYD"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "RGMA_MOUSE",
+    "query_type": "entry_name",
+    "resolved_accession": "Q6PCX7",
+    "resolved_entry_name": "RGMA_MOUSE"
+  },
+  "species_name_matches": [],
+  "structural_regions": [],
+  "target": {
+    "accession": "Q6PCX7",
+    "alternative_names": [
+      "RGM domain family member A"
+    ],
+    "canonical_isoform_id": "Q6PCX7-1",
+    "entry_name": "RGMA_MOUSE",
+    "gene_symbol": "Rgma",
+    "gene_synonyms": [],
+    "organism": "Mus musculus",
+    "protein_name": "Repulsive guidance molecule A",
+    "sequence": "MQPPRERLVVTGRAGWMGMGRGAGRSALGLWPTLAFLLCSFPAAISPCKILKCNSEFWSATSSGSHAPASDDVPEFCAALRTYALCTRRTARTCRGDLAYHSAVHGIEDLMSQHNCSKDGPTSQPRVRTLPPAGDSQERSDSPEICHYEKSFHKHSAAPNYTHCGLFGDPHLRTFTDHFQTCKVQGAWPLIDNNYLNVQVTNTPVLPGSAATATSKLTIIFKNFQECVDQKVYQAEMDELPSAFADGSKNGGDKHGANSLKITEKVSGQHVEIQAKYIGTTIVVRQVGRYLTFAVRMPEEVVNAVEDRDSQGLYLCLRGCPLNQQIDFQAFRANAESPRRPAAASPSPVVPETFPYETAVAKCKEKLPVEDLYYQACVFDLLTTGDVNFTLAAYYALEDGKMLHSNKDKLHLFERTRELPGAVAAAAAAATTFPLAPQILLGTIPLLVLLPVLW",
+    "taxon_id": 10090
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [
+      {
+        "confidence": 0.65,
+        "end": 450,
+        "label": "SURFY non-cytoplasmic region",
+        "metadata": {
+          "surfy_segment_type": "NC"
+        },
+        "source": "SURFY",
+        "start": 46
+      }
+    ],
+    "intramembrane_regions": [],
+    "major_extracellular_region": {
+      "confidence": 0.8,
+      "end": 454,
+      "label": "Secreted mature chain",
+      "metadata": {},
+      "source": "topology",
+      "start": 48
+    },
+    "membrane_core_region": null,
+    "topology_class": "secreted",
+    "transmembrane_regions": []
+  }
+}

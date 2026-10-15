@@ -1,0 +1,1294 @@
+{
+  "advanced_membrane_suggestions": [
+    {
+      "category": "gpcr_conservative_engineering",
+      "end": 409,
+      "evidence": [
+        "Topology-derived membrane core: 88-409"
+      ],
+      "rationale": [
+        "Topology contains 8 transmembrane helices.",
+        "7TM receptors often benefit from separate native-like and expression-engineered construct screens."
+      ],
+      "start": 88,
+      "suggested_actions": [
+        "Test the native full-length membrane construct alongside the trimmed membrane construct as the baseline pair.",
+        "Preserve the full 7TM core and a short juxtamembrane segment after the terminal helix before attempting more aggressive edits."
+      ],
+      "summary": "Treat this target as a 7TM/GPCR-like membrane protein and evaluate a small expression series separate from the native construct recommendations.",
+      "title": "Conservative 7TM expression series",
+      "warnings": [
+        "Advisory only; not part of the main native construct set."
+      ]
+    },
+    {
+      "category": "gpcr_loop_engineering",
+      "end": 358,
+      "evidence": [
+        "Topology-derived internal cytoplasmic loop."
+      ],
+      "rationale": [
+        "Longest internal cytoplasmic loop spans 271-358 (88 aa).",
+        "This topology-derived loop is a candidate insertion or truncation site for experimental testing."
+      ],
+      "start": 271,
+      "suggested_actions": [
+        "Create a conservative truncation variant preserving approximately 5-10 residues at each end of loop 271-358.",
+        "Create a fusion-insertion variant placing BRIL or T4 lysozyme into loop 271-358 rather than altering the main membrane core."
+      ],
+      "summary": "Consider an engineering series centered on the longest internal cytoplasmic loop.",
+      "title": "ICL-focused loop engineering screen",
+      "warnings": [
+        "Advisory only; foreign-fusion constructs are not represented in the main construct tables.",
+        "Loop engineering may alter signaling or G-protein coupling and should be interpreted as an expression/stability optimization path."
+      ]
+    },
+    {
+      "category": "gpcr_tail_engineering",
+      "end": 448,
+      "evidence": [
+        "Topology-derived cytoplasmic tail."
+      ],
+      "rationale": [
+        "Cytoplasmic tail spans 435-448.",
+        "Tail edits leave the transmembrane bundle unchanged but can affect trafficking and signaling."
+      ],
+      "start": 435,
+      "suggested_actions": [
+        "Compare terminal-tail variants with the native full-length construct.",
+        "If further stabilization is needed, test stepwise C-terminal truncations rather than immediate internal-loop edits."
+      ],
+      "summary": "Topology-derived terminal cytoplasmic-tail variants are candidates for experimental testing.",
+      "title": "Terminal tail engineering options",
+      "warnings": [
+        "Evaluate trafficking and signaling, because tail edits can alter regulation and internalization."
+      ]
+    }
+  ],
+  "assembly_requirements": [
+    {
+      "classification": "heteromeric_assembly",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "NTF",
+        "CTF"
+      ],
+      "rationale": [
+        "predominantly heterodimer of a N-terminal (NTF) and a C-terminal (CTF) endoproteolytical fragment."
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation indicates heteromeric assembly, but the text does not establish that the partner is obligatory."
+    },
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "DOCK3"
+      ],
+      "rationale": [
+        "Interacts with DOCK3."
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    },
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "HERPUD1",
+        "FLNA",
+        "FLNB",
+        "PARL"
+      ],
+      "rationale": [
+        "Interacts with HERPUD1, FLNA, FLNB and PARL."
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    },
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "AP1G1"
+      ],
+      "rationale": [
+        "Interacts with AP1G1;"
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    },
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "low",
+      "obligatory": false,
+      "partners": [],
+      "rationale": [
+        "Homodimer;"
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation mentions assembly-related context without establishing an obligatory partner requirement."
+    },
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "low",
+      "obligatory": false,
+      "partners": [
+        "PSEN1",
+        "PSEN2",
+        "NCSTN",
+        "APH1",
+        "APH1A",
+        "APH1B",
+        "PSENEN"
+      ],
+      "rationale": [
+        "Component of the gamma-secretase complex, a complex composed of a presenilin homodimer (PSEN1 or PSEN2), nicastrin (NCSTN), APH1 (APH1A or APH1B) and PSENEN (By similarity)."
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation mentions assembly-related context without establishing an obligatory partner requirement."
+    }
+  ],
+  "canonical_family": null,
+  "complex_portal_complexes": [],
+  "construct_details": [
+    {
+      "classification": "membrane_expression",
+      "clipped_domain_annotations": [],
+      "complete_domain_annotations": [],
+      "cysteine_analysis": [],
+      "domain_summary": "No complete InterPro/Pfam domain match; treat as structure-led region.",
+      "end": 448,
+      "evidence": [
+        "Native membrane-expression baseline.",
+        "Topology-derived membrane core: 88-409.",
+        "Detected 8 transmembrane segment(s)."
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "macaca_fascicularis",
+          "start": null
+        }
+      ],
+      "human_entry_name": "PSN2_MOUSE",
+      "length": 448,
+      "ligand_interactions": [],
+      "name": "membrane_expression_full_length",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "Presenilin-2 NTF subunit",
+          "end": 297,
+          "metadata": {
+            "feature_id": "PRO_0000025607",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 1,
+          "type": "CHAIN"
+        },
+        {
+          "description": "Phosphoserine",
+          "end": 19,
+          "metadata": {
+            "ptm_category": "modified residue",
+            "raw_type": "Modified residue"
+          },
+          "source": "UniProt",
+          "start": 19,
+          "type": "MOD_RES"
+        },
+        {
+          "description": "Phosphoserine",
+          "end": 22,
+          "metadata": {
+            "ptm_category": "modified residue",
+            "raw_type": "Modified residue"
+          },
+          "source": "UniProt",
+          "start": 22,
+          "type": "MOD_RES"
+        },
+        {
+          "description": "Phosphoserine",
+          "end": 25,
+          "metadata": {
+            "ptm_category": "modified residue",
+            "raw_type": "Modified residue"
+          },
+          "source": "UniProt",
+          "start": 25,
+          "type": "MOD_RES"
+        },
+        {
+          "description": "Phosphoserine",
+          "end": 30,
+          "metadata": {
+            "ptm_category": "modified residue",
+            "raw_type": "Modified residue"
+          },
+          "source": "UniProt",
+          "start": 30,
+          "type": "MOD_RES"
+        },
+        {
+          "description": "Phosphoserine",
+          "end": 52,
+          "metadata": {
+            "ptm_category": "modified residue",
+            "raw_type": "Modified residue"
+          },
+          "source": "UniProt",
+          "start": 52,
+          "type": "MOD_RES"
+        },
+        {
+          "description": "Presenilin-2 CTF subunit",
+          "end": 448,
+          "metadata": {
+            "feature_id": "PRO_0000025608",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 298,
+          "type": "CHAIN"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "Baseline native membrane-expression construct retaining the full membrane-spanning protein sequence.",
+      "score": 86.0,
+      "sequence": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLPYDPEMEEDSYDSFGEPSYPEAFEAPLPGYPGEELEEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "split_diagnostics": [],
+      "start": 1,
+      "structural_metrics": null,
+      "structure_image": null,
+      "warnings": [
+        "Retained n-terminal region 1-75; trimming was blocked because overlaps UniProt MOTIF annotation 16-21; PTM-rich N-terminal region (6 PTM annotation(s))."
+      ]
+    }
+  ],
+  "construct_recommendations": [
+    {
+      "classification": "membrane_expression",
+      "end": 448,
+      "evidence": [
+        "Native membrane-expression baseline.",
+        "Topology-derived membrane core: 88-409.",
+        "Detected 8 transmembrane segment(s)."
+      ],
+      "name": "membrane_expression_full_length",
+      "pdb_id": null,
+      "rationale": "Baseline native membrane-expression construct retaining the full membrane-spanning protein sequence.",
+      "score": 86.0,
+      "start": 1,
+      "warnings": [
+        "Retained n-terminal region 1-75; trimming was blocked because overlaps UniProt MOTIF annotation 16-21; PTM-rich N-terminal region (6 PTM annotation(s))."
+      ]
+    }
+  ],
+  "cross_reactivity_hits": [],
+  "cysteine_analysis": [],
+  "ectodomain": null,
+  "ectodomain_homology": [],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "Disordered",
+      "end": 74,
+      "metadata": {
+        "raw_type": "Region"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "REGION"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 87,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Presenilin-2 NTF subunit",
+      "end": 297,
+      "metadata": {
+        "feature_id": "PRO_0000025607",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "Involved in late endosome/lysosome localization",
+      "end": 21,
+      "metadata": {
+        "raw_type": "Motif"
+      },
+      "source": "UniProt",
+      "start": 16,
+      "type": "MOTIF"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 19,
+      "metadata": {
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 19,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Polar residues",
+      "end": 31,
+      "metadata": {
+        "raw_type": "Compositional bias"
+      },
+      "source": "UniProt",
+      "start": 19,
+      "type": "COMPOSITIONAL_BIAS"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 22,
+      "metadata": {
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 22,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 25,
+      "metadata": {
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 25,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 30,
+      "metadata": {
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 30,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "in Ref. 3; BAB29514",
+      "end": 40,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 40,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 52,
+      "metadata": {
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 52,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "in Ref. 3; BAB29514",
+      "end": 87,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 86,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "in Ref. 2; AAB92660 and 4; AAH10403",
+      "end": 87,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 87,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "Helical",
+      "end": 108,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 88,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "Lumenal",
+      "end": 138,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 109,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 159,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 139,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 166,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 160,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 187,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 167,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "Lumenal",
+      "end": 200,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 188,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 221,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 201,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 223,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 222,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 244,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 224,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "in Ref. 1; AAC52937",
+      "end": 226,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 226,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "Lumenal",
+      "end": 249,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 245,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 270,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 250,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "",
+      "end": 263,
+      "metadata": {
+        "raw_type": "Active site"
+      },
+      "source": "UniProt",
+      "start": 263,
+      "type": "ACTIVE_SITE"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 358,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 271,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "in isoform 2",
+      "end": 332,
+      "metadata": {
+        "feature_id": "VSP_008383",
+        "raw_type": "Alternative sequence"
+      },
+      "source": "UniProt",
+      "start": 296,
+      "type": "ALTERNATIVE_SEQUENCE"
+    },
+    {
+      "description": "Presenilin-2 CTF subunit",
+      "end": 448,
+      "metadata": {
+        "feature_id": "PRO_0000025608",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 298,
+      "type": "CHAIN"
+    },
+    {
+      "description": "in Ref. 2; AAB92660",
+      "end": 324,
+      "metadata": {
+        "raw_type": "Sequence conflict"
+      },
+      "source": "UniProt",
+      "start": 324,
+      "type": "SEQUENCE_CONFLICT"
+    },
+    {
+      "description": "in isoform 2",
+      "end": 448,
+      "metadata": {
+        "feature_id": "VSP_008384",
+        "raw_type": "Alternative sequence"
+      },
+      "source": "UniProt",
+      "start": 333,
+      "type": "ALTERNATIVE_SEQUENCE"
+    },
+    {
+      "description": "Helical",
+      "end": 379,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 359,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "",
+      "end": 366,
+      "metadata": {
+        "raw_type": "Active site"
+      },
+      "source": "UniProt",
+      "start": 366,
+      "type": "ACTIVE_SITE"
+    },
+    {
+      "description": "Lumenal",
+      "end": 388,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 380,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "Helical",
+      "end": 409,
+      "metadata": {
+        "raw_type": "Transmembrane"
+      },
+      "source": "UniProt",
+      "start": 389,
+      "type": "TRANSMEM"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 413,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 410,
+      "type": "TOPO_DOM"
+    },
+    {
+      "description": "PAL",
+      "end": 416,
+      "metadata": {
+        "raw_type": "Motif"
+      },
+      "source": "UniProt",
+      "start": 414,
+      "type": "MOTIF"
+    },
+    {
+      "description": "Helical",
+      "end": 434,
+      "metadata": {
+        "raw_type": "Intramembrane"
+      },
+      "source": "UniProt",
+      "start": 414,
+      "type": "INTRAMEMBRANE"
+    },
+    {
+      "description": "Cytoplasmic",
+      "end": 448,
+      "metadata": {
+        "raw_type": "Topological domain"
+      },
+      "source": "UniProt",
+      "start": 435,
+      "type": "TOPO_DOM"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [
+    {
+      "alignment_length": 448,
+      "alignment_source": "BLAST",
+      "bitscore": 877.0,
+      "coverage": 100.0,
+      "description": "sp|P49810|PSN2_HUMAN Presenilin-2 OS=Homo sapiens OX=9606 GN=PSEN2 PE=1 SV=1",
+      "evalue": 0.0,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 95.759,
+      "query_alignment": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLPYDPEMEEDSYDSFGEPSYPEAFEAPLPGYPGEELEEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "query_alignment_annotation": null,
+      "query_end": 448,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "MLTFMASDSEEEVCDERTSLMSAESPTPRSCQEGRQGPEDGENTAQWRSQENEEDGEEDPDRYVCSGVPGRPPGLEEELTLKYGAKHVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLLLTVWNFGAVGMVCIHWKGPLVLQQAYLIMISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLPYDPEMEEDSYDSFGEPSYPEVFEPPLTGYPGEELEEEEERGVKLGLGDFIFYSVLVGKAAATGSGDWNTTLACFVAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "subject_end": 448,
+      "subject_id": "sp|P49810|PSN2_HUMAN",
+      "subject_start": 1
+    },
+    {
+      "alignment_length": 451,
+      "alignment_source": "BLAST",
+      "bitscore": 509.0,
+      "coverage": 91.51785714285714,
+      "description": "sp|P49768|PSN1_HUMAN Presenilin-1 OS=Homo sapiens OX=9606 GN=PSEN1 PE=1 SV=1",
+      "evalue": 2.56e-179,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 65.41,
+      "query_alignment": "EDGESTAQWRTQESEEDCEEDPDRYACSGAP-----GRPSGLEEE-----------LTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGAL--QLPYDPE-MEEDSYDSFGEPS---YPEAFEAPLPGYPG------------EEL-------EEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "query_alignment_annotation": null,
+      "query_end": 448,
+      "query_start": 39,
+      "species": "Homo sapiens",
+      "subject_alignment": "EDNHLSNTVRSQNDNRERQEHNDRRSL-GHPEPLSNGRPQGNSRQVVEQDEEEDEELTLKYGAKHVIMLFVPVTLCMVVVVATIKSVSFYTRKDGQLIYTPFTEDTETVGQRALHSILNAAIMISVIVVMTILLVVLYKYRCYKVIHAWLIISSLLLLFFFSFIYLGEVFKTYNVAVDYITVALLIWNFGVVGMISIHWKGPLRLQQAYLIMISALMALVFIKYLPEWTAWLILAVISVYDLVAVLCPKGPLRMLVETAQERNETLFPALIYSSTMVWLVNMAEGDPEAQRRVSKNSKYNAESTERESQDTVAENDDGGFSEEWEAQRDSHLGPHRSTPESRAAVQELSSSILAGEDPEERGVKLGLGDFIFYSVLVGKASATASGDWNTTIACFVAILIGLCLTLLLLAIFKKALPALPISITFGLVFYFATDYLVQPFMDQLAFHQFYI",
+      "subject_end": 467,
+      "subject_id": "sp|P49768|PSN1_HUMAN",
+      "subject_start": 18
+    },
+    {
+      "alignment_length": 452,
+      "alignment_source": "BLAST",
+      "bitscore": 508.0,
+      "coverage": 91.51785714285714,
+      "description": "sp|P49769|PSN1_MOUSE Presenilin-1 OS=Mus musculus OX=10090 GN=Psen1 PE=1 SV=1",
+      "evalue": 6.14e-179,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 63.938,
+      "query_alignment": "EDGESTAQWRTQESEEDCEEDPDRYACSG----APGRPSGLEEE-----------LTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLPYDPEME--------EDSYDSFGEPSYPEAFEAPLPGYPG------------EEL-------EEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "query_alignment_annotation": null,
+      "query_end": 448,
+      "query_start": 39,
+      "species": "Mus musculus",
+      "subject_alignment": "EDSHSSSAIRSQNDSQERQQQHDRQRLDNPEPISNGRPQSNSRQVVEQDEEEDEELTLKYGAKHVIMLFVPVTLCMVVVVATIKSVSFYTRKDGQLIYTPFTEDTETVGQRALHSILNAAIMISVIVIMTILLVVLYKYRCYKVIHAWLIISSLLLLFFFSFIYLGEVFKTYNVAVDYVTVALLIWNFGVVGMIAIHWKGPLRLQQAYLIMISALMALVFIKYLPEWTAWLILAVISVYDLVAVLCPKGPLRMLVETAQERNETLFPALIYSSTMVWLVNMAEGDPEAQR--RVPKNPKYNTQRAERETQDSGSGNDDGGFSEEWEAQRDSHLGPHRSTPESRAAVQELSGSILTSEDPEERGVKLGLGDFIFYSVLVGKASATASGDWNTTIACFVAILIGLCLTLLLLAIFKKALPALPISITFGLVFYFATDYLVQPFMDQLAFHQFYI",
+      "subject_end": 467,
+      "subject_id": "sp|P49769|PSN1_MOUSE",
+      "subject_start": 18
+    },
+    {
+      "alignment_length": 442,
+      "alignment_source": "Canonical remap",
+      "bitscore": 502.0,
+      "coverage": 98.661,
+      "description": "GN=PSEN1 presenilin-1 isoform X1 [Macaca fascicularis]",
+      "evalue": 4.61e-178,
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "extracellular_surface_matches": null,
+      "identity": 67.647,
+      "query_alignment": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLP--YDPEMEED-SYDSFGEPSYP---EAFEAP----L-PGYPG-E------ELEE-----E--EERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "query_alignment_annotation": null,
+      "query_end": 448,
+      "query_start": 1,
+      "species": "Macaca fascicularis",
+      "subject_alignment": "MTELPAPLSYFQNAQM--SEDNHLSNTVRSQNDNR---ERQEHNDRRSLGHPEPLSNGRPQGNSRQVVEQDEEEDEE-LTLKYGAKHVIMLFVPVTLCMVVVVATIKSVSFYTRKDGQLIYTPFTEDTETVGQRALHSILNAAIMISVIVVMTILLVVLYKYRCYKVIHAWLIISSLLLLFFFSFIYLGEVFKTYNVAVDYITVALLIWNFGVVGMISIHWKGPLRLQQAYLIMISALMALVFIKYLPEWTAWLILAVISVYDLVAVLCPKGPLRMLVETAQERNETLFPALIYSSTMVWLVNMAEGDPEAQRRVSKNSKYNAESTERESQDTVAENDDGGFSEEWEAQRDSHLGPHRSTPESRAAVQELSSSILAGEDPEERGVKLGLGDFIFYSVLVGKASATASGDWNTTIACFVAILIGLCLTLLLLAIFKKALPALPISITFGLVFYFATDYLVQPFMDQLAFHQFYI",
+      "subject_end": 467,
+      "subject_id": "XP_005561762",
+      "subject_start": 1
+    }
+  ],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [
+    {
+      "c_linker": "GGSG",
+      "cassette_id": "bril",
+      "cassette_name": "BRIL / apocytochrome b562RIL",
+      "cassette_sequence": "ADLEDNWETLNDNLKVIEKADNAAQVKDALTKMRAAALDAQKATPPKLEDKSPDSPEMKDFRHGFDILVGQIDDALKLANEGKVKEAQAAAEQLKTTRNAYIQKYL",
+      "category": "gpcr_loop_fusion",
+      "end": 358,
+      "engineered_length": 484,
+      "evidence": [
+        "topology-derived internal cytoplasmic loop: 271-358 (88 aa).",
+        "Cassette registry: BRIL / apocytochrome b562RIL; openantigen-v1; Apocytochrome b562RIL/BRIL-style GPCR fusion cassette; used as a compact intracellular-loop stabilization fusion in GPCR structural biology."
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "insertion_after": 275,
+      "loop_source": "topology-derived internal cytoplasmic loop",
+      "n_linker": "GGSG",
+      "name": "PSN2_MOUSE_BRIL_ICL_fusion",
+      "native_length": 448,
+      "replaced_end": 353,
+      "replaced_start": 276,
+      "retained_c_terminal_loop_residues": 5,
+      "retained_n_terminal_loop_residues": 5,
+      "sequence": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRGGSGADLEDNWETLNDNLKVIEKADNAAQVKDALTKMRAAALDAQKATPPKLEDKSPDSPEMKDFRHGFDILVGQIDDALKLANEGKVKEAQAAAEQLKTTRNAYIQKYLGGSGEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "sequence_role": "engineered_receptor",
+      "start": 271,
+      "strategy": "Intracellular-loop cassette replacement",
+      "suggested_actions": [
+        "Treat as an expression/stability rescue construct, not as the primary antigen construct.",
+        "Compare against native full-length and terminal-trimmed membrane-expression constructs.",
+        "Validate ligand binding and cell-surface expression before antibody-campaign use."
+      ],
+      "summary": "Experimental BRIL / apocytochrome b562RIL fusion replacing the central part of topology-derived internal cytoplasmic loop 271-358 while retaining 5 receptor residues on each side.",
+      "tag_suggestions": {
+        "c_terminal": [
+          "Optional detection/purification tags can be placed after retained C-terminal receptor sequence.",
+          "C-terminal tags may affect trafficking or internalization for some GPCRs."
+        ],
+        "n_terminal": [
+          "Optional secretion/trafficking signal or epitope tag should be chosen in the expression vector, not appended by OpenAntigens.",
+          "For antibody campaigns, avoid masking extracellular epitopes with large N-terminal tags unless experimentally required."
+        ],
+        "notes": [
+          "OpenAntigens reports tag suggestions as metadata only; generated receptor sequences are untagged."
+        ]
+      },
+      "warnings": [
+        "Experimental GPCR engineering variant; may alter receptor conformational ensemble.",
+        "Receptor residues 276-353 are replaced by a foreign cassette.",
+        "Intracellular loop fusions can alter G-protein/effector coupling and receptor-state preference."
+      ]
+    },
+    {
+      "c_linker": "GGSG",
+      "cassette_id": "t4l",
+      "cassette_name": "T4 lysozyme",
+      "cassette_sequence": "MNIFEMLRIDERLRLKIYKDTEGYYTIGIGHLLTKSPSLNAAKSELDKAIGRNCNGVITKDEAEKLFNQDVDAAVRGILRNAKLKPVYDSLDAVRRCALINMVFQMGETGVAGFTNSLRMLQQKRWDEAAVNLAKSIWYNQTPNRAKRVITTFRTGTWDAYKNL",
+      "category": "gpcr_loop_fusion",
+      "end": 358,
+      "engineered_length": 542,
+      "evidence": [
+        "topology-derived internal cytoplasmic loop: 271-358 (88 aa).",
+        "Cassette registry: T4 lysozyme; uniprot-p00720; Bacteriophage T4 lysozyme/endolysin sequence corresponding to UniProt P00720."
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "insertion_after": 275,
+      "loop_source": "topology-derived internal cytoplasmic loop",
+      "n_linker": "GGSG",
+      "name": "PSN2_MOUSE_T4L_ICL_fusion",
+      "native_length": 448,
+      "replaced_end": 353,
+      "replaced_start": 276,
+      "retained_c_terminal_loop_residues": 5,
+      "retained_n_terminal_loop_residues": 5,
+      "sequence": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRGGSGMNIFEMLRIDERLRLKIYKDTEGYYTIGIGHLLTKSPSLNAAKSELDKAIGRNCNGVITKDEAEKLFNQDVDAAVRGILRNAKLKPVYDSLDAVRRCALINMVFQMGETGVAGFTNSLRMLQQKRWDEAAVNLAKSIWYNQTPNRAKRVITTFRTGTWDAYKNLGGSGEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+      "sequence_role": "engineered_receptor",
+      "start": 271,
+      "strategy": "Intracellular-loop cassette replacement",
+      "suggested_actions": [
+        "Treat as an expression/stability rescue construct, not as the primary antigen construct.",
+        "Compare against native full-length and terminal-trimmed membrane-expression constructs.",
+        "Validate ligand binding and cell-surface expression before antibody-campaign use."
+      ],
+      "summary": "Experimental T4 lysozyme fusion replacing the central part of topology-derived internal cytoplasmic loop 271-358 while retaining 5 receptor residues on each side.",
+      "tag_suggestions": {
+        "c_terminal": [
+          "Optional detection/purification tags can be placed after retained C-terminal receptor sequence.",
+          "C-terminal tags may affect trafficking or internalization for some GPCRs."
+        ],
+        "n_terminal": [
+          "Optional secretion/trafficking signal or epitope tag should be chosen in the expression vector, not appended by OpenAntigens.",
+          "For antibody campaigns, avoid masking extracellular epitopes with large N-terminal tags unless experimentally required."
+        ],
+        "notes": [
+          "OpenAntigens reports tag suggestions as metadata only; generated receptor sequences are untagged."
+        ]
+      },
+      "warnings": [
+        "Experimental GPCR engineering variant; may alter receptor conformational ensemble.",
+        "Receptor residues 276-353 are replaced by a foreign cassette.",
+        "Intracellular loop fusions can alter G-protein/effector coupling and receptor-state preference."
+      ]
+    }
+  ],
+  "interpro_annotations": [],
+  "ligand_interactions": [],
+  "metadata": {
+    "construct_identity_label": "Identity to mouse source",
+    "human_source_target": {
+      "accession": "P49810",
+      "entry_name": "PSN2_HUMAN",
+      "gene_symbol": "PSEN2",
+      "protein_name": "Presenilin-2"
+    },
+    "mouse_sequence_provenance": {
+      "alphafold_accession": "",
+      "alphafold_status": "",
+      "identifier_source": "uniprot_reviewed_mouse_gene_symbol",
+      "refseq_accession": "Q61144",
+      "sequence_source": "uniprot_reviewed_mouse_gene_symbol"
+    },
+    "portal_species": "mouse",
+    "source_database": "mouse_openantigens_structure_analysis"
+  },
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "Expected exactly one transmembrane region, found 8.",
+      "severity": "warning",
+      "source": "topology"
+    },
+    {
+      "message": "InterPro/Pfam annotation lookup failed: Connection error for https://www.ebi.ac.uk/interpro/api/entry/interpro/protein/uniprot/Q61144?page_size=200: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "InterPro"
+    },
+    {
+      "message": "Target has 7TM-like topology, but no GPCRdb annotation was available; using generic multipass logic.",
+      "severity": "warning",
+      "source": "GPCRdb"
+    },
+    {
+      "message": "Structure-driven analyses were skipped: All AlphaFold download URLs failed for Q61144.pdb: https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v6.pdb: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v6.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v6.pdb.gz: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v6.pdb.gz: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v4.pdb: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v4.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v4.pdb.gz: Connection error for https://alphafold.ebi.ac.uk/files/AF-Q61144-F1-model_v4.pdb.gz: [Errno 8] nodename nor servname provided, or not known | https://alphafold.com/files/AF-Q61144-F1-model_v6.pdb: Connection error for https://alphafold.com/files/AF-Q61144-F1-model_v6.pdb: [Errno 8] nodename nor servname provided, or not known | https://alphafold.com/files/AF-Q61144-F1-model_v6.pdb.gz: Connection error for https://alphafold.com/files/AF-Q61144-F1-model_v6.pdb.gz: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "AlphaFold"
+    },
+    {
+      "message": "Species homolog lookup failed: Connection error for https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=protein&retmode=json&retmax=20&term=Psen2%5BGene%20Name%5D%20AND%20Macaca%20fascicularis%5BOrganism%5D%20AND%20srcdb_refseq%5Bprop%5D: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "UniProt"
+    },
+    {
+      "message": "Family context lookup failed: Connection error for https://rest.genenames.org/fetch/symbol/Psen2: [Errno 8] nodename nor servname provided, or not known",
+      "severity": "warning",
+      "source": "HGNC"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: PSN2_HUMAN P49810.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: PSN2_HUMAN P49810.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "Presenilin-2 NTF subunit",
+      "end": 297,
+      "metadata": {
+        "feature_id": "PRO_0000025607",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "CHAIN"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 19,
+      "metadata": {
+        "ptm_category": "modified residue",
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 19,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 22,
+      "metadata": {
+        "ptm_category": "modified residue",
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 22,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 25,
+      "metadata": {
+        "ptm_category": "modified residue",
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 25,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 30,
+      "metadata": {
+        "ptm_category": "modified residue",
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 30,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Phosphoserine",
+      "end": 52,
+      "metadata": {
+        "ptm_category": "modified residue",
+        "raw_type": "Modified residue"
+      },
+      "source": "UniProt",
+      "start": 52,
+      "type": "MOD_RES"
+    },
+    {
+      "description": "Presenilin-2 CTF subunit",
+      "end": 448,
+      "metadata": {
+        "feature_id": "PRO_0000025608",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 298,
+      "type": "CHAIN"
+    }
+  ],
+  "residue_annotations": [],
+  "resolution": {
+    "query": "PSN2_MOUSE",
+    "query_type": "entry_name",
+    "resolved_accession": "Q61144",
+    "resolved_entry_name": "PSN2_MOUSE"
+  },
+  "species_name_matches": [],
+  "structural_regions": [],
+  "target": {
+    "accession": "Q61144",
+    "alternative_names": [
+      "Presenilin-2 NTF subunit",
+      "Presenilin-2 CTF subunit"
+    ],
+    "canonical_isoform_id": "Q61144-1",
+    "entry_name": "PSN2_MOUSE",
+    "gene_symbol": "Psen2",
+    "gene_synonyms": [
+      "Ad4h",
+      "Alg3",
+      "Ps-2",
+      "Ps2",
+      "Psnl2"
+    ],
+    "organism": "Mus musculus",
+    "protein_name": "Presenilin-2",
+    "sequence": "MLAFMASDSEEEVCDERTSLMSAESPTSRSCQEGRPGPEDGESTAQWRTQESEEDCEEDPDRYACSGAPGRPSGLEEELTLKYGAKRVIMLFVPVTLCMIVVVATIKSVRFYTEKNGQLIYTPFTEDTPSVGQRLLNSVLNTLIMISVIVVMTIFLVVLYKYRCYKFIHGWLIMSSLMLLFLFTYIYLGEVLKTYNVAMDYPTLFLAVWNFGAVGMVCIHWKGPLVLQQAYLIVISALMALVFIKYLPEWSAWVILGAISVYDLVAVLCPKGPLRMLVETAQERNEPIFPALIYSSAMVWTVGMAKLDPSSQGALQLPYDPEMEEDSYDSFGEPSYPEAFEAPLPGYPGEELEEEEERGVKLGLGDFIFYSVLVGKAAATGNGDWNTTLACFIAILIGLCLTLLLLAVFKKALPALPISITFGLIFYFSTDNLVRPFMDTLASHQLYI",
+    "taxon_id": 10090
+  },
+  "topology": {
+    "cytoplasmic_regions": [
+      {
+        "confidence": 0.8,
+        "end": 87,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 1
+      },
+      {
+        "confidence": 0.8,
+        "end": 166,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 160
+      },
+      {
+        "confidence": 0.8,
+        "end": 223,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 222
+      },
+      {
+        "confidence": 0.8,
+        "end": 358,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 271
+      },
+      {
+        "confidence": 0.8,
+        "end": 413,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 410
+      },
+      {
+        "confidence": 0.8,
+        "end": 448,
+        "label": "Cytoplasmic",
+        "metadata": {},
+        "source": "topology",
+        "start": 435
+      }
+    ],
+    "cytoplasmic_tail_region": {
+      "confidence": 0.8,
+      "end": 448,
+      "label": "Cytoplasmic tail",
+      "metadata": {},
+      "source": "topology",
+      "start": 435
+    },
+    "extracellular_regions": [
+      {
+        "confidence": 0.8,
+        "end": 138,
+        "label": "Lumenal",
+        "metadata": {},
+        "source": "topology",
+        "start": 109
+      },
+      {
+        "confidence": 0.8,
+        "end": 200,
+        "label": "Lumenal",
+        "metadata": {},
+        "source": "topology",
+        "start": 188
+      },
+      {
+        "confidence": 0.8,
+        "end": 249,
+        "label": "Lumenal",
+        "metadata": {},
+        "source": "topology",
+        "start": 245
+      },
+      {
+        "confidence": 0.8,
+        "end": 388,
+        "label": "Lumenal",
+        "metadata": {},
+        "source": "topology",
+        "start": 380
+      }
+    ],
+    "intramembrane_regions": [
+      {
+        "confidence": 0.8,
+        "end": 434,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 414
+      }
+    ],
+    "major_extracellular_region": null,
+    "membrane_core_region": {
+      "confidence": 0.8,
+      "end": 409,
+      "label": "Membrane core",
+      "metadata": {},
+      "source": "topology",
+      "start": 88
+    },
+    "topology_class": "multipass_compact",
+    "transmembrane_regions": [
+      {
+        "confidence": 0.8,
+        "end": 108,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 88
+      },
+      {
+        "confidence": 0.8,
+        "end": 159,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 139
+      },
+      {
+        "confidence": 0.8,
+        "end": 187,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 167
+      },
+      {
+        "confidence": 0.8,
+        "end": 221,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 201
+      },
+      {
+        "confidence": 0.8,
+        "end": 244,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 224
+      },
+      {
+        "confidence": 0.8,
+        "end": 270,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 250
+      },
+      {
+        "confidence": 0.8,
+        "end": 379,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 359
+      },
+      {
+        "confidence": 0.8,
+        "end": 409,
+        "label": "Helical",
+        "metadata": {},
+        "source": "UniProt",
+        "start": 389
+      }
+    ]
+  }
+}

@@ -789,4 +789,9 @@ def _topology_class(report: dict[str, Any]) -> str:
 
 def _append_note(report: dict[str, Any], severity: str, message: str, source: str) -> None:
     notes = report.setdefault("notes", [])
-    notes.append({"severity": severity, "message": message, "source": source})
+    note = {"severity": severity, "message": message, "source": source}
+    # Idempotent: finalization re-enters this for `skipped_existing` rows on a
+    # resumed build, which otherwise stacks a second copy of every note.
+    if any(isinstance(existing, dict) and existing == note for existing in notes):
+        return
+    notes.append(note)
