@@ -939,6 +939,11 @@ def _version_from_pyproject() -> str:
     return "unknown"
 
 
+def _export_name_symbol(target: dict[str, Any]) -> str:
+    # Construct cards and the Construct Builder both name exported regions by UniProt entry-name base.
+    return _entry_name_base(str(target.get("entry_name") or "")) or str(target.get("gene_symbol") or "TARGET")
+
+
 def _entry_name_base(entry_name: str) -> str:
     text = str(entry_name or "").strip()
     if "_" not in text:
@@ -1684,7 +1689,7 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Live Selected Region</h2>
         <p>The table reports sequences for the current selection: {selected_region_scope} where ortholog mappings exist.</p>
-        <p>The construct name follows the format <code>GENE_SPECIES_start-end</code>. Selecting optional Cys-to-Ser mutations adds mutation suffixes to the name and updates the sequence immediately.</p>
+        <p>The construct name follows the format <code>ENTRY_SPECIES_start-end</code>, where <code>ENTRY</code> is the UniProt entry-name prefix (for example, <code>PD1L1</code> for PD-L1, gene <em>CD274</em>). Selecting optional Cys-to-Ser mutations adds mutation suffixes to the name and updates the sequence immediately.</p>
       </article>
       <article class="card doc-card">
         <h2>Structure panel</h2>
@@ -1938,7 +1943,7 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         <table>
           <thead><tr><th>Field</th><th>Meaning</th><th>Why it matters</th></tr></thead>
           <tbody>
-            <tr><td>Name</td><td><code>GENE_SPECIES_start-end</code>, with optional mutation suffixes when edits are applied in the builder.</td><td>Identifies the sequence and any selected edits.</td></tr>
+            <tr><td>Name</td><td><code>ENTRY_SPECIES_start-end</code>, where <code>ENTRY</code> is the UniProt entry-name prefix, with optional mutation suffixes when edits are applied in the builder.</td><td>Identifies the sequence and any selected edits.</td></tr>
             <tr><td>Boundary</td><td>Amino-acid start/end in the source protein sequence.</td><td>Defines the exact construct region.</td></tr>
             <tr><td>Sequence</td><td>Construct amino-acid sequence.</td><td>Can be copied directly into cloning or ordering workflows.</td></tr>
             <tr><td>Homologs</td><td>{homolog_species} equivalent regions when mapping is available.</td><td>Supports cross-species reagent and screening strategy.</td></tr>
@@ -4355,6 +4360,7 @@ def _render_construct_card(
         for item in construct_ptms
     ) or "<li>None</li>"
     gene_symbol = str(target.get("gene_symbol") or target.get("entry_name") or "TARGET")
+    name_symbol = _export_name_symbol(target)
     primary_species = _target_species_key(target)
     primary_entry = str(target.get("entry_name") or human_entry)
     primary_identity = str(construct.get("identity_to_source_human") or "100.00%")
@@ -4362,7 +4368,7 @@ def _render_construct_card(
         primary_identity = _fmt_pct(construct.get("identity_to_source_human"))
     export_rows = [
         {
-            "name": _format_export_name(gene_symbol, primary_species, construct.get("start"), construct.get("end")),
+            "name": _format_export_name(name_symbol, primary_species, construct.get("start"), construct.get("end")),
             "species": _species_code(primary_species),
             "species_raw": primary_species,
             "boundary": f"{construct.get('start')}-{construct.get('end')}",
@@ -4397,7 +4403,7 @@ def _render_construct_card(
         )
         export_rows.append(
             {
-                "name": _format_export_name(gene_symbol, species, item.get("start"), item.get("end")),
+                "name": _format_export_name(name_symbol, species, item.get("start"), item.get("end")),
                 "species": _species_code(species),
                 "species_raw": species,
                 "boundary": f"{item.get('start')}-{item.get('end')}",
@@ -4423,7 +4429,7 @@ def _render_construct_card(
         )
     unavailable_rows = [
         {
-            "name": f"{gene_symbol}_{_species_code(str(item.get('species') or ''))}_mapping",
+            "name": f"{name_symbol}_{_species_code(str(item.get('species') or ''))}_mapping",
             "species": _species_code(str(item.get("species") or "")),
             "species_raw": str(item.get("species") or ""),
             "reason": "; ".join(str(note) for note in (item.get("notes") or []) if str(note).strip())
@@ -4501,6 +4507,7 @@ def _render_construct_card(
         ]
     construct_payload = {
         "geneSymbol": gene_symbol,
+        "nameSymbol": name_symbol,
         "identityHeader": _identity_header(identity_label),
         "surfaceIdentityHeader": _surface_identity_header(identity_label),
         "rows": [
@@ -4806,7 +4813,7 @@ def _construct_mutation_card_script(*, target: dict[str, Any]) -> str:
               );
               const mutated = mutateSequenceByGlobalEdits(row.sequence || '', Number(row.start), rowMutationEdits);
               return {
-                name: nameWithMutationEdits(payload.geneSymbol, row.speciesRaw, row.start, row.end, mutated.appliedEdits),
+                name: nameWithMutationEdits(payload.nameSymbol, row.speciesRaw, row.start, row.end, mutated.appliedEdits),
                 species: row.species || speciesCode(row.speciesRaw),
                 boundary: `${row.start}-${row.end}`,
                 sequence: mutated.sequence,
@@ -5981,7 +5988,7 @@ def _render_structure_widget(
           accession: {_js_json(target.get("accession") or "")},
           entryName: {_js_json(target.get("entry_name") or "")},
           geneSymbol: {_js_json(target.get("gene_symbol") or target.get("entry_name") or "TARGET")},
-          nameSymbol: {_js_json(_entry_name_base(str(target.get("entry_name") or "")) or target.get("gene_symbol") or "TARGET")},
+          nameSymbol: {_js_json(_export_name_symbol(target))},
           species: {_js_json(_target_species_key(target))},
           identityHeader: {_js_json(_identity_header(identity_label))},
           surfaceIdentityHeader: {_js_json(_surface_identity_header(identity_label))}
@@ -7354,7 +7361,7 @@ def _render_structure_widget(
                 : mapTargetMutationEditsToSpecies(row.speciesRaw, targetMutationEdits);
               const mutated = mutateSequenceByGlobalEdits(row.sequence || '', Number(row.start), rowMutationEdits);
               return {{
-                name: nameWithMutationEdits(payload.geneSymbol, row.speciesRaw, row.start, row.end, mutated.appliedEdits),
+                name: nameWithMutationEdits(payload.nameSymbol, row.speciesRaw, row.start, row.end, mutated.appliedEdits),
                 species: row.species || speciesCode(row.speciesRaw),
                 boundary: `${{row.start}}-${{row.end}}`,
                 sequence: mutated.sequence,
