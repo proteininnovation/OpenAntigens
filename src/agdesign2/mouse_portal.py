@@ -35,7 +35,12 @@ class MousePortalBuildResult:
 # on a later run a mismatch (or a missing sentinel, e.g. reports left by the old
 # annotation-transfer code) disables resume so every target is re-analyzed rather
 # than silently reused.
-MOUSE_PIPELINE_VERSION = "2026-07-no-default-af3"
+# 2026-10-remediation: PR-1..PR-9 change stored mouse report content (notes,
+# GPCR advice, cysteine pairing and exposure, design regions, construct names,
+# homolog rows and identities). Bumped last, per plan §6, so one re-analysis
+# picks all of it up. Note the sentinel also embeds fetch_alphafold=0|1, so
+# toggling that flag forces a full mouse re-analysis on its own.
+MOUSE_PIPELINE_VERSION = "2026-10-remediation"
 
 
 def build_mouse_portal_from_human_orthologs(
@@ -69,9 +74,9 @@ def build_mouse_portal_from_human_orthologs(
     mouse_rows: list[dict[str, str]] = []
     provenance_by_entry: dict[str, dict[str, Any]] = {}
     human_to_mouse_entry: dict[str, str] = {}
-    seen_mouse_targets: set[str] = set()
 
     uniprot_client = _mouse_uniprot_client(mouse_output_dir)
+    claims: list[tuple[int, dict, dict, dict, str, str, str]] = []
     for index, item in enumerate(human_summary, start=1):
         report_path = _resolve_path(item.get("json_report"), base=human_batch_dir)
         if report_path is None:
@@ -97,10 +102,22 @@ def build_mouse_portal_from_human_orthologs(
             continue
         mouse_accession = str(mouse_target.get("accession") or "").strip()
         mouse_key = (mouse_accession or mouse_entry).upper()
-        if mouse_key in seen_mouse_targets:
-            skipped.append(_skip_row(item, f"duplicate_mouse_target:{mouse_entry}"))
+        claims.append((index, item, human_report, mouse_target, mouse_entry, mouse_accession, mouse_key))
+
+    # SF3 (207 mouse pages): several human genes can claim one mouse accession,
+    # and the winner was whichever came first in the human summary. That is how
+    # Pcdhgb5's mouse page named PCDHGB3 as its origin while its own Homology
+    # table, re-derived live, named PCDHGB5 — and how 53 human targets whose
+    # symbol exactly matches the mouse gene were skipped as "duplicates".
+    winners = _select_mouse_claim_winners(claims, ortholog_rows)
+    for index, item, human_report, mouse_target, mouse_entry, mouse_accession, mouse_key in claims:
+        winner = winners[mouse_key]
+        if winner[0] != index:
+            row = _skip_row(item, f"duplicate_mouse_target:{mouse_entry}")
+            # The reason stays a stable code; the owner goes in its own field.
+            row["claimed_by"] = str((winner[2].get("target") or {}).get("gene_symbol") or "")
+            skipped.append(row)
             continue
-        seen_mouse_targets.add(mouse_key)
         human_target = human_report.get("target") or {}
         human_entry = str(human_target.get("entry_name") or "").strip()
         provenance_by_entry[mouse_key] = {
@@ -727,6 +744,40 @@ def _first_available_mouse_homology(report: dict[str, Any]) -> dict[str, Any] | 
             if str(item.get("species") or "").lower() == "mouse" and item.get("available"):
                 return item
     return None
+
+
+def _select_mouse_claim_winners(
+    claims: list[tuple[int, dict, dict, dict, str, str, str]],
+    ortholog_rows: dict[str, dict[str, str]],
+) -> dict[str, tuple[int, dict, dict]]:
+    """For each mouse accession, the human gene that owns its page.
+
+    The human gene whose symbol equals the mouse symbol (case-insensitively)
+    wins; else the highest ``mouse_identity_to_human`` in the ortholog table;
+    else file order, which is what used to decide everything.
+    """
+    by_key: dict[str, list[tuple[int, dict, dict, dict]]] = {}
+    for index, item, human_report, mouse_target, _entry, _accession, mouse_key in claims:
+        by_key.setdefault(mouse_key, []).append((index, item, human_report, mouse_target))
+
+    def rank(candidate: tuple[int, dict, dict, dict]) -> tuple[int, float, int]:
+        index, _item, human_report, mouse_target = candidate
+        human_target = human_report.get("target") or {}
+        human_symbol = str(human_target.get("gene_symbol") or "").strip().upper()
+        mouse_symbol = str(mouse_target.get("gene_symbol") or "").strip().upper()
+        same_symbol = 0 if human_symbol and human_symbol == mouse_symbol else 1
+        row = ortholog_rows.get(str(human_target.get("entry_name") or "").strip().upper()) or {}
+        try:
+            identity = float(row.get("mouse_identity_to_human") or "nan")
+        except ValueError:
+            identity = float("nan")
+        identity_key = -identity if identity == identity else 0.0
+        return (same_symbol, identity_key, index)
+
+    return {
+        key: (lambda best: (best[0], best[1], best[2]))(min(candidates, key=rank))
+        for key, candidates in by_key.items()
+    }
 
 
 def _load_ortholog_rows(path: Path) -> dict[str, dict[str, str]]:

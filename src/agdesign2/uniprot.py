@@ -143,10 +143,23 @@ class UniProtClient:
             if isinstance(gene_name, dict):
                 gene_symbol = gene_name.get("value")
         protein_description = entry.get("proteinDescription", {})
+        submitted = protein_description.get("submissionNames") or protein_description.get("submittedName") or []
+        if isinstance(submitted, dict):
+            submitted = [submitted]
         protein_name = (
             protein_description.get("recommendedName", {})
             .get("fullName", {})
             .get("value")
+            # F19-3: unreviewed TrEMBL entries have only a submitted name, so
+            # 266 mouse pages showed "Q8VF03_MOUSE" as the protein's name.
+            or next(
+                (
+                    str((item.get("fullName") or {}).get("value") or "")
+                    for item in submitted
+                    if isinstance(item, dict) and (item.get("fullName") or {}).get("value")
+                ),
+                None,
+            )
             or entry.get("uniProtkbId", entry.get("primaryAccession", "Unknown protein"))
         )
         return TargetRecord(

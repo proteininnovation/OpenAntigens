@@ -3872,7 +3872,17 @@ def render_detail_page(
                 ),
             )
         )
-    homology_rows = "".join(homology_rows_list) or "<tr><td colspan=\"6\">No homolog records.</td></tr>"
+    homology_rows = "".join(homology_rows_list) or (
+        # SF7: a build-time network failure is not a negative result.
+        "<tr><td colspan=\"6\">The species homolog lookup failed when this report was built; "
+        "see Notes. No homolog records are shown.</td></tr>"
+        if any(
+            "species homolog lookup failed" in str(note.get("message") or "").lower()
+            for note in notes
+            if isinstance(note, dict)
+        )
+        else "<tr><td colspan=\"6\">No homolog records.</td></tr>"
+    )
 
     target_sequence = str(target.get("sequence") or "")
     ecto_start = ectodomain.get("start")
@@ -9592,18 +9602,15 @@ def _fetch_refseq_target(accession: str, *, batch_dir: Path) -> dict[str, Any] |
         lines = [line.strip() for line in fasta_text.splitlines() if line.strip()]
         if not lines or not lines[0].startswith(">"):
             return _fetch_refseq_target_from_ortholog_table(accession, batch_dir=batch_dir)
-        header = lines[0][1:]
         sequence = "".join(lines[1:])
-        gene_symbol = accession
-        for token in header.replace(",", " ").split():
-            cleaned = token.strip("[]();")
-            if cleaned.isupper() and 2 <= len(cleaned) <= 10 and "_" not in cleaned and not cleaned.startswith(("XP", "NP")):
-                gene_symbol = cleaned
-                break
+        # F19-2: do not guess a gene symbol from the FASTA header. Its first
+        # all-capital token is "X1" in "... isoform X1 [Macaca fascicularis]",
+        # which produced gene_exact:X1 UniProt and Gene links on 1,815 mouse
+        # pages. None lets the caller fall back to the page's own symbol.
         return {
             "accession": accession,
             "entry_name": accession,
-            "gene_symbol": gene_symbol,
+            "gene_symbol": None,
             "sequence": sequence,
         }
     except Exception:

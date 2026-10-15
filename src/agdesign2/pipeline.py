@@ -1819,6 +1819,33 @@ class AntigenAnalyzer:
                         coverage=round(alignment.coverage, 2),
                     )
                 )
+            elif ectodomain is None:
+                # SF4b (1,563 mouse pages): with no design region the live path
+                # left identity and coverage None, so mouse GPCR pages showed a
+                # blank Homology row where the human page — through
+                # precomputed.py:330 — shows a full-length number. Mirror it.
+                alignment = global_align(sequence, target.sequence)
+                full_length = Region(
+                    start=1,
+                    end=len(target.sequence),
+                    label="Transferred full-length protein",
+                    source="alignment",
+                )
+                context[species] = {
+                    "available": True,
+                    "target": target,
+                    "ectodomain": full_length,
+                    "ectodomain_sequence": target.sequence,
+                    "alignment": alignment,
+                    "notes": match.notes,
+                }
+                homology.append(
+                    replace(
+                        match,
+                        identity=round(alignment.identity, 2),
+                        coverage=round(alignment.coverage, 2),
+                    )
+                )
             else:
                 context[species] = {
                     "available": True,
