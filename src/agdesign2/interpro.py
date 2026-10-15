@@ -27,6 +27,12 @@ class InterProClient:
                 url,
                 headers={"Accept": "application/json"},
                 cache_namespace="interpro",
+                # The API answers HTTP 204 with an empty body when the protein
+                # has no entries in this database. Without this, the empty body
+                # raised and discarded the entries already read from the other
+                # database (F04b: 179 of 246 affected reports have real
+                # InterPro annotations).
+                allow_empty=True,
             )
             for result in payload.get("results", []):
                 annotations.extend(self._parse_result(database, result))

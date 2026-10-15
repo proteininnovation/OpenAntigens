@@ -3595,6 +3595,58 @@ def _target_aliases(target: dict[str, Any], *, entry: dict[str, Any] | None = No
     return names
 
 
+def _cysteine_empty_reason(report: dict[str, Any]) -> str:
+    """Why the cysteine table is empty — a bare negative read as "no liabilities".
+
+    The analysis needs a structure, and the structure is only fetched when there
+    is a design region or the target is multipass (pipeline.py:254).
+    """
+    topology_class = str((report.get("topology") or {}).get("topology_class") or "")
+    if not report.get("ectodomain") and not topology_class.startswith("multipass"):
+        return (
+            "No design region was defined and the target is not multipass, so no "
+            "structure was loaded and no cysteine analysis was run."
+        )
+    for note in report.get("notes") or []:
+        if not isinstance(note, dict):
+            continue
+        message = str(note.get("message") or "").lower()
+        if "structure" in message and ("fail" in message or "unavailable" in message or "error" in message):
+            return "No structure could be loaded, so no cysteine analysis was run."
+    return "The analyzed region contains no cysteines."
+
+
+def _interpro_lookup_failed(report: dict[str, Any]) -> bool:
+    for note in report.get("notes") or []:
+        if not isinstance(note, dict):
+            continue
+        if "interpro" not in str(note.get("source") or "").strip().lower():
+            continue
+        if "lookup failed" in str(note.get("message") or "").strip().lower():
+            return True
+    return False
+
+
+def _interpro_empty_reason(report: dict[str, Any]) -> str:
+    """Why the InterPro table is empty — three causes, three sentences.
+
+    F04a: the stored list is already filtered to domain-like entries inside the
+    design region (pipeline.py:237, :1746-1753), so "No InterPro annotations."
+    sat beside a cited family accession on 2,205 human / 1,916 mouse pages.
+    """
+    if _interpro_lookup_failed(report):
+        return "The InterPro lookup failed for this report; see Notes."
+    if not report.get("ectodomain"):
+        return (
+            "No design region was defined for this target, so no region-restricted "
+            "domain entries could be listed."
+        )
+    return (
+        "No InterPro domain, repeat or homologous-superfamily entry lies entirely "
+        "inside the design region."
+    )
+
+
 def _dedupe_notes(notes: Any) -> list[Any]:
     """Collapse repeated notes for display.
 
@@ -3729,6 +3781,11 @@ def render_detail_page(
         query_label=query_species_label,
     )
     blast_unavailable = _blast_search_unavailable(report, full_length=False)
+    # F03: with no design region the pipeline never runs the region search and
+    # stores [] (pipeline.py:580, module_refresh.py:166). Printing a completed
+    # negative here put "returned no hits" directly above a full-length hit
+    # table on 1,658 human and 1,598 mouse pages.
+    region_blast_ran = bool(report.get("ectodomain"))
     if cross_hits:
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
@@ -3744,6 +3801,11 @@ def render_detail_page(
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
       <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
+        """
+    elif not region_blast_ran:
+        design_region_cross_html = f"""
+      <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
+      <p class="section-note">No design region was defined for this target, so no region-restricted BLAST search was run. The full-length search below covers the whole sequence.</p>
         """
     else:
         design_region_cross_html = f"""
@@ -3762,6 +3824,17 @@ def render_detail_page(
           </table>
         </div>
         """
+    elif _blast_search_unavailable(report, full_length=True):
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
+        """
+    elif not region_blast_ran:
+        # No region search ran either, so this is the only search the page has.
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">The completed full-length BLAST search returned no sequence similarity hits.</p>
+        """
 
     cysteine_rows = "".join(
         "<tr><td>{position}</td><td>{paired}</td><td>{surface}</td><td>{nearest}</td><td>{warning}</td></tr>".format(
@@ -3772,7 +3845,7 @@ def render_detail_page(
             warning=escape(str(item.get("warning") or "")),
         )
         for item in (report.get("cysteine_analysis") or [])
-    ) or "<tr><td colspan=\"5\">No cysteine analysis available.</td></tr>"
+    ) or f"<tr><td colspan=\"5\">{escape(_cysteine_empty_reason(report))}</td></tr>"
 
     furin_rows = "".join(
         "<tr><td>{boundary}</td><td><code>{motif}</code></td><td>{suggestions}</td></tr>".format(
@@ -3781,7 +3854,13 @@ def render_detail_page(
             suggestions=escape(", ".join(item.get("suggestions") or [])),
         )
         for item in (report.get("furin_sites") or [])
-    ) or "<tr><td colspan=\"3\">No candidate furin-like motifs found.</td></tr>"
+    ) or (
+        "<tr><td colspan=\"3\">No candidate furin-like motifs found in the analyzed "
+        "sequence.</td></tr>"
+        if report.get("target", {}).get("sequence")
+        else "<tr><td colspan=\"3\">No sequence was available, so no furin-like motif "
+        "search was run.</td></tr>"
+    )
 
     ptm_rows = _render_ptm_rows(ptms)
 
@@ -3816,10 +3895,23 @@ def render_detail_page(
         if portal_title != "OpenAntigens Mouse"
         else ""
     )
+    # F05: an empty assembly table is not "no partners". The module only
+    # evaluates canonical integrin chains (pipeline.py:3305), and the mouse
+    # portal does not query Complex Portal at all (mouse_portal.py:157), so the
+    # bare negative stood on all 4,702 mouse pages — 588 of them twins of a
+    # human page that does list curated complexes.
+    assembly_scope_note = (
+        '<p class="section-note">Obligate assembly requirements are only evaluated for '
+        "canonical integrin chains; an empty result here does not rule out an obligate "
+        "partner.</p>"
+    )
+    if portal_title == "OpenAntigens Mouse":
+        assembly_scope_note += (
+            '<p class="section-note">Complex Portal is not queried for mouse targets; '
+            "see the human page for curated complexes.</p>"
+        )
     interaction_assembly_html = (
-        complex_portal_html
-        + assembly_requirements_html
-        or '<p class="section-note">No assembly requirements reported.</p>'
+        complex_portal_html + assembly_requirements_html + assembly_scope_note
     )
 
     soluble_construct_summary_rows = _render_precomputed_construct_summary_rows(
@@ -3864,7 +3956,12 @@ def render_detail_page(
             name=escape(str(item.get("name") or "")),
         )
         for item in interpro_annotations[:50]
-    ) or "<tr><td colspan=\"6\">No InterPro annotations.</td></tr>"
+    ) or f"<tr><td colspan=\"6\">{escape(_interpro_empty_reason(report))}</td></tr>"
+    interpro_scope_note = (
+        "This table lists InterPro and Pfam domain, repeat and homologous-superfamily "
+        "entries that lie entirely inside the design region. Family-level entries are "
+        "shown under Family Context."
+    )
 
     family_html = _render_family_context_section(
         family_context,
@@ -4008,7 +4105,7 @@ def render_detail_page(
           <dt>Label</dt><dd>{escape(str(ectodomain.get('label') or ''))}</dd>
           <dt>Source</dt><dd>{escape(str(ectodomain.get('source') or ''))}</dd>
           <dt>Constructs</dt><dd>{len(constructs)}</dd>
-          <dt>BLAST sequence similarity hits</dt><dd>{len(cross_hits)}</dd>
+          <dt>BLAST sequence similarity hits</dt><dd>{_index_cross_reactivity_count(report)}</dd>
         </dl>
       </article>
     </section>
@@ -4097,6 +4194,7 @@ def render_detail_page(
 
     <section class="card" id="interpro-pfam" data-report-section="InterPro / Pfam">
       <h2>InterPro / Pfam</h2>
+      <p class="section-note">{escape(interpro_scope_note)}</p>
       <table>
         <thead><tr><th>Start</th><th>End</th><th>Source</th><th>Accession</th><th>Type</th><th>Name</th></tr></thead>
         <tbody>{interpro_rows}</tbody>
@@ -4372,8 +4470,8 @@ def _render_construct_card(
         else ""
     )
 
-    evidence_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in evidence) or "<li>None</li>"
-    warning_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in warnings) or "<li>None</li>"
+    evidence_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in evidence) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+    warning_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in warnings) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
     construct_ptms = _features_in_region(ptms, construct.get("start"), construct.get("end")) if ptms else construct.get("ptms") or []
     ptm_list = "".join(
         "<li>{label} <strong>{category}</strong>: {description}</li>".format(
@@ -4382,7 +4480,7 @@ def _render_construct_card(
             description=escape(str(item.get("description") or item.get("type") or "")),
         )
         for item in construct_ptms
-    ) or "<li>None</li>"
+    ) or "<li class=\"muted\">No annotated PTM lies inside this construct.</li>"
     gene_symbol = str(target.get("gene_symbol") or target.get("entry_name") or "TARGET")
     name_symbol = _export_name_symbol(target)
     primary_species = _target_species_key(target)
@@ -4595,7 +4693,7 @@ def _render_construct_card(
             ),
         )
         for segment in gpcr_segments
-    ) or "<li>None</li>"
+    ) or "<li class=\"muted\">No GPCRdb segment overlaps this construct.</li>"
     gpcr_range = construct.get("gpcr_generic_range")
     gpcr_construct_html = ""
     if gpcr_segments or gpcr_range:
@@ -4661,7 +4759,7 @@ def _render_construct_card(
           </div>
           <div>
             <h4>Structural Metrics</h4>
-            <ul>{metrics_html or '<li>None</li>'}</ul>
+            <ul>{metrics_html or '<li class="muted">No structural metric was computed for this construct.</li>'}</ul>
           </div>
           {gpcr_construct_html}
         </div>
@@ -5304,19 +5402,19 @@ def _render_advanced_membrane_suggestions_section(suggestions: list[dict[str, An
         rationale = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("rationale") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         actions = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("suggested_actions") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         evidence = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("evidence") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         warnings = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("warnings") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         region = ""
         if suggestion.get("start") is not None and suggestion.get("end") is not None:
             region = f"<p><strong>Region:</strong> {escape(str(suggestion.get('start')))}-{escape(str(suggestion.get('end')))}</p>"
@@ -5408,9 +5506,9 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
                 action=focus_button,
             )
         )
-        warnings = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("warnings") or [])) or "<li>None</li>"
-        evidence = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("evidence") or [])) or "<li>None</li>"
-        actions = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("suggested_actions") or [])) or "<li>None</li>"
+        warnings = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("warnings") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+        evidence = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("evidence") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+        actions = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("suggested_actions") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         replacement = ""
         if variant.get("replaced_start") is not None and variant.get("replaced_end") is not None:
             replacement = (

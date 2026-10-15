@@ -52,12 +52,27 @@ class HttpClient:
         headers: dict[str, str] | None = None,
         cache_namespace: str = "json",
         cache_key: str | None = None,
+        allow_empty: bool = False,
     ) -> Any:
+        """Fetch and parse JSON.
+
+        ``allow_empty`` is for APIs that answer "nothing here" with HTTP 204 and
+        an empty body: the InterPro API does this per database, and treating it
+        as a parse failure discarded the annotations already fetched from the
+        other database. Only an empty body is forgiven; connection and HTTP
+        errors, and a non-empty body that is not JSON, still raise.
+        """
         cache_path = self._cache_path(cache_namespace, cache_key or url, ".json")
         if cache_path and cache_path.exists():
             return json.loads(cache_path.read_text(encoding="utf-8"))
         payload = self._request(url, headers=headers)
         text = payload.decode("utf-8")
+        if allow_empty and not text.strip():
+            # Cache "{}", not the empty body: a cached "" would raise on every
+            # later read.
+            if cache_path:
+                _atomic_write(cache_path, b"{}")
+            return {}
         # Parse before caching: a 200 response with a non-JSON body (e.g. an
         # HTML maintenance page) must not be written to the cache, or every
         # later read would re-raise JSONDecodeError forever (poisoned cache).
