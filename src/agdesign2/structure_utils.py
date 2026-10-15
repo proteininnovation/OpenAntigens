@@ -314,9 +314,26 @@ def analyze_cysteines(
         if partner is None:
             continue
         if partner in in_range:
+            # Free whoever the model had paired to either end, or the table
+            # contradicts itself: C20 kept pointing at C10 while C10 pointed at
+            # its curated partner C30, and C20 — a genuinely free cysteine —
+            # then never appeared as unpaired or in the Cys->Ser offer.
+            for end in (residue, partner):
+                displaced = paired.pop(end, None)
+                if displaced is not None and displaced not in (residue, partner):
+                    paired.pop(displaced, None)
             paired[residue] = partner
+            paired[partner] = residue
+        elif construct_start <= partner <= construct_end:
+            # Inside the analysed range, yet not a cysteine in the model: the
+            # curated annotation and the structure disagree. Say so, and leave
+            # the residue's own geometric pairing alone rather than destroying
+            # a correct one.
+            outside_partner.setdefault(residue, None)
         else:
-            paired.pop(residue, None)
+            displaced = paired.pop(residue, None)
+            if displaced is not None:
+                paired.pop(displaced, None)
             outside_partner[residue] = partner
 
     unpaired_cysteines = [residue for residue in cysteines if residue not in paired]
@@ -333,12 +350,24 @@ def analyze_cysteines(
             else _is_surface_exposed(residue, atoms)
         )
         warning = None
-        if residue in interchain:
+        if residue in interchain and pair is None:
             warning = INTERCHAIN_DISULFIDE_WARNING
-        elif residue in outside_partner:
+        elif residue in interchain:
+            # The model pairs it here, so the page must not also say the
+            # partner is on another chain.
+            warning = (
+                f"UniProt annotates an interchain disulfide at C{residue}; the model pairs "
+                f"it with C{pair} in this monomer."
+            )
+        elif outside_partner.get(residue) is not None:
             warning = (
                 f"Curated disulfide partner C{outside_partner[residue]} lies outside "
                 "this range."
+            )
+        elif residue in outside_partner:
+            warning = (
+                "A curated disulfide names a partner that is not a cysteine in this "
+                "model; the annotation and the structure disagree."
             )
         elif pair is None and candidates[residue]:
             warning = "Ambiguous cysteine pairing: competing sulfur contacts."

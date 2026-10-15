@@ -151,3 +151,139 @@ class MembraneExposureTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PairingConsistencyTests(unittest.TestCase):
+    """PR-6b: the curated override left the table contradicting itself.
+
+    Writing paired[a] = b without revisiting whoever the model had paired to
+    either end gave C10->C30, C20->C10, C30->C10. C20 claimed a partner that
+    claimed someone else, so a genuinely free cysteine was never listed as
+    unpaired and never offered for Cys->Ser. The configuration is the commit's
+    own "model pairs a different partner" case: 509 human / 198 mouse pages.
+    """
+
+    def test_a_displaced_cysteine_becomes_unpaired(self) -> None:
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 20: (2.0, 0.0, 0.0), 30: (9.0, 0.0, 0.0)})
+        names = {10: "CYS", 20: "CYS", 30: "CYS"}
+        findings = {
+            f.position: f
+            for f in analyze_cysteines(
+                atoms, names, 1, 100,
+                curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description="")],
+            )
+        }
+        self.assertEqual(findings[10].paired_with, 30)
+        self.assertEqual(findings[30].paired_with, 10)
+        self.assertIsNone(findings[20].paired_with)
+
+    def test_the_pairing_is_symmetric(self) -> None:
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 20: (2.0, 0.0, 0.0), 30: (9.0, 0.0, 0.0)})
+        names = {10: "CYS", 20: "CYS", 30: "CYS"}
+        findings = {
+            f.position: f
+            for f in analyze_cysteines(
+                atoms, names, 1, 100,
+                curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description="")],
+            )
+        }
+        for finding in findings.values():
+            if finding.paired_with is not None:
+                self.assertEqual(findings[finding.paired_with].paired_with, finding.position)
+
+    def test_a_curated_partner_that_is_not_a_cysteine_does_not_destroy_a_pairing(self) -> None:
+        # Position 30 is in range but is not CYS in the model. The old code
+        # called it "outside this range" (false) and threw away C10's correct
+        # geometric pairing to C20.
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 20: (2.0, 0.0, 0.0)})
+        names = {10: "CYS", 20: "CYS", 30: "SER"}
+        findings = {
+            f.position: f
+            for f in analyze_cysteines(
+                atoms, names, 1, 100,
+                curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description="")],
+            )
+        }
+        self.assertEqual(findings[10].paired_with, 20)
+        self.assertIn("not a cysteine in this model", findings[10].warning)
+
+    def test_a_model_paired_interchain_residue_is_not_told_otherwise(self) -> None:
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 20: (2.0, 0.0, 0.0)})
+        findings = {
+            f.position: f
+            for f in analyze_cysteines(
+                atoms, {10: "CYS", 20: "CYS"}, 1, 100,
+                curated_disulfides=[Feature(type="DISULFID", start=10, end=10, description="Interchain")],
+            )
+        }
+        self.assertEqual(findings[10].paired_with, 20)
+        self.assertNotIn("partner is on another chain", findings[10].warning)
+        self.assertIn("the model pairs it with C20", findings[10].warning)
+
+
+class MembraneKeyCoverageTests(unittest.TestCase):
+    """PR-6b: every membrane residue needs an explicit key, not just the ones
+    the SASA pass covered. The target set is bounded by the design region, so a
+    membrane cysteine outside it had no key and fell through to the second
+    heuristic — 1,476 construct-level findings on 165 human / 149 mouse pages.
+    """
+
+    def test_a_membrane_residue_outside_the_sasa_scope_still_gets_a_key(self) -> None:
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
+        topology = TopologyAnnotation(
+            topology_class="multipass_compact",
+            extracellular_regions=[Region(start=1, end=38, label="e", source="t")],
+            transmembrane_regions=[Region(start=39, end=59, label="TM1", source="UniProt")],
+            cytoplasmic_regions=[Region(start=60, end=100, label="c", source="t")],
+        )
+        # The SASA pass only covered residue 10; 49 is in TM1 and absent.
+        result = analyzer._withhold_membrane_exposure(
+            {10: True}, sequence_length=100, topology=topology
+        )
+        self.assertIn(49, result)
+        self.assertIsNone(result[49])
+
+    def test_the_stored_classification_is_withheld_too(self) -> None:
+        source = (SRC / "agdesign2" / "pipeline.py").read_text(encoding="utf-8")
+        self.assertIn("No solvent-exposure call is made inside a membrane span.", source)
+
+
+class WarningLabelTests(unittest.TestCase):
+    """PR-6b: F12-B's user-visible half and F11's second producer had no test."""
+
+    def test_the_label_names_a_partner_outside_the_construct(self) -> None:
+        from agdesign2.models import CysteineFinding
+
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
+        label = analyzer._unpaired_cysteine_warning_label(
+            CysteineFinding(position=139, paired_with=None, surface_exposed=None,
+                            partner_outside_range=162)
+        )
+        self.assertIn("curated partner C162 is outside this construct", label)
+
+    def test_the_viewer_payload_withholds_membrane_exposure(self) -> None:
+        """F11's second producer: _build_residue_annotations feeds the 3D
+        viewer and has its own membrane check, separate from the dict."""
+        from types import SimpleNamespace
+
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
+        topology = TopologyAnnotation(
+            topology_class="multipass_compact",
+            extracellular_regions=[Region(start=1, end=38, label="e", source="t")],
+            transmembrane_regions=[Region(start=39, end=59, label="TM1", source="UniProt")],
+        )
+        accessibility = SimpleNamespace(
+            surface_exposed=True, classification="exposed", reason="exposed in the model",
+            full_model_sasa=1.0, full_model_relative_sasa=0.5,
+            domain_context_sasa=1.0, domain_context_relative_sasa=0.5, pae_block_id=None,
+        )
+        annotations = analyzer._build_residue_annotations(
+            sequence="M" * 60,
+            topology=topology,
+            residue_plddt={},
+            surface_accessibility={10: accessibility, 49: accessibility},
+        )
+        by_position = {a.position: a for a in annotations}
+        self.assertIs(by_position[10].surface_exposed, True)
+        self.assertIsNone(by_position[49].surface_exposed, "residue 49 is inside TM1")
+        self.assertIsNone(by_position[49].surface_accessibility)

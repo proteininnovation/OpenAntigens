@@ -1218,8 +1218,19 @@ class AntigenAnalyzer:
                         if locations.get(position) == "membrane" or accessibility is None
                         else accessibility.surface_exposed
                     ),
-                    surface_accessibility=accessibility.classification if accessibility is not None else None,
-                    surface_accessibility_reason=accessibility.reason if accessibility is not None else None,
+                    # Withhold the classification and its reason too: leaving
+                    # them said "exposed", and why, for a residue the page
+                    # refuses to call.
+                    surface_accessibility=(
+                        None
+                        if locations.get(position) == "membrane" or accessibility is None
+                        else accessibility.classification
+                    ),
+                    surface_accessibility_reason=(
+                        "No solvent-exposure call is made inside a membrane span."
+                        if locations.get(position) == "membrane"
+                        else (accessibility.reason if accessibility is not None else None)
+                    ),
                     full_model_sasa=accessibility.full_model_sasa if accessibility is not None else None,
                     full_model_relative_sasa=accessibility.full_model_relative_sasa if accessibility is not None else None,
                     domain_context_sasa=accessibility.domain_context_sasa if accessibility is not None else None,
@@ -1256,10 +1267,19 @@ class AntigenAnalyzer:
         (``structure_utils._is_surface_exposed``) for a residue that is absent.
         """
         locations = self._topology_location_by_residue(sequence_length, topology)
-        return {
+        withheld = {
             residue: (None if locations.get(residue) == "membrane" else value)
             for residue, value in surface_exposure.items()
         }
+        # Every membrane residue gets an explicit key, not just the ones the
+        # SASA pass happened to cover. The SASA target set is bounded by the
+        # design region, so a membrane cysteine outside it had NO key and fell
+        # through to the second heuristic — 1,476 construct-level findings on
+        # 165 human / 149 mouse reports still called such a cysteine exposed.
+        for residue, location in locations.items():
+            if location == "membrane":
+                withheld[residue] = None
+        return withheld
 
     def _topology_location_by_residue(
         self,
