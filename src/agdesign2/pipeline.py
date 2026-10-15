@@ -206,7 +206,11 @@ _GPCR_NAME_TOKENS: tuple[str, ...] = (
     "g protein-coupled receptor", "g-protein coupled receptor", "gpcr",
     "olfactory receptor", "odorant receptor", "vomeronasal",
     "taste receptor", "opsin", "rhodopsin",
-    "frizzled", "smoothened homolog", "adhesion g",
+    # "smoothened", not "smoothened homolog": SMO's protein name is "Protein
+    # smoothened" (the negative list already excludes its modulator). And
+    # "adhesion g protein"/"adhesion g-protein", not "adhesion g", which also
+    # matched "Small cell adhesion glycoprotein".
+    "frizzled", "smoothened", "adhesion g protein", "adhesion g-protein",
     "trace amine-associated receptor", "mas-related",
     "chemokine receptor", "metabotropic glutamate receptor",
     "adrenergic receptor", "muscarinic acetylcholine receptor",
@@ -377,7 +381,6 @@ class AntigenAnalyzer:
             )
         else:
             canonical_family = live_canonical_family
-        interpro_annotations = self._filter_design_annotations(interpro_annotations, topology.ectodomain)
         gpcr_annotation = self._fetch_gpcr_annotation(
             target=target,
             topology=topology.topology,
@@ -385,6 +388,10 @@ class AntigenAnalyzer:
             notes=notes,
         )
         self._clip_ectodomain_to_gpcrdb_tm1(topology, gpcr_annotation, notes)
+        # After the clip, not before: these annotations become domain_* and
+        # repeat_* constructs, so filtering against the un-clipped region left
+        # an InterPro domain reaching into GPCRdb TM1 on offer.
+        interpro_annotations = self._filter_design_annotations(interpro_annotations, topology.ectodomain)
 
         structural_regions: list[Region] = []
         cysteine_analysis: list[CysteineFinding] = []
@@ -722,6 +729,8 @@ class AntigenAnalyzer:
             topology=topology.topology,
             interpro_annotations=interpro_annotations,
             gpcr_annotation=gpcr_annotation,
+            ligand_interactions=ligand_interactions,
+            ptms=ptms,
         )
         gpcr_engineering_variants = self._suggest_gpcr_engineering_variants(
             target=target,
@@ -730,6 +739,7 @@ class AntigenAnalyzer:
             ligand_interactions=ligand_interactions,
             ptms=ptms,
             gpcr_annotation=gpcr_annotation,
+            interpro_annotations=interpro_annotations,
         )
         if topology.ectodomain and self.config.run_cross_reactivity:
             ectodomain_sequence = slice_sequence(target.sequence, topology.ectodomain.start, topology.ectodomain.end)
@@ -3054,6 +3064,8 @@ class AntigenAnalyzer:
         topology: TopologyAnnotation | None,
         interpro_annotations: list[DomainAnnotation],
         gpcr_annotation: GPCRdbAnnotation | None = None,
+        ligand_interactions: list[Feature] | None = None,
+        ptms: list[Feature] | None = None,
     ) -> list[MembraneEngineeringSuggestion]:
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
@@ -3068,8 +3080,8 @@ class AntigenAnalyzer:
                     loop=longest_loop,
                     topology=topology,
                     features=features,
-                    ligand_interactions=[],
-                    ptms=[],
+                    ligand_interactions=ligand_interactions or [],
+                    ptms=ptms or [],
                     gpcr_annotation=gpcr_annotation,
                     domains=features,
                 )
@@ -3253,11 +3265,15 @@ class AntigenAnalyzer:
         ligand_interactions: list[Feature],
         ptms: list[Feature],
         gpcr_annotation: GPCRdbAnnotation | None = None,
+        interpro_annotations: list[DomainAnnotation] | None = None,
     ) -> list[GPCREngineeringVariant]:
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
         tm_count = len(topology.transmembrane_regions)
-        if gpcr_annotation is None and not is_gpcr_by_name(target, []):
+        # The same inputs the advice gate uses. With an empty InterPro list a
+        # target classified only by an InterPro family name got the 7TM advice
+        # block but silently no fusion variants.
+        if gpcr_annotation is None and not is_gpcr_by_name(target, interpro_annotations or []):
             return []
         registry = load_gpcr_engineering_registry(self.config.gpcr_engineering_cassette_registry_path)
         variants: list[GPCREngineeringVariant] = []
@@ -3433,28 +3449,43 @@ class AntigenAnalyzer:
         """
         if gpcr_annotation is None:
             return []
+        # The cassette keeps `retain` residues at each end of the loop, so the
+        # cut points are inside it. Testing loop.start/loop.end over-blocked by
+        # that margin and named a residue the construct does not cut.
+        retain = max(int(self.config.gpcr_loop_fusion_retain_residues), 0)
+        cut_start, cut_end = loop.start + retain, loop.end - retain
+        if cut_start > cut_end:
+            return []
         blockers: list[str] = []
         for segment in gpcr_annotation.segments:
             name = str(segment.name or "").strip().upper()
             if not (name.startswith("TM") or name == "H8"):
                 continue
-            if loop.start > segment.end or loop.end < segment.start:
+            if cut_start > segment.end or cut_end < segment.start:
                 continue
             helix = name[2:] if name.startswith("TM") else ""
             window = GPCR_ICL3_FUSION_WINDOW.get(helix)
             start_generic = _generic_number(segment.generic_start)
             end_generic = _generic_number(segment.generic_end)
-            if window is None or start_generic is None or end_generic is None or segment.end == segment.start:
+            if start_generic is None or end_generic is None or segment.end == segment.start:
                 blockers.append(
                     f"Selected loop overlaps GPCRdb {name} ({segment.start}-{segment.end}); "
                     "no generic numbering is available, so no cut inside an annotated "
                     "transmembrane segment is allowed."
                 )
                 continue
+            if window is None:
+                # Numbering exists, but only TM5/TM6 have a published fusion
+                # window. Say that, rather than that the numbering is missing.
+                blockers.append(
+                    f"Selected loop cuts into GPCRdb {name} ({segment.start}-{segment.end}); "
+                    "a published fusion window exists only for TM5 and TM6."
+                )
+                continue
             # One residue is (end_generic - start_generic) / (end - start) units.
             step = (end_generic - start_generic) / (segment.end - segment.start)
             low, high = window
-            for residue in (loop.start, loop.end):
+            for residue in (cut_start, cut_end):
                 if not (segment.start <= residue <= segment.end):
                     continue
                 generic = start_generic + (residue - segment.start) * step

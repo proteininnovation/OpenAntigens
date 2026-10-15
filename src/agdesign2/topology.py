@@ -589,8 +589,10 @@ def apply_surfy_topology_fallback(
 def _clip_regions_to_transmembrane(regions: list[Region], tm_regions: list[Region]) -> None:
     """Trim each region so it does not reach inside a transmembrane helix.
 
-    A region that a helix splits in two is replaced by the longer half; one
-    entirely inside a helix is dropped.
+    A region that a helix splits is replaced by every piece outside the helix.
+    Keeping only the longer piece silently discarded real annotation: SURFY
+    CY 265-317 across TM7 276-296 lost 265-275 with no note. A region entirely
+    inside a helix is dropped.
     """
     if not tm_regions:
         return
@@ -608,13 +610,11 @@ def _clip_regions_to_transmembrane(regions: list[Region], tm_regions: list[Regio
                 if end > helix.end:
                     next_pieces.append((helix.end + 1, end))
             pieces = next_pieces
-        if not pieces:
-            continue
-        start, end = max(pieces, key=lambda piece: piece[1] - piece[0])
-        if (start, end) == (region.start, region.end):
-            clipped.append(region)
-        else:
-            clipped.append(replace_region(region, start=start, end=end))
+        for start, end in pieces:
+            if (start, end) == (region.start, region.end):
+                clipped.append(region)
+            else:
+                clipped.append(replace_region(region, start=start, end=end))
     regions[:] = clipped
 
 

@@ -163,10 +163,18 @@ class FusionBandTests(unittest.TestCase):
         ],
     )
 
-    def _blockers(self, start: int, end: int, annotation=None):
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+    def _blockers(self, cut_start: int, cut_end: int, annotation=None):
+        """Blockers for a construct that CUTS at ``cut_start``/``cut_end``.
+
+        The cassette keeps ``gpcr_loop_fusion_retain_residues`` at each end, so
+        the loop is wider than the cut. The published A2A numbers below are cut
+        points, so the loop is widened here to match.
+        """
+        config = AnalysisConfig(generate_assets=False, prefer_precomputed_references=False)
+        retain = config.gpcr_loop_fusion_retain_residues
+        analyzer = AntigenAnalyzer(config=config)
         return analyzer._gpcr_band_blockers(
-            loop=Region(start=start, end=end, label="ICL3", source="test"),
+            loop=Region(start=cut_start - retain, end=cut_end + retain, label="ICL3", source="test"),
             gpcr_annotation=self.A2A if annotation is None else annotation,
         )
 
@@ -267,3 +275,107 @@ class SurfyTailTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GpcrWiringTests(unittest.TestCase):
+    """PR-5b: items a red-team round showed no test exercised.
+
+    Reverting each of these left the whole suite green: the band blocker's
+    wiring into the variant path, the F02-C advisory blockers, the F17-3 clip,
+    and the GPCRdb non-404 raise. FusionBandTests called the band helper
+    directly, so the helper was pinned but its use was not.
+    """
+
+    A2A = FusionBandTests.A2A
+
+    def _analyzer(self) -> AntigenAnalyzer:
+        return AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+
+    def test_the_band_blocker_is_wired_into_the_loop_blockers(self) -> None:
+        topology = _seven_tm_topology(AnalysisConfig()).topology
+        blockers = self._analyzer()._gpcr_loop_engineering_blockers(
+            loop=Region(start=199, end=234, label="ICL3", source="t"),
+            topology=topology, features=[], ligand_interactions=[], ptms=[],
+            gpcr_annotation=self.A2A,
+        )
+        self.assertTrue([b for b in blockers if "ICL3-fusion window" in b], blockers)
+
+    def test_a_helix_without_a_window_is_not_said_to_lack_numbering(self) -> None:
+        # Red team: 106 messages claimed "no generic numbering" for TM3/TM4
+        # segments that carry it. Only TM5/TM6 have a published window.
+        annotation = GPCRdbAnnotation(
+            entry_name="x", accession="Q1", name="x",
+            segments=[GPCRdbSegment(name="TM3", start=100, end=130,
+                                    generic_start="3.22x22", generic_end="3.52x52")],
+        )
+        blockers = self._analyzer()._gpcr_band_blockers(
+            loop=Region(start=110, end=125, label="ICL", source="t"), gpcr_annotation=annotation,
+        )
+        self.assertTrue(blockers)
+        self.assertNotIn("no generic numbering", blockers[0])
+        self.assertIn("only for TM5 and TM6", blockers[0])
+
+    def test_the_advisory_screen_says_when_nothing_is_eligible(self) -> None:
+        topology = _seven_tm_topology(AnalysisConfig()).topology
+        suggestions = self._analyzer()._suggest_advanced_membrane_engineering(
+            target=_target("Beta-2 adrenergic receptor"),
+            features=[Feature(type="DOMAIN", start=1, end=510, description="covers everything")],
+            topology=topology, interpro_annotations=[], gpcr_annotation=None,
+        )
+        categories = [s.category for s in suggestions]
+        self.assertIn("gpcr_loop_engineering_blocked", categories)
+        self.assertNotIn("gpcr_loop_engineering", categories)
+
+    def test_the_tm1_clip_trims_and_notes(self) -> None:
+        from agdesign2.topology import TopologyResult
+
+        annotation = GPCRdbAnnotation(
+            entry_name="agrg3", accession="Q1", name="x",
+            segments=[GPCRdbSegment(name="TM1", start=261, end=297)],
+        )
+        result = TopologyResult(
+            ectodomain=Region(start=21, end=270, label="Extracellular", source="topology"),
+            notes=[], topology=None,
+        )
+        notes: list = []
+        self._analyzer()._clip_ectodomain_to_gpcrdb_tm1(result, annotation, notes)
+        self.assertEqual(result.ectodomain.end, 260)
+        self.assertTrue(notes and "GPCRdb places TM1 at 261-297" in notes[0].message)
+
+    def test_the_tm1_clip_runs_before_the_interpro_filter(self) -> None:
+        """Removing the call site left the suite green, and the ORDER matters.
+
+        InterPro annotations surviving the design-region filter become domain_*
+        and repeat_* constructs, so filtering against the un-clipped region put
+        a domain reaching into GPCRdb TM1 back on offer.
+        """
+        source = (SRC / "agdesign2" / "pipeline.py").read_text(encoding="utf-8")
+        clip = source.index("self._clip_ectodomain_to_gpcrdb_tm1(topology, gpcr_annotation, notes)")
+        design_filter = source.index(
+            "interpro_annotations = self._filter_design_annotations(interpro_annotations, topology.ectodomain)"
+        )
+        self.assertLess(clip, design_filter)
+
+    def test_a_non_404_gpcrdb_error_raises(self) -> None:
+        from agdesign2.exceptions import ExternalServiceError
+        from agdesign2.gpcrdb import _is_not_found
+
+        self.assertTrue(_is_not_found(ExternalServiceError("HTTP error for https://x: 404")))
+        self.assertFalse(_is_not_found(ExternalServiceError("HTTP error for https://x: 503")))
+        self.assertFalse(_is_not_found(ExternalServiceError("Connection error for https://x: offline")))
+
+    def test_smoothened_is_a_gpcr_and_its_modulator_is_not(self) -> None:
+        self.assertTrue(is_gpcr_by_name(_target("Protein smoothened"), []))
+        self.assertFalse(is_gpcr_by_name(_target("Modulator of smoothened protein"), []))
+        self.assertFalse(is_gpcr_by_name(_target("Small cell adhesion glycoprotein"), []))
+
+
+class SurfyClipKeepsBothPiecesTests(unittest.TestCase):
+    """PR-5b: a region split by a helix keeps every piece outside it."""
+
+    def test_both_sides_of_a_helix_survive(self) -> None:
+        from agdesign2.topology import _clip_regions_to_transmembrane
+
+        regions = [Region(start=265, end=317, label="CY", source="SURFY")]
+        _clip_regions_to_transmembrane(regions, [Region(start=276, end=296, label="TM7", source="UniProt")])
+        self.assertEqual([(r.start, r.end) for r in regions], [(265, 275), (297, 317)])
