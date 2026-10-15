@@ -1027,6 +1027,10 @@ def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = F
 # the very file an agent fetches first (F21).
 _PER_PORTAL_GUIDE_ARTIFACTS = (
     "downloads.html",
+    "help.html",
+    "builder.html",
+    "constructs.html",
+    "methods.html",
     "downloads/agdesign2_portal_index.json",
     "downloads/agdesign2_portal_index.tsv",
     "downloads/download_manifest.json",
@@ -2016,7 +2020,11 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
 
 def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     is_mouse = portal_title == "OpenAntigens Mouse"
-    target_identity_source = "Reviewed UniProt mouse records" if is_mouse else "Reviewed UniProt human records"
+    target_identity_source = (
+        "Reviewed UniProt mouse records, or the ortholog table's RefSeq record where no reviewed mouse entry exists"
+        if is_mouse
+        else "Reviewed UniProt human records"
+    )
     target_universe_text = (
         "OpenAntigens Mouse contains unique mouse orthologs resolved from the OpenAntigens human target universe. "
         "Targets without a resolved mouse record are omitted, and duplicate mouse records are included once. "
@@ -2047,7 +2055,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         else "Human, mouse, and cynomolgus monkey primary databases use reviewed UniProt protein sets. For cynomolgus monkey, targets without hits in the reviewed set are searched against a broader local UniProt proteome database when that database is configured."
     )
     ortholog_source = (
-        "Reviewed UniProt homolog lookup"
+        "Reviewed UniProt homolog lookup, with the ortholog table's RefSeq sequence as the fallback"
         if is_mouse
         else "Precomputed RefSeq/HCOP-derived ortholog table"
     )
@@ -3890,6 +3898,11 @@ def render_detail_page(
     # negative here put "returned no hits" directly above a full-length hit
     # table on 1,658 human and 1,598 mouse pages.
     region_blast_ran = bool(report.get("ectodomain"))
+    # Mirror pipeline.py:667 / module_refresh.py:132 exactly.
+    full_length_blast_ran = (
+        str((report.get("topology") or {}).get("topology_class") or "").startswith("multipass")
+        or report.get("ectodomain") is None
+    )
     if cross_hits:
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
@@ -3933,10 +3946,16 @@ def render_detail_page(
         <h3>Full-length BLAST sequence similarity hits</h3>
         <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
         """
-    else:
+    elif full_length_blast_ran:
         full_length_cross_html = """
         <h3>Full-length BLAST sequence similarity hits</h3>
         <p class="section-note">The completed full-length BLAST search returned no sequence similarity hits.</p>
+        """
+    else:
+        # The design-region search above is the only one that ran.
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">No full-length BLAST search was run for this target; the design-region search above covers it.</p>
         """
 
     cysteine_rows = "".join(
@@ -4005,7 +4024,7 @@ def render_detail_page(
     # bare negative stood on all 4,702 mouse pages — 588 of them twins of a
     # human page that does list curated complexes.
     non_obligatory_count = len(assembly_requirements) - len(obligatory_assembly_requirements)
-    if obligatory_assembly_requirements:
+    if obligatory_assembly_requirements or complex_portal_complexes:
         assembly_scope_note = ""
     elif non_obligatory_count:
         assembly_scope_note = (

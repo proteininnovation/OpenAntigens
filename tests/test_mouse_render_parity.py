@@ -111,6 +111,10 @@ class MouseMethodsProvenanceTests(unittest.TestCase):
         self.assertNotIn("Each included target is analyzed against reviewed mouse UniProt data", mouse)
         self.assertIn("Most included targets are analyzed against reviewed mouse UniProt data", mouse)
         self.assertIn("RefSeq record named in the report", mouse)
+        # The provenance table two paragraphs below said the opposite.
+        self.assertNotIn("<td>Reviewed UniProt mouse records</td>", mouse)
+        self.assertNotIn("<td>Reviewed UniProt homolog lookup</td>", mouse)
+        self.assertIn("where no reviewed mouse entry exists", mouse)
 
     def test_human_methods_is_untouched(self) -> None:
         human = render_methods_page()
@@ -121,9 +125,26 @@ class MouseMethodsProvenanceTests(unittest.TestCase):
 class AgentGuideLinkTests(unittest.TestCase):
     """F21."""
 
+    # Listed explicitly, not read from _PER_PORTAL_GUIDE_ARTIFACTS: a test that
+    # iterates the constant it is testing passes when the constant shrinks.
+    PER_PORTAL = (
+        "downloads.html",
+        "help.html",
+        "builder.html",
+        "constructs.html",
+        "methods.html",
+        "downloads/agdesign2_portal_index.json",
+        "downloads/agdesign2_portal_index.tsv",
+        "downloads/download_manifest.json",
+        "portal_metadata.json",
+    )
+
+    def test_the_constant_still_covers_every_per_portal_artifact(self) -> None:
+        self.assertEqual(set(_PER_PORTAL_GUIDE_ARTIFACTS), set(self.PER_PORTAL))
+
     def test_mouse_guide_points_at_the_mouse_artifacts(self) -> None:
         mouse = render_agent_guide_page(portal_title="OpenAntigens Mouse")
-        for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+        for artifact in self.PER_PORTAL:
             with self.subTest(artifact=artifact):
                 self.assertIn(f'href="{artifact}"', mouse)
                 self.assertNotIn(f'href="../{artifact}"', mouse)
@@ -142,7 +163,7 @@ class AgentGuideLinkTests(unittest.TestCase):
 
     def test_human_guide_is_unchanged(self) -> None:
         human = render_agent_guide_page()
-        for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+        for artifact in self.PER_PORTAL:
             self.assertIn(f'href="{artifact}"', human)
         self.assertIn("Human index paths are relative to https://openantigens.org/", human)
 

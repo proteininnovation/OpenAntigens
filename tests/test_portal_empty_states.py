@@ -97,6 +97,36 @@ class BlastEmptyStateTests(unittest.TestCase):
                 html = _render(report, title)
                 self.assertIn("The completed BLAST search returned no sequence similarity hits.", html)
 
+    def test_a_design_region_target_does_not_claim_a_completed_full_length_search(self) -> None:
+        """The full-length search runs only for multipass targets and targets
+        with no design region (pipeline.py:667, module_refresh.py:132).
+
+        3,237 human / 2,712 mouse pages have a design region, are not
+        multipass, and never ran it — and none of them carries a BLAST note, so
+        the unavailable check cannot see it either.
+        """
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["topology"] = {"topology_class": "single_pass"}
+                report["cross_reactivity_hits"] = [{"accession": "P1"}]
+                report["full_length_cross_reactivity_hits"] = []
+                report["notes"] = []
+                html = _render(report, title)
+                self.assertNotIn("completed full-length BLAST search returned no", html)
+                self.assertIn("No full-length BLAST search was run for this target", html)
+
+    def test_a_multipass_target_with_no_hits_does_claim_a_completed_search(self) -> None:
+        for title in PORTAL_TITLES:
+            with self.subTest(portal_title=title):
+                report = _region_report()
+                report["topology"] = {"topology_class": "multipass_mixed"}
+                report["cross_reactivity_hits"] = []
+                report["full_length_cross_reactivity_hits"] = []
+                report["notes"] = []
+                html = _render(report, title)
+                self.assertIn("completed full-length BLAST search returned no", html)
+
     def test_full_length_block_has_an_empty_state(self) -> None:
         for title in PORTAL_TITLES:
             with self.subTest(portal_title=title):
@@ -170,6 +200,18 @@ class AssemblyEmptyStateTests(unittest.TestCase):
                 html = _render(report, title)
                 self.assertNotIn("No assembly requirements reported.", html)
                 self.assertIn("only evaluated for canonical integrin chains", html)
+
+    def test_curated_complexes_are_not_followed_by_an_empty_result_claim(self) -> None:
+        # 630 human pages list Complex Portal records; only 26 of them have an
+        # obligatory assembly row, so keying on assembly_requirements alone
+        # left 604 showing the sentence under a populated table.
+        report = _base_report()
+        report["assembly_requirements"] = []
+        report["complex_portal_complexes"] = [
+            {"complex_id": "CPX-1", "name": "A complex", "members": ["X", "Y"]}
+        ]
+        html = _render(report, "OpenAntigens")
+        self.assertNotIn("an empty result here does not rule out", html)
 
     def test_a_populated_table_is_not_followed_by_an_empty_result_claim(self) -> None:
         # 26 human pages do list an obligatory requirement; the scope sentence
