@@ -37,8 +37,10 @@ def is_beta_stranded_transmem(feature: Feature) -> bool:
     annotated "Beta stranded", so C6/C8A/C8B/C9/PRF1/MPEG1, GSDMA/B/D and VDAC1
     — 10 human / 9 mouse reports — became Track Multipass with a blank
     ectodomain, while C7, which has no TRANSMEM at all, is correctly Secreted
-    23-843. These hairpins only insert into a target membrane on activation;
-    the soluble protein is the antigen.
+    23-843. The MACPF and gasdermin hairpins insert into a target membrane only
+    on activation, so the soluble protein is the antigen. VDAC1's strands are a
+    constitutive outer-mitochondrial-membrane barrel — not a plasma-membrane
+    helix bundle either, so it is not multipass in the sense the portal means.
     """
     return "beta" in str(feature.description or "").lower()
 
@@ -130,7 +132,7 @@ def _derive_ectodomain(
         for feature in features
         if feature.type.upper() == "TRANSMEM" and not is_beta_stranded_transmem(feature)
     ]
-    intramembrane_regions = [feature for feature in features if feature.type.upper() == "INTRAMEMBRANE"]
+    intramembrane_regions = [feature for feature in features if feature_type(feature) == "INTRAMEM"]
     signal_regions = [feature for feature in features if feature.type.upper() == "SIGNAL"]
     topo_regions = [feature for feature in features if feature.type.upper() == "TOPO_DOM"]
     if len(tm_regions) == 0:

@@ -2236,7 +2236,10 @@ class AntigenAnalyzer:
     def _annotation_construct_name(self, annotation: DomainAnnotation) -> str:
         base = re.sub(r"[^a-z0-9]+", "_", annotation.name.lower()).strip("_")
         prefix = "repeat" if annotation.type == "repeat" else "domain"
-        return f"{prefix}_{base or annotation.accession.lower()}"
+        # Row 29: two InterPro domains with one name ("Ig-like domain" twice)
+        # gave two spans one construct name — 8,569 domain_* and 907 repeat_*
+        # duplicate instances. The boundary makes it unique.
+        return f"{prefix}_{base or annotation.accession.lower()}_{annotation.start}_{annotation.end}"
 
     def _annotation_seed_score(self, annotation: DomainAnnotation) -> float:
         base_score = 82.0 if annotation.source_database == "INTERPRO" else 80.0

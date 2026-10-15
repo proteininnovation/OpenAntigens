@@ -67,15 +67,27 @@ class UniProtClient:
         """Features of the analysed sequence.
 
         RSM-002: a feature's ``location.sequence`` names the isoform it belongs
-        to. Where the coordinates fall outside the canonical sequence they are
-        another isoform's and must not be applied here — 13 human and 1 mouse
-        report carry such a feature, and on PPAP it is topology-determining.
+        to; canonical features carry none. Such a feature is dropped whether or
+        not its coordinates happen to fit inside the canonical length — the
+        length check alone missed VCAM-1, brevican, AChE and NCAM1, whose
+        isoform-only GPI sites truncated the canonical design region by up to
+        379 residues. Coordinates past the sequence end are dropped too (PPAP's
+        TRANSMEM 382-404 on a 386-aa record).
         """
         if sequence_length is None:
             sequence_length = len(str((entry.get("sequence") or {}).get("value") or "")) or None
+        canonical_ids = {
+            value
+            for value in (self._canonical_isoform_id(entry), str(entry.get("primaryAccession") or ""))
+            if value
+        }
         features: list[Feature] = []
         for feature in entry.get("features", []):
             location = feature.get("location", {})
+            owner = str(location.get("sequence") or "").strip()
+            if owner and owner not in canonical_ids:
+                # Belongs to another isoform; its coordinates are not ours.
+                continue
             start = self._location_value(location.get("start"))
             end = self._location_value(location.get("end"))
             if not start or not end:

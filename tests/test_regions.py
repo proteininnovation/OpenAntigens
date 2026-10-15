@@ -111,15 +111,48 @@ class GpiRegionCapTests(unittest.TestCase):
         self.assertIsNotNone(result.ectodomain)
         self.assertEqual(result.ectodomain.end, 345)
 
-    def test_a_region_already_inside_the_site_is_untouched(self) -> None:
+    def test_a_region_with_no_chain_is_left_untrimmed(self) -> None:
+        # §7's exception: no CHAIN means nothing says the tail is a propeptide.
         features = [
-            Feature(type="SIGNAL", start=1, end=19, description="Signal peptide"),
-            Feature(type="CHAIN", start=20, end=100, description="Mature chain"),
-            Feature(type="LIPID", start=120, end=120, description="GPI-anchor amidated serine"),
+            Feature(type="SIGNAL", start=1, end=18, description="Signal peptide"),
+            Feature(type="LIPID", start=59, end=59, description="GPI-anchor amidated glycine"),
         ]
-        result = derive_ectodomain(features, 150, AnalysisConfig())
-        # The anchor is outside every CHAIN, so the chain branch does not apply.
-        self.assertIsNotNone(result.ectodomain)
+        result = derive_ectodomain(features, 80, AnalysisConfig())
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (19, 80))
+
+    def test_the_chain_branch_caps_on_its_own(self) -> None:
+        """The cap inside _derive_gpi_anchored_region, without the wrapper.
+
+        Reverting it left the suite green because the wrapper also caught it.
+        """
+        from agdesign2.topology import _derive_gpi_anchored_region
+
+        region = _derive_gpi_anchored_region(
+            [Feature(type="CHAIN", start=20, end=375, description="CD14")], 375, [345]
+        )
+        self.assertEqual((region.start, region.end), (20, 345))
+
+
+class IntramembraneTests(unittest.TestCase):
+    """R5-1: the OA-018 alias renamed Intramembrane to INTRAMEM while topology
+    still tested "INTRAMEMBRANE", emptying intramembrane_regions on 361
+    reports — and with it the F11 rule for intramembrane spans."""
+
+    def test_the_new_spelling_is_detected(self) -> None:
+        features = [
+            Feature(type="TRANSMEM", start=30, end=50, description="Helical"),
+            Feature(type="INTRAMEM", start=100, end=120, description="Helical"),
+        ]
+        result = derive_ectodomain(features, 300, AnalysisConfig())
+        self.assertEqual([(r.start, r.end) for r in result.topology.intramembrane_regions], [(100, 120)])
+
+    def test_the_legacy_spelling_still_is(self) -> None:
+        features = [
+            Feature(type="TRANSMEM", start=30, end=50, description="Helical"),
+            Feature(type="INTRAMEMBRANE", start=100, end=120, description="Helical"),
+        ]
+        result = derive_ectodomain(features, 300, AnalysisConfig())
+        self.assertEqual(len(result.topology.intramembrane_regions), 1)
 
 
 class SecretedPrecursorLabelTests(unittest.TestCase):
@@ -263,6 +296,57 @@ class IsoformFeatureTests(unittest.TestCase):
         }
         features = UniProtClient.get_features(UniProtClient.__new__(UniProtClient), entry)
         self.assertEqual([f.type for f in features], ["CHAIN"])
+
+
+class IsoformOwnedFeatureTests(unittest.TestCase):
+    """R5-2: an isoform-only GPI site inside the canonical length capped VCAM-1
+    mouse's canonical region from 25-698 to 25-319."""
+
+    def test_a_feature_owned_by_another_isoform_is_dropped(self) -> None:
+        from agdesign2.uniprot import UniProtClient
+
+        entry = {
+            "primaryAccession": "P29533",
+            "sequence": {"value": "M" * 739},
+            "features": [
+                {"type": "Topological domain", "description": "Extracellular",
+                 "location": {"start": {"value": 25}, "end": {"value": 698}}},
+                {"type": "Lipidation", "description": "GPI-anchor amidated serine",
+                 "location": {"start": {"value": 319}, "end": {"value": 319}, "sequence": "P29533-2"}},
+            ],
+        }
+        features = UniProtClient.get_features(UniProtClient.__new__(UniProtClient), entry)
+        self.assertEqual([f.type for f in features], ["TOPO_DOM"])
+
+    def test_a_feature_naming_the_canonical_isoform_is_kept(self) -> None:
+        from agdesign2.uniprot import UniProtClient
+
+        entry = {
+            "primaryAccession": "P29533",
+            "sequence": {"value": "M" * 739},
+            "features": [
+                {"type": "Lipidation", "description": "GPI-anchor",
+                 "location": {"start": {"value": 319}, "end": {"value": 319}, "sequence": "P29533"}},
+            ],
+        }
+        features = UniProtClient.get_features(UniProtClient.__new__(UniProtClient), entry)
+        self.assertEqual([f.type for f in features], ["LIPID"])
+
+
+class AnnotationConstructNameTests(unittest.TestCase):
+    """R5-3: InterPro domain constructs were named by description alone."""
+
+    def test_two_domains_with_one_name_get_two_names(self) -> None:
+        from agdesign2.models import DomainAnnotation
+        from agdesign2.pipeline import AntigenAnalyzer
+
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
+        first = DomainAnnotation(accession="IPR007110", name="Ig-like domain", source_database="interpro",
+                                 type="domain", start=30, end=120)
+        second = DomainAnnotation(accession="IPR007110", name="Ig-like domain", source_database="interpro",
+                                  type="domain", start=140, end=230)
+        self.assertNotEqual(analyzer._annotation_construct_name(first),
+                            analyzer._annotation_construct_name(second))
 
 
 class SingleTransmembraneNoteTests(unittest.TestCase):
