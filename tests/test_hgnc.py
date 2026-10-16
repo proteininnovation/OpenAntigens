@@ -239,13 +239,15 @@ class HGNCTests(unittest.TestCase):
         self.assertEqual(lookup.predictions["macaca_fascicularis"].gene_symbol, "EGFR")
         self.assertEqual(lookup.predictions["macaca_fascicularis"].ncbi_gene_id, "613027")
 
-    @mock.patch.dict(os.environ, {"AGDESIGN2_ALIGNMENT_BACKEND": "python"})
     def test_long_sequence_identity_uses_global_alignment_in_both_orders(self) -> None:
         fixture = json.loads((Path(__file__).parent / "fixtures/ptprc_mapping.json").read_text())
         query, subject = fixture["human_sequence"], fixture["mouse_sequence"]
         client = HGNCClient(FakeHttpClient(), FakeUniProtClient(), AnalysisConfig())
         forward = client._pairwise_directional_identity(query, subject)
-        self.assertEqual(forward, (42.57, 43.44))
+        # Re-derived for BLOSUM62 11/1 with free end gaps (PR-4). PTPRC human
+        # and mouse are 552 and 541 aa, so the old scheme's length artefact did
+        # not reach them: 42.57/43.44 -> 42.39/43.25.
+        self.assertEqual(forward, (42.39, 43.25))
         client._identity_cache.clear()
         reverse = client._pairwise_directional_identity(subject, query)
         self.assertEqual(reverse, forward[::-1])

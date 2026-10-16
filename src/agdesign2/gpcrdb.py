@@ -11,6 +11,17 @@ GPCRDB_BASE = "https://gpcrdb.org"
 GPCRDB_SERVICES = f"{GPCRDB_BASE}/services"
 
 
+def _is_not_found(exc: Exception) -> bool:
+    """A 404 means GPCRdb has no entry; anything else is a failure.
+
+    F01/OA-003: ``except Exception: return None`` made a transient network error
+    indistinguishable from "not a GPCR". 19 of the 28 mouse GPCR-named reports
+    with no annotation return HTTP 200 from GPCRdb today, so some of those
+    absences were swallowed failures and the code gave no way to tell.
+    """
+    return "HTTP error" in str(exc) and "404" in str(exc)
+
+
 class GPCRdbClient:
     def __init__(self, http: HttpClient) -> None:
         self.http = http
@@ -69,8 +80,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"protein:{entry_name}",
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            if _is_not_found(exc):
+                return None
+            raise
         return payload if isinstance(payload, dict) and payload.get("entry_name") else None
 
     def _fetch_protein_by_accession(self, accession: str) -> dict[str, Any] | None:
@@ -80,8 +93,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"protein_accession:{accession}",
             )
-        except Exception:
-            return None
+        except Exception as exc:
+            if _is_not_found(exc):
+                return None
+            raise
         return payload if isinstance(payload, dict) and payload.get("entry_name") else None
 
     def _fetch_residues(self, entry_name: str) -> list[GPCRdbResidue]:
@@ -91,8 +106,10 @@ class GPCRdbClient:
                 cache_namespace="gpcrdb",
                 cache_key=f"residues:{entry_name}",
             )
-        except Exception:
-            return []
+        except Exception as exc:
+            if _is_not_found(exc):
+                return []
+            raise
         if not isinstance(payload, list):
             return []
         residues: list[GPCRdbResidue] = []
@@ -166,31 +183,88 @@ def _segment_from_group(name: str, residues: list[GPCRdbResidue]) -> GPCRdbSegme
     )
 
 
+# Which generic positions each motif occupies, and which residue each of those
+# positions must carry for the motif to be present. Positions mapped to None are
+# the "x" of the motif name and are unconstrained.
+#
+# F15: the old code set status="detected" whenever GPCRdb had *annotated* every
+# position, without ever looking at the residues — so a receptor whose 3.50 is
+# not an arginine still read "DRY / E/DRY activation motif: detected" on 724
+# human / 407 mouse pages. Position presence is not motif presence.
+MOTIF_DEFINITIONS: tuple[tuple[str, list[str]], ...] = (
+    ("DRY / E/DRY activation motif", ["3.49", "3.50", "3.51"]),
+    ("CWxP / toggle-switch motif", ["6.47", "6.48", "6.49", "6.50"]),
+    ("NPxxY / helix-7 motif", ["7.49", "7.50", "7.51", "7.52", "7.53"]),
+    ("Na+ pocket / class-A D2.50 position", ["2.50"]),
+    ("Class-A N1.50 position", ["1.50"]),
+)
+
+MOTIF_EXPECTED_RESIDUES: dict[str, dict[str, frozenset[str]]] = {
+    "DRY / E/DRY activation motif": {
+        "3.49": frozenset("DE"),
+        "3.50": frozenset("R"),
+        "3.51": frozenset("Y"),
+    },
+    "CWxP / toggle-switch motif": {
+        "6.47": frozenset("C"),
+        "6.48": frozenset("W"),
+        "6.50": frozenset("P"),
+    },
+    "NPxxY / helix-7 motif": {
+        "7.49": frozenset("N"),
+        "7.50": frozenset("P"),
+        "7.53": frozenset("Y"),
+    },
+    "Na+ pocket / class-A D2.50 position": {"2.50": frozenset("D")},
+    "Class-A N1.50 position": {"1.50": frozenset("N")},
+}
+
+
+def motif_status(name: str, residues: dict[str, str], all_positions_present: bool) -> str:
+    """``matched`` / ``variant`` / ``partial`` for one conserved motif.
+
+    ``residues`` maps canonical generic number to the one-letter residue GPCRdb
+    reports at that position. A position the motif does not constrain (the "x")
+    is ignored.
+    """
+    expected = MOTIF_EXPECTED_RESIDUES.get(name) or {}
+    mismatches = [
+        generic
+        for generic, allowed in expected.items()
+        if generic in residues and residues[generic].upper() not in allowed
+    ]
+    if mismatches:
+        return "variant at " + ", ".join(sorted(mismatches))
+    if not all_positions_present:
+        return "partial"
+    if any(generic not in residues for generic in expected):
+        return "partial"
+    return "matched"
+
+
 def _conserved_motifs(residues: list[GPCRdbResidue]) -> list[GPCRdbMotif]:
     by_generic: dict[str, GPCRdbResidue] = {}
     for residue in residues:
         generic = _canonical_generic(residue.display_generic_number)
         if generic:
             by_generic[generic] = residue
-    motifs = [
-        ("DRY / E/DRY activation motif", ["3.49", "3.50", "3.51"]),
-        ("CWxP / toggle-switch motif", ["6.47", "6.48", "6.49", "6.50"]),
-        ("NPxxY / helix-7 motif", ["7.49", "7.50", "7.51", "7.52", "7.53"]),
-        ("Na+ pocket / class-A D2.50 position", ["2.50"]),
-        ("Class-A N1.50 position", ["1.50"]),
-    ]
     detected: list[GPCRdbMotif] = []
-    for name, generics in motifs:
+    for name, generics in MOTIF_DEFINITIONS:
         members = [by_generic[generic] for generic in generics if generic in by_generic]
         if not members:
             continue
+        found = {
+            generic: by_generic[generic].amino_acid
+            for generic in generics
+            if generic in by_generic
+        }
         detected.append(
             GPCRdbMotif(
                 name=name,
                 positions=[item.sequence_number for item in members],
                 generic_numbers=[item.display_generic_number or "" for item in members],
                 sequence="".join(item.amino_acid for item in members),
-                status="detected" if len(members) == len(generics) else "partial",
+                status=motif_status(name, found, len(members) == len(generics)),
             )
         )
     return detected

@@ -333,7 +333,7 @@ def _render_homology_table(records: list[HomologyRecord]) -> list[str]:
         rows.append(
             [
                 record.species,
-                f"`{record.entry_name}`" if record.entry_name else "",
+                f"`{record.entry_name or record.accession}`" if (record.entry_name or record.accession) else "",
                 str(record.ectodomain_start) if record.ectodomain_start is not None else "",
                 str(record.ectodomain_end) if record.ectodomain_end is not None else "",
                 f"{record.identity:.2f}%" if record.identity is not None else "",

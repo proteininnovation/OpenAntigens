@@ -128,6 +128,16 @@ class TopologyTests(unittest.TestCase):
         self.assertTrue(any("without trimming" in note.message for note in result.notes))
 
     def test_transmembrane_topology_takes_precedence_over_gpi_processing(self) -> None:
+        """Tetherin is a genuine TM+GPI protein: the TM branch still decides
+        the class and the N-terminal boundary.
+
+        The C-terminal boundary changed in PR-7 (F16b). A CHAIN bounds the
+        region and contains the omega site at 161, so residues 162-180 are the
+        GPI attachment signal the transamidase removes — they are not in the
+        mature protein and must not be in a construct. Before this, 11 human /
+        116 mouse GPI regions ran past their omega site; the single-pass branch
+        is why 6 of them survived the cap inside _derive_gpi_anchored_region.
+        """
         features = [
             Feature(type="TRANSMEM", start=21, end=43, description="Helical"),
             Feature(type="TOPO_DOM", start=44, end=160, description="Extracellular"),
@@ -135,8 +145,9 @@ class TopologyTests(unittest.TestCase):
             Feature(type="LIPIDATION", start=161, end=161, description="GPI-anchor amidated serine"),
         ]
         result = derive_ectodomain(features, 180, AnalysisConfig())
-        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (44, 180))
+        self.assertEqual((result.ectodomain.start, result.ectodomain.end), (44, 161))
         self.assertEqual(result.topology.topology_class, "single_pass")
+        self.assertTrue(any("omega site" in note.message for note in result.notes))
 
     def test_derives_secreted_chain_from_extracellular_topology_without_tm(self) -> None:
         features = [

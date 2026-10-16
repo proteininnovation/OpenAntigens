@@ -1,0 +1,3684 @@
+{
+  "advanced_membrane_suggestions": [],
+  "assembly_requirements": [
+    {
+      "classification": "interaction_context",
+      "complex_portal_ids": [],
+      "confidence": "medium",
+      "obligatory": false,
+      "partners": [
+        "IL7R",
+        "CSF2RG"
+      ],
+      "rationale": [
+        "Interacts with IL7R and CSF2RG"
+      ],
+      "source": "UniProt SUBUNIT",
+      "summary": "Curated UniProt subunit annotation lists interaction partners or complexes, but this is not sufficient evidence for an obligatory partner requirement."
+    }
+  ],
+  "canonical_family": {
+    "accession": "IPR001181",
+    "coverage_fraction": 100.0,
+    "covered_length": 154,
+    "end": 154,
+    "fragment_count": 1,
+    "name": "Interleukin-7",
+    "notes": [
+      "Coverage across merged family fragments: 154 aa (100.0% of sequence).",
+      "Name similarity to target protein label: 1.00."
+    ],
+    "source_database": "INTERPRO",
+    "start": 1
+  },
+  "complex_portal_complexes": [],
+  "construct_details": [
+    {
+      "classification": "complete_domain",
+      "clipped_domain_annotations": [],
+      "complete_domain_annotations": [
+        {
+          "accession": "PF01415",
+          "end": 153,
+          "integrated_accession": null,
+          "integrated_name": null,
+          "metadata": {
+            "member_database": null,
+            "signature_accession": null,
+            "source_database_raw": "pfam"
+          },
+          "name": "Interleukin 7",
+          "representative": false,
+          "source_database": "PFAM",
+          "start": 26,
+          "type": "domain"
+        }
+      ],
+      "cysteine_analysis": [
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 116,
+          "position": 27,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 133,
+          "position": 58,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 145,
+          "position": 71,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 27,
+          "position": 116,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 58,
+          "position": 133,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 71,
+          "position": 145,
+          "surface_exposed": false,
+          "warning": null
+        }
+      ],
+      "domain_summary": "Captures one complete annotated domain: Interleukin 7 (PF01415)",
+      "end": 154,
+      "evidence": [
+        "Topology-derived ectodomain",
+        "Captures one complete annotated domain: Interleukin 7 (PF01415)"
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": "XP_005563650",
+          "available": true,
+          "end": 175,
+          "entry_name": "XP_005563650",
+          "extracellular_surface_aligned_positions": 96,
+          "extracellular_surface_identity_to_human": 61.46,
+          "identity_to_human": 66.67,
+          "notes": [
+            "Resolved from RefSeq canonical protein candidate XP_005563650."
+          ],
+          "sequence": "DCDIEGKDGKQYESVLMVSIDQLLDSMKEIGSNCLNNEFNFFKRHLCDDNKEGMFLFRAARKLRQFLKMNSTGDFDLHLLKVSEGTTILLNCTGKVKGRKPAALGEAQPTKSLEENKSLKEQKKLNDSCFLKRLLQKIKTCWNKILMGTK",
+          "species": "macaca_fascicularis",
+          "start": 26
+        }
+      ],
+      "human_entry_name": "IL7_MOUSE",
+      "length": 129,
+      "ligand_interactions": [],
+      "name": "full_ectodomain",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "Interleukin-7",
+          "end": 154,
+          "metadata": {
+            "feature_id": "PRO_0000015624",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 26,
+          "type": "CHAIN"
+        },
+        {
+          "description": "",
+          "end": 145,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 27,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 133,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 58,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 116,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 71,
+          "type": "DISULFID"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 94,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 94,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 115,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 115,
+          "type": "CARBOHYD"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "Complete extracellular domain based on topology annotations.",
+      "score": 95.0,
+      "sequence": "ECHIKDKEGKAYESVLMISIDELDKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCTSKEEKNVKEQKKNDACFLKRLLREIKTCWNKILKGSI",
+      "split_diagnostics": [],
+      "start": 26,
+      "structural_metrics": {
+        "max_intra_pae": 28.0,
+        "max_plddt": 96.81,
+        "mean_intra_pae": 6.86,
+        "mean_plddt": 84.64,
+        "min_plddt": 43.62,
+        "structured_fraction": 0.8605
+      },
+      "structure_image": null,
+      "warnings": []
+    },
+    {
+      "classification": "complete_domain",
+      "clipped_domain_annotations": [],
+      "complete_domain_annotations": [
+        {
+          "accession": "PF01415",
+          "end": 153,
+          "integrated_accession": null,
+          "integrated_name": null,
+          "metadata": {
+            "member_database": null,
+            "signature_accession": null,
+            "source_database_raw": "pfam"
+          },
+          "name": "Interleukin 7",
+          "representative": false,
+          "source_database": "PFAM",
+          "start": 26,
+          "type": "domain"
+        }
+      ],
+      "cysteine_analysis": [
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 116,
+          "position": 27,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 133,
+          "position": 58,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 145,
+          "position": 71,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 27,
+          "position": 116,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 58,
+          "position": 133,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 71,
+          "position": 145,
+          "surface_exposed": false,
+          "warning": null
+        }
+      ],
+      "domain_summary": "Captures one complete annotated domain: Interleukin 7 (PF01415)",
+      "end": 153,
+      "evidence": [
+        "PFAM PF01415 Interleukin 7",
+        "Captures one complete annotated domain: Interleukin 7 (PF01415)"
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": "XP_005563650",
+          "available": true,
+          "end": 174,
+          "entry_name": "XP_005563650",
+          "extracellular_surface_aligned_positions": 95,
+          "extracellular_surface_identity_to_human": 62.11,
+          "identity_to_human": 67.19,
+          "notes": [
+            "Resolved from RefSeq canonical protein candidate XP_005563650."
+          ],
+          "sequence": "DCDIEGKDGKQYESVLMVSIDQLLDSMKEIGSNCLNNEFNFFKRHLCDDNKEGMFLFRAARKLRQFLKMNSTGDFDLHLLKVSEGTTILLNCTGKVKGRKPAALGEAQPTKSLEENKSLKEQKKLNDSCFLKRLLQKIKTCWNKILMGT",
+          "species": "macaca_fascicularis",
+          "start": 26
+        }
+      ],
+      "human_entry_name": "IL7_MOUSE",
+      "length": 128,
+      "ligand_interactions": [],
+      "name": "domain_interleukin_7",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "Interleukin-7",
+          "end": 154,
+          "metadata": {
+            "feature_id": "PRO_0000015624",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 26,
+          "type": "CHAIN"
+        },
+        {
+          "description": "",
+          "end": 145,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 27,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 133,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 58,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 116,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 71,
+          "type": "DISULFID"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 94,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 94,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 115,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 115,
+          "type": "CARBOHYD"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "Representative PFAM domain annotation for Interleukin 7.",
+      "score": 85.0,
+      "sequence": "ECHIKDKEGKAYESVLMISIDELDKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCTSKEEKNVKEQKKNDACFLKRLLREIKTCWNKILKGS",
+      "split_diagnostics": [],
+      "start": 26,
+      "structural_metrics": {
+        "max_intra_pae": 28.0,
+        "max_plddt": 96.81,
+        "mean_intra_pae": 6.71,
+        "mean_plddt": 84.96,
+        "min_plddt": 45.78,
+        "structured_fraction": 0.8672
+      },
+      "structure_image": null,
+      "warnings": []
+    },
+    {
+      "classification": "partial_domain",
+      "clipped_domain_annotations": [
+        {
+          "accession": "PF01415",
+          "end": 153,
+          "integrated_accession": null,
+          "integrated_name": null,
+          "metadata": {
+            "member_database": null,
+            "signature_accession": null,
+            "source_database_raw": "pfam"
+          },
+          "name": "Interleukin 7",
+          "representative": false,
+          "source_database": "PFAM",
+          "start": 26,
+          "type": "domain"
+        }
+      ],
+      "complete_domain_annotations": [],
+      "cysteine_analysis": [
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 116,
+          "position": 27,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": 71,
+          "closest_unpaired_cysteine_distance": 21.04,
+          "closest_unpaired_cysteine_distance_atom": "SG-SG",
+          "paired_with": null,
+          "position": 58,
+          "surface_exposed": true,
+          "warning": "Unpaired cysteine appears surface exposed."
+        },
+        {
+          "closest_unpaired_cysteine": 58,
+          "closest_unpaired_cysteine_distance": 21.04,
+          "closest_unpaired_cysteine_distance_atom": "SG-SG",
+          "paired_with": null,
+          "position": 71,
+          "surface_exposed": true,
+          "warning": "Unpaired cysteine appears surface exposed."
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 27,
+          "position": 116,
+          "surface_exposed": true,
+          "warning": null
+        }
+      ],
+      "domain_summary": "Truncates annotated architecture: Interleukin 7 (PF01415)",
+      "end": 117,
+      "evidence": [
+        "AlphaFold strict domain segmentation"
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": "XP_005563650",
+          "available": true,
+          "end": 118,
+          "entry_name": "XP_005563650",
+          "extracellular_surface_aligned_positions": 69,
+          "extracellular_surface_identity_to_human": 59.42,
+          "identity_to_human": 63.04,
+          "notes": [
+            "Resolved from RefSeq canonical protein candidate XP_005563650."
+          ],
+          "sequence": "DCDIEGKDGKQYESVLMVSIDQLLDSMKEIGSNCLNNEFNFFKRHLCDDNKEGMFLFRAARKLRQFLKMNSTGDFDLHLLKVSEGTTILLNCT",
+          "species": "macaca_fascicularis",
+          "start": 26
+        }
+      ],
+      "human_entry_name": "IL7_MOUSE",
+      "length": 92,
+      "ligand_interactions": [],
+      "name": "strict_domain_1",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "Interleukin-7",
+          "end": 154,
+          "metadata": {
+            "feature_id": "PRO_0000015624",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 26,
+          "type": "CHAIN"
+        },
+        {
+          "description": "",
+          "end": 145,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 27,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 133,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 58,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 116,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 71,
+          "type": "DISULFID"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 94,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 94,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 115,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 115,
+          "type": "CARBOHYD"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "More-stringent AlphaFold segmentation intended to isolate likely single extracellular domains.",
+      "score": 68.0,
+      "sequence": "ECHIKDKEGKAYESVLMISIDELDKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCT",
+      "split_diagnostics": [],
+      "start": 26,
+      "structural_metrics": {
+        "max_intra_pae": 27.0,
+        "max_plddt": 96.81,
+        "mean_intra_pae": 5.32,
+        "mean_plddt": 88.43,
+        "min_plddt": 62.19,
+        "structured_fraction": 0.9674
+      },
+      "structure_image": null,
+      "warnings": [
+        "Clips annotated domain architecture: Interleukin 7 (PF01415)",
+        "Contains unpaired cysteine(s): C58 (nearest unpaired C71, 21.04 A SG-SG), C71 (nearest unpaired C58, 21.04 A SG-SG)."
+      ]
+    },
+    {
+      "classification": "partial_domain",
+      "clipped_domain_annotations": [
+        {
+          "accession": "PF01415",
+          "end": 153,
+          "integrated_accession": null,
+          "integrated_name": null,
+          "metadata": {
+            "member_database": null,
+            "signature_accession": null,
+            "source_database_raw": "pfam"
+          },
+          "name": "Interleukin 7",
+          "representative": false,
+          "source_database": "PFAM",
+          "start": 26,
+          "type": "domain"
+        }
+      ],
+      "complete_domain_annotations": [],
+      "cysteine_analysis": [
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 116,
+          "position": 27,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 133,
+          "position": 58,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 145,
+          "position": 71,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 27,
+          "position": 116,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 58,
+          "position": 133,
+          "surface_exposed": true,
+          "warning": null
+        },
+        {
+          "closest_unpaired_cysteine": null,
+          "closest_unpaired_cysteine_distance": null,
+          "closest_unpaired_cysteine_distance_atom": null,
+          "paired_with": 71,
+          "position": 145,
+          "surface_exposed": false,
+          "warning": null
+        }
+      ],
+      "domain_summary": "Truncates annotated architecture: Interleukin 7 (PF01415)",
+      "end": 152,
+      "evidence": [
+        "AlphaFold lenient structured region"
+      ],
+      "gpcr_generic_range": null,
+      "gpcr_segments": [],
+      "homologs": [
+        {
+          "accession": null,
+          "available": false,
+          "end": null,
+          "entry_name": null,
+          "extracellular_surface_aligned_positions": null,
+          "extracellular_surface_identity_to_human": null,
+          "identity_to_human": null,
+          "notes": [
+            "No same-name UniProt entry found for species."
+          ],
+          "sequence": null,
+          "species": "mouse",
+          "start": null
+        },
+        {
+          "accession": "XP_005563650",
+          "available": true,
+          "end": 173,
+          "entry_name": "XP_005563650",
+          "extracellular_surface_aligned_positions": 94,
+          "extracellular_surface_identity_to_human": 62.77,
+          "identity_to_human": 67.72,
+          "notes": [
+            "Resolved from RefSeq canonical protein candidate XP_005563650."
+          ],
+          "sequence": "DCDIEGKDGKQYESVLMVSIDQLLDSMKEIGSNCLNNEFNFFKRHLCDDNKEGMFLFRAARKLRQFLKMNSTGDFDLHLLKVSEGTTILLNCTGKVKGRKPAALGEAQPTKSLEENKSLKEQKKLNDSCFLKRLLQKIKTCWNKILMG",
+          "species": "macaca_fascicularis",
+          "start": 26
+        }
+      ],
+      "human_entry_name": "IL7_MOUSE",
+      "length": 127,
+      "ligand_interactions": [],
+      "name": "lenient_region_1",
+      "pdb_id": null,
+      "ptms": [
+        {
+          "description": "Interleukin-7",
+          "end": 154,
+          "metadata": {
+            "feature_id": "PRO_0000015624",
+            "ptm_category": "molecule processing",
+            "raw_type": "Chain"
+          },
+          "source": "UniProt",
+          "start": 26,
+          "type": "CHAIN"
+        },
+        {
+          "description": "",
+          "end": 145,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 27,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 133,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 58,
+          "type": "DISULFID"
+        },
+        {
+          "description": "",
+          "end": 116,
+          "metadata": {
+            "ptm_category": "disulfide",
+            "raw_type": "Disulfide bond"
+          },
+          "source": "UniProt",
+          "start": 71,
+          "type": "DISULFID"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 94,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 94,
+          "type": "CARBOHYD"
+        },
+        {
+          "description": "N-linked (GlcNAc...) asparagine",
+          "end": 115,
+          "metadata": {
+            "feature_id": "",
+            "ptm_category": "glycosylation",
+            "raw_type": "Glycosylation"
+          },
+          "source": "UniProt",
+          "start": 115,
+          "type": "CARBOHYD"
+        }
+      ],
+      "quality_plot": null,
+      "rationale": "Less-stringent AlphaFold structured region intended to preserve larger cohesive extracellular units, potentially spanning multiple domains.",
+      "score": 66.0,
+      "sequence": "ECHIKDKEGKAYESVLMISIDELDKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCTSKEEKNVKEQKKNDACFLKRLLREIKTCWNKILKG",
+      "split_diagnostics": [],
+      "start": 26,
+      "structural_metrics": {
+        "max_intra_pae": 28.0,
+        "max_plddt": 96.81,
+        "mean_intra_pae": 6.6,
+        "mean_plddt": 85.19,
+        "min_plddt": 45.78,
+        "structured_fraction": 0.874
+      },
+      "structure_image": null,
+      "warnings": [
+        "Clips annotated domain architecture: Interleukin 7 (PF01415)"
+      ]
+    }
+  ],
+  "construct_recommendations": [
+    {
+      "classification": "complete_domain",
+      "end": 154,
+      "evidence": [
+        "Topology-derived ectodomain",
+        "Captures one complete annotated domain: Interleukin 7 (PF01415)"
+      ],
+      "name": "full_ectodomain",
+      "pdb_id": null,
+      "rationale": "Complete extracellular domain based on topology annotations.",
+      "score": 95.0,
+      "start": 26,
+      "warnings": []
+    },
+    {
+      "classification": "complete_domain",
+      "end": 153,
+      "evidence": [
+        "PFAM PF01415 Interleukin 7",
+        "Captures one complete annotated domain: Interleukin 7 (PF01415)"
+      ],
+      "name": "domain_interleukin_7",
+      "pdb_id": null,
+      "rationale": "Representative PFAM domain annotation for Interleukin 7.",
+      "score": 85.0,
+      "start": 26,
+      "warnings": []
+    },
+    {
+      "classification": "partial_domain",
+      "end": 117,
+      "evidence": [
+        "AlphaFold strict domain segmentation"
+      ],
+      "name": "strict_domain_1",
+      "pdb_id": null,
+      "rationale": "More-stringent AlphaFold segmentation intended to isolate likely single extracellular domains.",
+      "score": 68.0,
+      "start": 26,
+      "warnings": [
+        "Clips annotated domain architecture: Interleukin 7 (PF01415)"
+      ]
+    },
+    {
+      "classification": "partial_domain",
+      "end": 152,
+      "evidence": [
+        "AlphaFold lenient structured region"
+      ],
+      "name": "lenient_region_1",
+      "pdb_id": null,
+      "rationale": "Less-stringent AlphaFold structured region intended to preserve larger cohesive extracellular units, potentially spanning multiple domains.",
+      "score": 66.0,
+      "start": 26,
+      "warnings": [
+        "Clips annotated domain architecture: Interleukin 7 (PF01415)"
+      ]
+    }
+  ],
+  "cross_reactivity_hits": [
+    {
+      "alignment_length": 149,
+      "alignment_source": "BLAST",
+      "bitscore": 158.0,
+      "coverage": 99.2248062015504,
+      "description": "sp|P13232|IL7_HUMAN Interleukin-7 OS=Homo sapiens OX=9606 GN=IL7 PE=1 SV=1",
+      "evalue": 1.22e-50,
+      "extracellular_surface_aligned_positions": 95,
+      "extracellular_surface_identity": 60.0,
+      "extracellular_surface_matches": 57,
+      "identity": 56.376,
+      "query_alignment": "ECHIKDKEGKAYESVLMISIDEL-DKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCTSK-------------------EEKNVKEQKK-NDACFLKRLLREIKTCWNKILKGS",
+      "query_alignment_annotation": "SSSSS.SS.SSSSSS.SS.SSS..SSSSSSSSSSSSSSSS.SSS.SSSSSSS.S.S.S..SSSSSSSSSSSSSS..S..SS..S...S..SSSSS...................SSSSSSSSSS.SSSS...S..SS.SS..SS..SSS",
+      "query_end": 128,
+      "query_start": 1,
+      "species": "Homo sapiens",
+      "subject_alignment": "DCDIEGKDGKQYESVLMVSIDQLLDSMKEIGSNCLNNEFNFFKRHICDANKEGMFLFRAARKLRQFLKMNSTGDFDLHLLKVSEGTTILLNCTGQVKGRKPAALGEAQPTKSLEENKSLKEQKKLNDLCFLKRLLQEIKTCWNKILMGT",
+      "subject_end": 174,
+      "subject_id": "sp|P13232|IL7_HUMAN",
+      "subject_start": 26
+    }
+  ],
+  "cysteine_analysis": [
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 116,
+      "position": 27,
+      "surface_exposed": true,
+      "warning": null
+    },
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 133,
+      "position": 58,
+      "surface_exposed": true,
+      "warning": null
+    },
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 145,
+      "position": 71,
+      "surface_exposed": true,
+      "warning": null
+    },
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 27,
+      "position": 116,
+      "surface_exposed": true,
+      "warning": null
+    },
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 58,
+      "position": 133,
+      "surface_exposed": true,
+      "warning": null
+    },
+    {
+      "closest_unpaired_cysteine": null,
+      "closest_unpaired_cysteine_distance": null,
+      "closest_unpaired_cysteine_distance_atom": null,
+      "paired_with": 71,
+      "position": 145,
+      "surface_exposed": false,
+      "warning": null
+    }
+  ],
+  "ectodomain": {
+    "confidence": 0.8,
+    "end": 154,
+    "label": "Secreted mature chain",
+    "metadata": {},
+    "source": "topology",
+    "start": 26
+  },
+  "ectodomain_homology": [
+    {
+      "accession": "P13232",
+      "available": true,
+      "coverage": 100.0,
+      "ectodomain_end": 177,
+      "ectodomain_start": 26,
+      "entry_name": "IL7_HUMAN",
+      "extracellular_surface_aligned_positions": 96,
+      "extracellular_surface_identity": 61.46,
+      "identity": 66.67,
+      "notes": [
+        "No transmembrane region detected; treating the mature secreted chain as the extracellular design region."
+      ],
+      "species": "human"
+    },
+    {
+      "accession": "XP_005563650",
+      "available": true,
+      "coverage": 100.0,
+      "ectodomain_end": 175,
+      "ectodomain_start": 26,
+      "entry_name": "XP_005563650",
+      "extracellular_surface_aligned_positions": 96,
+      "extracellular_surface_identity": 61.46,
+      "identity": 66.67,
+      "notes": [
+        "Resolved from RefSeq canonical protein candidate XP_005563650."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "experimental_constructs": [],
+  "family_context": null,
+  "features": [
+    {
+      "description": "",
+      "end": 25,
+      "metadata": {
+        "raw_type": "Signal"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "SIGNAL"
+    },
+    {
+      "description": "Interleukin-7",
+      "end": 154,
+      "metadata": {
+        "feature_id": "PRO_0000015624",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 26,
+      "type": "CHAIN"
+    },
+    {
+      "description": "",
+      "end": 145,
+      "metadata": {
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 27,
+      "type": "DISULFID"
+    },
+    {
+      "description": "",
+      "end": 133,
+      "metadata": {
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 58,
+      "type": "DISULFID"
+    },
+    {
+      "description": "",
+      "end": 116,
+      "metadata": {
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 71,
+      "type": "DISULFID"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 94,
+      "metadata": {
+        "feature_id": "",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 94,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 115,
+      "metadata": {
+        "feature_id": "",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 115,
+      "type": "CARBOHYD"
+    }
+  ],
+  "full_length_cross_reactivity_hits": [],
+  "full_length_family_context": null,
+  "furin_sites": [],
+  "gpcr_annotation": null,
+  "gpcr_engineering_variants": [],
+  "interpro_annotations": [
+    {
+      "accession": "PF01415",
+      "end": 153,
+      "integrated_accession": null,
+      "integrated_name": null,
+      "metadata": {
+        "member_database": null,
+        "signature_accession": null,
+        "source_database_raw": "pfam"
+      },
+      "name": "Interleukin 7",
+      "representative": false,
+      "source_database": "PFAM",
+      "start": 26,
+      "type": "domain"
+    }
+  ],
+  "ligand_interactions": [],
+  "metadata": {
+    "construct_identity_label": "Identity to mouse source",
+    "human_source_target": {
+      "accession": "P13232",
+      "entry_name": "IL7_HUMAN",
+      "gene_symbol": "IL7",
+      "protein_name": "Interleukin-7"
+    },
+    "mouse_sequence_provenance": {
+      "alphafold_accession": "",
+      "alphafold_status": "",
+      "identifier_source": "uniprot_reviewed_mouse_gene_symbol",
+      "refseq_accession": "P10168",
+      "sequence_source": "uniprot_reviewed_mouse_gene_symbol"
+    },
+    "portal_species": "mouse",
+    "source_database": "mouse_openantigens_structure_analysis"
+  },
+  "notes": [
+    {
+      "message": "Resolved from UniProt entry name.",
+      "severity": "info",
+      "source": "UniProt"
+    },
+    {
+      "message": "No transmembrane region detected; treating the mature secreted chain as the extracellular design region.",
+      "severity": "info",
+      "source": "topology"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: IL7_HUMAN P13232.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "This mouse report was generated by running the OpenAntigens structure-aware construct pipeline on the mouse ortholog target.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    },
+    {
+      "message": "Source human OpenAntigens target: IL7_HUMAN P13232.",
+      "severity": "info",
+      "source": "OpenAntigens Mouse"
+    }
+  ],
+  "ptms": [
+    {
+      "description": "",
+      "end": 25,
+      "metadata": {
+        "ptm_category": "molecule processing",
+        "raw_type": "Signal"
+      },
+      "source": "UniProt",
+      "start": 1,
+      "type": "SIGNAL"
+    },
+    {
+      "description": "Interleukin-7",
+      "end": 154,
+      "metadata": {
+        "feature_id": "PRO_0000015624",
+        "ptm_category": "molecule processing",
+        "raw_type": "Chain"
+      },
+      "source": "UniProt",
+      "start": 26,
+      "type": "CHAIN"
+    },
+    {
+      "description": "",
+      "end": 145,
+      "metadata": {
+        "ptm_category": "disulfide",
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 27,
+      "type": "DISULFID"
+    },
+    {
+      "description": "",
+      "end": 133,
+      "metadata": {
+        "ptm_category": "disulfide",
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 58,
+      "type": "DISULFID"
+    },
+    {
+      "description": "",
+      "end": 116,
+      "metadata": {
+        "ptm_category": "disulfide",
+        "raw_type": "Disulfide bond"
+      },
+      "source": "UniProt",
+      "start": 71,
+      "type": "DISULFID"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 94,
+      "metadata": {
+        "feature_id": "",
+        "ptm_category": "glycosylation",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 94,
+      "type": "CARBOHYD"
+    },
+    {
+      "description": "N-linked (GlcNAc...) asparagine",
+      "end": 115,
+      "metadata": {
+        "feature_id": "",
+        "ptm_category": "glycosylation",
+        "raw_type": "Glycosylation"
+      },
+      "source": "UniProt",
+      "start": 115,
+      "type": "CARBOHYD"
+    }
+  ],
+  "residue_annotations": [
+    {
+      "amino_acid": "M",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 40.28,
+      "position": 1,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 31.67,
+      "position": 2,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "H",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 39.09,
+      "position": 3,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 49.38,
+      "position": 4,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 47.09,
+      "position": 5,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 54.47,
+      "position": 6,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 46.66,
+      "position": 7,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "Y",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 47.84,
+      "position": 8,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 60.97,
+      "position": 9,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 50.53,
+      "position": 10,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "G",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 50.69,
+      "position": 11,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 58.09,
+      "position": 12,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "P",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 48.84,
+      "position": 13,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "P",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 50.97,
+      "position": 14,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 51.19,
+      "position": 15,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 57.69,
+      "position": 16,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 48.41,
+      "position": 17,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 52.5,
+      "position": 18,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 48.62,
+      "position": 19,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 44.78,
+      "position": 20,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "P",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 43.38,
+      "position": 21,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 45.34,
+      "position": 22,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 45.25,
+      "position": 23,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 52.81,
+      "position": 24,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 59.31,
+      "position": 25,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": null,
+      "surface_accessibility_reason": null,
+      "surface_exposed": null,
+      "topology_location": "unknown"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4772,
+      "full_model_sasa": 106.41,
+      "pae_block_id": null,
+      "plddt": 77.69,
+      "position": 26,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": 0.2001,
+      "domain_context_sasa": 33.42,
+      "full_model_relative_sasa": 0.1168,
+      "full_model_sasa": 19.51,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 87.44,
+      "position": 27,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "H",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5055,
+      "full_model_sasa": 113.22,
+      "pae_block_id": null,
+      "plddt": 88.88,
+      "position": 28,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": 0.2877,
+      "domain_context_sasa": 56.68,
+      "full_model_relative_sasa": 0.136,
+      "full_model_sasa": 26.79,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 89.44,
+      "position": 29,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5409,
+      "full_model_sasa": 127.65,
+      "pae_block_id": null,
+      "plddt": 87.06,
+      "position": 30,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": 0.1872,
+      "domain_context_sasa": 36.13,
+      "full_model_relative_sasa": 0.1428,
+      "full_model_sasa": 27.56,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 80.56,
+      "position": 31,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6029,
+      "full_model_sasa": 142.28,
+      "pae_block_id": null,
+      "plddt": 78.31,
+      "position": 32,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5508,
+      "full_model_sasa": 122.84,
+      "pae_block_id": null,
+      "plddt": 82.94,
+      "position": 33,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "G",
+      "domain_context_relative_sasa": 0.1744,
+      "domain_context_sasa": 18.14,
+      "full_model_relative_sasa": 0.0023,
+      "full_model_sasa": 0.24,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 85.69,
+      "position": 34,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5926,
+      "full_model_sasa": 139.85,
+      "pae_block_id": null,
+      "plddt": 88.06,
+      "position": 35,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2885,
+      "full_model_sasa": 37.22,
+      "pae_block_id": null,
+      "plddt": 89.88,
+      "position": 36,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "Y",
+      "domain_context_relative_sasa": 0.3726,
+      "domain_context_sasa": 98.0,
+      "full_model_relative_sasa": 0.0036,
+      "full_model_sasa": 0.96,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 91.12,
+      "position": 37,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4147,
+      "full_model_sasa": 92.48,
+      "pae_block_id": null,
+      "plddt": 90.69,
+      "position": 38,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4556,
+      "full_model_sasa": 70.63,
+      "pae_block_id": null,
+      "plddt": 91.06,
+      "position": 39,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4287,
+      "full_model_sasa": 74.6,
+      "pae_block_id": null,
+      "plddt": 93.62,
+      "position": 40,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.0449,
+      "domain_context_sasa": 9.03,
+      "full_model_relative_sasa": 0.0205,
+      "full_model_sasa": 4.13,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 95.5,
+      "position": 41,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "M",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.272,
+      "full_model_sasa": 60.92,
+      "pae_block_id": null,
+      "plddt": 94.88,
+      "position": 42,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5378,
+      "full_model_sasa": 105.94,
+      "pae_block_id": null,
+      "plddt": 95.69,
+      "position": 43,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": 0.0459,
+      "domain_context_sasa": 7.11,
+      "full_model_relative_sasa": 0.0459,
+      "full_model_sasa": 7.11,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 96.5,
+      "position": 44,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": 0.3552,
+      "domain_context_sasa": 69.97,
+      "full_model_relative_sasa": 0.0158,
+      "full_model_sasa": 3.11,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 96.19,
+      "position": 45,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2546,
+      "full_model_sasa": 49.13,
+      "pae_block_id": null,
+      "plddt": 94.94,
+      "position": 46,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2134,
+      "full_model_sasa": 47.58,
+      "pae_block_id": null,
+      "plddt": 94.62,
+      "position": 47,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.0908,
+      "domain_context_sasa": 18.26,
+      "full_model_relative_sasa": 0.0,
+      "full_model_sasa": 0.0,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 93.88,
+      "position": 48,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3162,
+      "full_model_sasa": 61.03,
+      "pae_block_id": null,
+      "plddt": 91.12,
+      "position": 49,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.619,
+      "full_model_sasa": 146.09,
+      "pae_block_id": null,
+      "plddt": 90.56,
+      "position": 50,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "M",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2836,
+      "full_model_sasa": 63.53,
+      "pae_block_id": null,
+      "plddt": 89.38,
+      "position": 51,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": 0.5842,
+      "domain_context_sasa": 100.48,
+      "full_model_relative_sasa": 0.1451,
+      "full_model_sasa": 24.96,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 85.69,
+      "position": 52,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "G",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3505,
+      "full_model_sasa": 36.45,
+      "pae_block_id": null,
+      "plddt": 76.69,
+      "position": 53,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7425,
+      "full_model_sasa": 127.7,
+      "pae_block_id": null,
+      "plddt": 67.0,
+      "position": 54,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4033,
+      "full_model_sasa": 77.85,
+      "pae_block_id": null,
+      "plddt": 64.62,
+      "position": 55,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5812,
+      "full_model_sasa": 90.09,
+      "pae_block_id": null,
+      "plddt": 62.19,
+      "position": 56,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.753,
+      "full_model_sasa": 146.83,
+      "pae_block_id": null,
+      "plddt": 76.31,
+      "position": 57,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2903,
+      "full_model_sasa": 48.48,
+      "pae_block_id": null,
+      "plddt": 82.25,
+      "position": 58,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "P",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5601,
+      "full_model_sasa": 89.05,
+      "pae_block_id": null,
+      "plddt": 80.56,
+      "position": 59,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7973,
+      "full_model_sasa": 155.47,
+      "pae_block_id": null,
+      "plddt": 77.88,
+      "position": 60,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5299,
+      "full_model_sasa": 103.33,
+      "pae_block_id": null,
+      "plddt": 82.06,
+      "position": 61,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3177,
+      "full_model_sasa": 70.86,
+      "pae_block_id": null,
+      "plddt": 77.88,
+      "position": 62,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "P",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2108,
+      "full_model_sasa": 33.52,
+      "pae_block_id": null,
+      "plddt": 84.44,
+      "position": 63,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4684,
+      "full_model_sasa": 91.34,
+      "pae_block_id": null,
+      "plddt": 86.25,
+      "position": 64,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": 0.1876,
+      "domain_context_sasa": 45.02,
+      "full_model_relative_sasa": 0.0606,
+      "full_model_sasa": 14.55,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 89.12,
+      "position": 65,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": 0.4128,
+      "domain_context_sasa": 99.06,
+      "full_model_relative_sasa": 0.0486,
+      "full_model_sasa": 11.67,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 88.56,
+      "position": 66,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5762,
+      "full_model_sasa": 157.88,
+      "pae_block_id": null,
+      "plddt": 86.56,
+      "position": 67,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6448,
+      "full_model_sasa": 152.17,
+      "pae_block_id": null,
+      "plddt": 87.69,
+      "position": 68,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "H",
+      "domain_context_relative_sasa": 0.1743,
+      "domain_context_sasa": 39.03,
+      "full_model_relative_sasa": 0.1743,
+      "full_model_sasa": 39.03,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 89.75,
+      "position": 69,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5254,
+      "full_model_sasa": 91.42,
+      "pae_block_id": null,
+      "plddt": 90.25,
+      "position": 70,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": 0.4446,
+      "domain_context_sasa": 74.24,
+      "full_model_relative_sasa": 0.1423,
+      "full_model_sasa": 23.77,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 92.31,
+      "position": 71,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2193,
+      "full_model_sasa": 42.32,
+      "pae_block_id": null,
+      "plddt": 87.88,
+      "position": 72,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5717,
+      "full_model_sasa": 110.35,
+      "pae_block_id": null,
+      "plddt": 84.38,
+      "position": 73,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7088,
+      "full_model_sasa": 121.91,
+      "pae_block_id": null,
+      "plddt": 85.0,
+      "position": 74,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4747,
+      "full_model_sasa": 112.04,
+      "pae_block_id": null,
+      "plddt": 88.19,
+      "position": 75,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": 0.3373,
+      "domain_context_sasa": 75.21,
+      "full_model_relative_sasa": 0.1249,
+      "full_model_sasa": 27.85,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 91.44,
+      "position": 76,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": 0.0457,
+      "domain_context_sasa": 5.89,
+      "full_model_relative_sasa": 0.0457,
+      "full_model_sasa": 5.89,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 91.5,
+      "position": 77,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": 0.2005,
+      "domain_context_sasa": 25.87,
+      "full_model_relative_sasa": 0.1447,
+      "full_model_sasa": 18.67,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 90.88,
+      "position": 78,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": 0.1621,
+      "domain_context_sasa": 38.89,
+      "full_model_relative_sasa": 0.0229,
+      "full_model_sasa": 5.49,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 93.5,
+      "position": 79,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.3421,
+      "domain_context_sasa": 68.76,
+      "full_model_relative_sasa": 0.0,
+      "full_model_sasa": 0.0,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 94.44,
+      "position": 80,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": 0.0695,
+      "domain_context_sasa": 13.54,
+      "full_model_relative_sasa": 0.0627,
+      "full_model_sasa": 12.22,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 92.69,
+      "position": 81,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.243,
+      "full_model_sasa": 66.59,
+      "pae_block_id": null,
+      "plddt": 92.06,
+      "position": 82,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": 0.1785,
+      "domain_context_sasa": 23.03,
+      "full_model_relative_sasa": 0.0,
+      "full_model_sasa": 0.0,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 93.88,
+      "position": 83,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": 0.0106,
+      "domain_context_sasa": 1.36,
+      "full_model_relative_sasa": 0.0002,
+      "full_model_sasa": 0.03,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 94.12,
+      "position": 84,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3101,
+      "full_model_sasa": 84.96,
+      "pae_block_id": null,
+      "plddt": 91.75,
+      "position": 85,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": 0.3694,
+      "domain_context_sasa": 87.18,
+      "full_model_relative_sasa": 0.1029,
+      "full_model_sasa": 24.28,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 91.44,
+      "position": 86,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.2713,
+      "domain_context_sasa": 54.53,
+      "full_model_relative_sasa": 0.0006,
+      "full_model_sasa": 0.13,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 92.5,
+      "position": 87,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3168,
+      "full_model_sasa": 74.76,
+      "pae_block_id": null,
+      "plddt": 91.12,
+      "position": 88,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "Q",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2251,
+      "full_model_sasa": 50.65,
+      "pae_block_id": null,
+      "plddt": 89.31,
+      "position": 89,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": 0.3697,
+      "domain_context_sasa": 88.72,
+      "full_model_relative_sasa": 0.0204,
+      "full_model_sasa": 4.9,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 89.56,
+      "position": 90,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2037,
+      "full_model_sasa": 40.93,
+      "pae_block_id": null,
+      "plddt": 88.62,
+      "position": 91,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7201,
+      "full_model_sasa": 169.96,
+      "pae_block_id": null,
+      "plddt": 83.81,
+      "position": 92,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "M",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2259,
+      "full_model_sasa": 50.6,
+      "pae_block_id": null,
+      "plddt": 77.88,
+      "position": 93,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5865,
+      "full_model_sasa": 114.36,
+      "pae_block_id": null,
+      "plddt": 78.25,
+      "position": 94,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4992,
+      "full_model_sasa": 98.33,
+      "pae_block_id": null,
+      "plddt": 82.06,
+      "position": 95,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.322,
+      "full_model_sasa": 49.91,
+      "pae_block_id": null,
+      "plddt": 90.75,
+      "position": 96,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6634,
+      "full_model_sasa": 147.94,
+      "pae_block_id": null,
+      "plddt": 93.44,
+      "position": 97,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4519,
+      "full_model_sasa": 100.78,
+      "pae_block_id": null,
+      "plddt": 93.94,
+      "position": 98,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": 0.0445,
+      "domain_context_sasa": 10.68,
+      "full_model_relative_sasa": 0.0046,
+      "full_model_sasa": 1.09,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 93.0,
+      "position": 99,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": 0.1556,
+      "domain_context_sasa": 30.34,
+      "full_model_relative_sasa": 0.1556,
+      "full_model_sasa": 30.34,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 93.81,
+      "position": 100,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4749,
+      "full_model_sasa": 82.63,
+      "pae_block_id": null,
+      "plddt": 95.94,
+      "position": 101,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "H",
+      "domain_context_relative_sasa": 0.1543,
+      "domain_context_sasa": 34.55,
+      "full_model_relative_sasa": 0.1543,
+      "full_model_sasa": 34.55,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 96.5,
+      "position": 102,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.0217,
+      "domain_context_sasa": 4.36,
+      "full_model_relative_sasa": 0.0017,
+      "full_model_sasa": 0.35,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 95.12,
+      "position": 103,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3188,
+      "full_model_sasa": 64.07,
+      "pae_block_id": null,
+      "plddt": 96.06,
+      "position": 104,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.244,
+      "full_model_sasa": 41.97,
+      "pae_block_id": null,
+      "plddt": 96.81,
+      "position": 105,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": 0.0382,
+      "domain_context_sasa": 6.64,
+      "full_model_relative_sasa": 0.0002,
+      "full_model_sasa": 0.03,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 96.44,
+      "position": 106,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": 0.0006,
+      "domain_context_sasa": 0.09,
+      "full_model_relative_sasa": 0.0006,
+      "full_model_sasa": 0.09,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 95.0,
+      "position": 107,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "Q",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4053,
+      "full_model_sasa": 91.19,
+      "pae_block_id": null,
+      "plddt": 94.5,
+      "position": 108,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "G",
+      "domain_context_relative_sasa": 0.1853,
+      "domain_context_sasa": 19.27,
+      "full_model_relative_sasa": 0.1853,
+      "full_model_sasa": 19.27,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 94.75,
+      "position": 109,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": 0.0876,
+      "domain_context_sasa": 15.06,
+      "full_model_relative_sasa": 0.0015,
+      "full_model_sasa": 0.26,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 94.44,
+      "position": 110,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "Q",
+      "domain_context_relative_sasa": 0.1996,
+      "domain_context_sasa": 44.92,
+      "full_model_relative_sasa": 0.1996,
+      "full_model_sasa": 44.92,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 92.44,
+      "position": 111,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5198,
+      "full_model_sasa": 89.4,
+      "pae_block_id": null,
+      "plddt": 91.88,
+      "position": 112,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": 0.1698,
+      "domain_context_sasa": 34.14,
+      "full_model_relative_sasa": 0.1092,
+      "full_model_sasa": 21.95,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 92.5,
+      "position": 113,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": 0.0399,
+      "domain_context_sasa": 6.95,
+      "full_model_relative_sasa": 0.0298,
+      "full_model_sasa": 5.19,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 90.88,
+      "position": 114,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3836,
+      "full_model_sasa": 74.8,
+      "pae_block_id": null,
+      "plddt": 83.25,
+      "position": 115,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": 0.2451,
+      "domain_context_sasa": 40.94,
+      "full_model_relative_sasa": 0.1564,
+      "full_model_sasa": 26.11,
+      "pae_block_id": "pae_block_1:26-117",
+      "plddt": 87.0,
+      "position": 116,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Buried in the full model but exposed when SASA is computed within the PAE-coherent block.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5265,
+      "full_model_sasa": 90.56,
+      "pae_block_id": null,
+      "plddt": 77.0,
+      "position": 117,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5115,
+      "full_model_sasa": 79.28,
+      "pae_block_id": null,
+      "plddt": 66.31,
+      "position": 118,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.5575,
+      "full_model_sasa": 131.56,
+      "pae_block_id": null,
+      "plddt": 53.62,
+      "position": 119,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6652,
+      "full_model_sasa": 148.33,
+      "pae_block_id": null,
+      "plddt": 52.09,
+      "position": 120,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4063,
+      "full_model_sasa": 90.6,
+      "pae_block_id": null,
+      "plddt": 52.91,
+      "position": 121,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7371,
+      "full_model_sasa": 173.95,
+      "pae_block_id": null,
+      "plddt": 50.44,
+      "position": 122,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6312,
+      "full_model_sasa": 123.08,
+      "pae_block_id": null,
+      "plddt": 51.19,
+      "position": 123,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "V",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6547,
+      "full_model_sasa": 113.91,
+      "pae_block_id": null,
+      "plddt": 50.97,
+      "position": 124,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 49.72,
+      "position": 125,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Low pLDDT (49.7); treating as accessible but low-confidence/disordered rather than buried.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3274,
+      "full_model_sasa": 73.01,
+      "pae_block_id": null,
+      "plddt": 52.5,
+      "position": 126,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "Q",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 45.78,
+      "position": 127,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Low pLDDT (45.8); treating as accessible but low-confidence/disordered rather than buried.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.7557,
+      "full_model_sasa": 178.34,
+      "pae_block_id": null,
+      "plddt": 53.75,
+      "position": 128,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.8322,
+      "full_model_sasa": 196.4,
+      "pae_block_id": null,
+      "plddt": 58.22,
+      "position": 129,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.256,
+      "full_model_sasa": 49.92,
+      "pae_block_id": null,
+      "plddt": 66.81,
+      "position": 130,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "D",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3425,
+      "full_model_sasa": 66.11,
+      "pae_block_id": null,
+      "plddt": 81.88,
+      "position": 131,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "A",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4115,
+      "full_model_sasa": 53.09,
+      "pae_block_id": null,
+      "plddt": 84.94,
+      "position": 132,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2068,
+      "full_model_sasa": 34.53,
+      "pae_block_id": null,
+      "plddt": 87.62,
+      "position": 133,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "F",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.1152,
+      "full_model_sasa": 27.66,
+      "pae_block_id": null,
+      "plddt": 90.06,
+      "position": 134,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0015,
+      "full_model_sasa": 0.3,
+      "pae_block_id": null,
+      "plddt": 90.75,
+      "position": 135,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0988,
+      "full_model_sasa": 23.32,
+      "pae_block_id": null,
+      "plddt": 90.0,
+      "position": 136,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.266,
+      "full_model_sasa": 72.88,
+      "pae_block_id": null,
+      "plddt": 91.38,
+      "position": 137,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0,
+      "full_model_sasa": 0.0,
+      "pae_block_id": null,
+      "plddt": 93.5,
+      "position": 138,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0083,
+      "full_model_sasa": 1.66,
+      "pae_block_id": null,
+      "plddt": 94.31,
+      "position": 139,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "R",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4998,
+      "full_model_sasa": 136.94,
+      "pae_block_id": null,
+      "plddt": 93.06,
+      "position": 140,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "E",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2405,
+      "full_model_sasa": 53.63,
+      "pae_block_id": null,
+      "plddt": 94.44,
+      "position": 141,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0004,
+      "full_model_sasa": 0.08,
+      "pae_block_id": null,
+      "plddt": 95.12,
+      "position": 142,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.2716,
+      "full_model_sasa": 64.11,
+      "pae_block_id": null,
+      "plddt": 95.12,
+      "position": 143,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "T",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.4589,
+      "full_model_sasa": 78.93,
+      "pae_block_id": null,
+      "plddt": 94.44,
+      "position": 144,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "C",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.005,
+      "full_model_sasa": 0.84,
+      "pae_block_id": null,
+      "plddt": 94.81,
+      "position": 145,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "W",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.001,
+      "full_model_sasa": 0.29,
+      "pae_block_id": null,
+      "plddt": 94.06,
+      "position": 146,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "N",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.273,
+      "full_model_sasa": 53.24,
+      "pae_block_id": null,
+      "plddt": 91.81,
+      "position": 147,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3351,
+      "full_model_sasa": 79.07,
+      "pae_block_id": null,
+      "plddt": 91.25,
+      "position": 148,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.078,
+      "full_model_sasa": 15.36,
+      "pae_block_id": null,
+      "plddt": 89.25,
+      "position": 149,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "L",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.0958,
+      "full_model_sasa": 19.26,
+      "pae_block_id": null,
+      "plddt": 86.94,
+      "position": 150,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "buried",
+      "surface_accessibility_reason": "Low solvent accessibility in both full-model and available PAE-block contexts.",
+      "surface_exposed": false,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "K",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6867,
+      "full_model_sasa": 162.07,
+      "pae_block_id": null,
+      "plddt": 83.94,
+      "position": 151,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "G",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.6648,
+      "full_model_sasa": 69.14,
+      "pae_block_id": null,
+      "plddt": 70.12,
+      "position": 152,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "S",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": 0.3975,
+      "full_model_sasa": 61.61,
+      "pae_block_id": null,
+      "plddt": 56.41,
+      "position": 153,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "exposed",
+      "surface_accessibility_reason": "Solvent-accessible in the full AlphaFold model.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    },
+    {
+      "amino_acid": "I",
+      "domain_context_relative_sasa": null,
+      "domain_context_sasa": null,
+      "full_model_relative_sasa": null,
+      "full_model_sasa": null,
+      "pae_block_id": null,
+      "plddt": 43.62,
+      "position": 154,
+      "source": "topology+AlphaFold",
+      "surface_accessibility": "conditional",
+      "surface_accessibility_reason": "Low pLDDT (43.6); treating as accessible but low-confidence/disordered rather than buried.",
+      "surface_exposed": true,
+      "topology_location": "extracellular"
+    }
+  ],
+  "resolution": {
+    "query": "IL7_MOUSE",
+    "query_type": "entry_name",
+    "resolved_accession": "P10168",
+    "resolved_entry_name": "IL7_MOUSE"
+  },
+  "species_name_matches": [
+    {
+      "accession": "P13232",
+      "available": true,
+      "coverage": null,
+      "ectodomain_end": 177,
+      "ectodomain_start": 26,
+      "entry_name": "IL7_HUMAN",
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "No transmembrane region detected; treating the mature secreted chain as the extracellular design region."
+      ],
+      "species": "human"
+    },
+    {
+      "accession": "XP_005563650",
+      "available": true,
+      "coverage": null,
+      "ectodomain_end": 175,
+      "ectodomain_start": 26,
+      "entry_name": "XP_005563650",
+      "extracellular_surface_aligned_positions": null,
+      "extracellular_surface_identity": null,
+      "identity": null,
+      "notes": [
+        "Resolved from RefSeq canonical protein candidate XP_005563650."
+      ],
+      "species": "macaca_fascicularis"
+    }
+  ],
+  "structural_regions": [
+    {
+      "confidence": 0.78,
+      "end": 117,
+      "label": "Strict predicted domain",
+      "metadata": {
+        "included_interpro_domains": [],
+        "mean_intra_pae": 5.32,
+        "recursion_depth": 0,
+        "segmentation_method": "pae_boundary_scoring",
+        "split_history": [],
+        "stringency": "strict"
+      },
+      "source": "AlphaFold",
+      "start": 26
+    },
+    {
+      "confidence": 0.73,
+      "end": 152,
+      "label": "Lenient structured region",
+      "metadata": {
+        "included_interpro_domains": [],
+        "mean_intra_pae": 6.6,
+        "stringency": "lenient"
+      },
+      "source": "AlphaFold",
+      "start": 26
+    }
+  ],
+  "target": {
+    "accession": "P10168",
+    "alternative_names": [],
+    "canonical_isoform_id": "P10168",
+    "entry_name": "IL7_MOUSE",
+    "gene_symbol": "Il7",
+    "gene_synonyms": [
+      "Il-7"
+    ],
+    "organism": "Mus musculus",
+    "protein_name": "Interleukin-7",
+    "sequence": "MFHVSFRYIFGIPPLILVLLPVTSSECHIKDKEGKAYESVLMISIDELDKMTGTDSNCPNNEPNFFRKHVCDDTKEAAFLNRAARKLKQFLKMNISEEFNVHLLTVSQGTQTLVNCTSKEEKNVKEQKKNDACFLKRLLREIKTCWNKILKGSI",
+    "taxon_id": 10090
+  },
+  "topology": {
+    "cytoplasmic_regions": [],
+    "cytoplasmic_tail_region": null,
+    "extracellular_regions": [],
+    "intramembrane_regions": [],
+    "major_extracellular_region": {
+      "confidence": 0.8,
+      "end": 154,
+      "label": "Secreted mature chain",
+      "metadata": {},
+      "source": "topology",
+      "start": 26
+    },
+    "membrane_core_region": null,
+    "topology_class": "secreted",
+    "transmembrane_regions": []
+  }
+}

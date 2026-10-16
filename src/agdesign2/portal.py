@@ -22,10 +22,16 @@ from .cache import FileCache
 from .blast import extract_accession, extract_entry_name
 from .af3 import is_af3_artifact
 from .config import AnalysisConfig
+from .gpcrdb import MOTIF_DEFINITIONS, motif_status
 from .http import HttpClient, _atomic_write
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align, slice_sequence
-from .structure_utils import load_pae_matrix, pae_matches_sequence_length, parse_alphafold_pdb
+from .structure_utils import (
+    NOT_A_FREE_THIOL_WARNING_PREFIXES,
+    load_pae_matrix,
+    pae_matches_sequence_length,
+    parse_alphafold_pdb,
+)
 from .site_docs import PAPER, agent_guide_html, citation_html, citation_short_html, citation_metadata, site_document_files
 
 
@@ -997,7 +1003,7 @@ def _citation_section() -> str:
 def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = False) -> str:
     site = "https://openantigens.org/mouse/" if portal_title == "OpenAntigens Mouse" else "https://openantigens.org/"
     prompt = (
-        "Before using OpenAntigens, read https://openantigens.org/llms.txt. "
+        f"Before using OpenAntigens, read {site}llms.txt. "
         f"Start at {site}index.html. Confirm each target's species and accession, preserve its residue numbering, "
         "distinguish predicted from experimental evidence, and cite the inspected report and release. "
         "For research use, include the OpenAntigens preprint citation given in the guide.\n\nMy question: "
@@ -1020,10 +1026,35 @@ def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = F
 """
 
 
+# Artifacts each portal publishes for itself. The agent guide's generic
+# "../" rewrite sent the mouse guide's data-access links to the human files —
+# the human index JSON starts at A1BG_HUMAN, the mouse one at A1BG_MOUSE — on
+# the very file an agent fetches first (F21).
+_PER_PORTAL_GUIDE_ARTIFACTS = (
+    "downloads.html",
+    "help.html",
+    "builder.html",
+    "constructs.html",
+    "methods.html",
+    "downloads/agdesign2_portal_index.json",
+    "downloads/agdesign2_portal_index.tsv",
+    "downloads/download_manifest.json",
+    "portal_metadata.json",
+)
+
+
 def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
-    human_prefix = "../" if portal_title == "OpenAntigens Mouse" else ""
+    is_mouse = portal_title == "OpenAntigens Mouse"
+    human_prefix = "../" if is_mouse else ""
     content = agent_guide_html().replace('href="https://openantigens.org/"', f'href="{human_prefix}index.html"')
     content = content.replace('href="https://openantigens.org/', f'href="{human_prefix}')
+    if is_mouse:
+        for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+            content = content.replace(f'href="../{artifact}"', f'href="{artifact}"')
+        content = content.replace(
+            "Human index paths are relative to https://openantigens.org/",
+            "Mouse index paths are relative to https://openantigens.org/mouse/",
+        )
     headings = re.findall(r"<h2>([^<]+)</h2>", content)
     links = []
     for heading in headings:
@@ -1045,9 +1076,28 @@ def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
 def _write_site_documents(portal_dir: Path, *, portal_title: str = "OpenAntigens") -> None:
     _write_text_atomic(portal_dir / "agent-guide.html", render_agent_guide_page(portal_title=portal_title))
     for name, content in site_document_files().items():
+        if name == "llms.txt" and portal_title == "OpenAntigens Mouse":
+            content = mouse_llms_txt(content)
         destination = portal_dir / name
         destination.parent.mkdir(parents=True, exist_ok=True)
         _write_text_atomic(destination, content)
+
+
+def mouse_llms_txt(human: str) -> str:
+    """The mouse portal's own llms.txt.
+
+    Points the per-portal artifacts at /mouse/ and names the mouse index root.
+    Shared links — the human portal itself, the citation — stay where they are.
+    """
+    content = human
+    for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
+        content = content.replace(
+            f"https://openantigens.org/{artifact}", f"https://openantigens.org/mouse/{artifact}"
+        )
+    return content.replace(
+        "Human index paths are relative to https://openantigens.org/",
+        "Mouse index paths are relative to https://openantigens.org/mouse/",
+    )
 
 
 def render_index_page(
@@ -1612,7 +1662,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
           <tbody>
             <tr><td>Report is pending or failed</td><td>The target could not be completed for the current release because of source-data limitations, structure mismatch, or processing failure.</td><td>Inspect the release index error field. The target may be resolved in a future release.</td></tr>
             <tr><td>AlphaFold is missing</td><td>No canonical AlphaFold model was found or the available model did not match the canonical UniProt sequence.</td><td>Review available PDB and domain evidence. A new analysis or release is needed to incorporate a later structure.</td></tr>
-            <tr><td>Homolog sequence is missing</td><td>A usable reference sequence or alignment was unavailable when the report was built.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually.</td></tr>
+            <tr><td>Homolog sequence is missing</td><td>A usable reference sequence or alignment was unavailable when the report was built, or the ortholog was withheld because it failed the acceptance gate (too little of either sequence aligned, or identity below the floor for its evidence). The table cell says which.</td><td>Use {primary_only_design} until the ortholog table is updated, or inspect source identifiers manually. A withheld ortholog is deliberately not exported.</td></tr>
             <tr><td>Family matrix is absent</td><td>No canonical family was identified, the family exceeded the configured size limit, or precomputed paralog data are unavailable.</td><td>Review BLAST local similarity and InterPro domain annotations for specificity context.</td></tr>
             <tr><td>BLAST hit list is long</td><td>The query region is highly conserved, contains common domains, or the full-length track captured broad family similarity.</td><td>Inspect the list, which is ranked by bit score, and check which alignments overlap the selected construct.</td></tr>
             <tr><td>Construct looks biologically wrong</td><td>Automated heuristics can miss ligand sites, partner requirements, topology edge cases, or literature-specific constraints.</td><td>Use the builder to adjust boundaries and check Methods for the exact evidence sources and limitations.</td></tr>
@@ -1994,18 +2044,22 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
 
 def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     is_mouse = portal_title == "OpenAntigens Mouse"
-    target_identity_source = "Reviewed UniProt mouse records" if is_mouse else "Reviewed UniProt human records"
+    target_identity_source = (
+        "Reviewed UniProt mouse records, or the ortholog table's RefSeq record where no reviewed mouse entry exists"
+        if is_mouse
+        else "Reviewed UniProt human records"
+    )
     target_universe_text = (
         "OpenAntigens Mouse contains unique mouse orthologs resolved from the OpenAntigens human target universe. "
         "Targets without a resolved mouse record are omitted, and duplicate mouse records are included once. "
-        "Each included target is analyzed against reviewed mouse UniProt data; the originating human target remains in report metadata."
+        "Most included targets are analyzed against reviewed mouse UniProt data; where no reviewed mouse entry covers the ortholog, the sequence comes from the RefSeq record named in the report's sequence source. The originating human target remains in report metadata."
         if is_mouse
         else "The human target universe is sourced from the refined cell-surface and secreted protein topology table under <code>data/inputs/</code>. "
         "That table combines public evidence from UniProt, Thera-SAbDab, the SURFY surfaceome publication, and the Uhlén secretome publication. "
         "The active portal includes proteins categorized as secreted, GPI-anchored, single-pass membrane, or multipass membrane."
     )
     target_resolution_text = (
-        "Mouse records are resolved through reviewed mouse UniProt entries. The build records skipped human targets, including missing mouse orthologs and duplicate mouse targets, in a separate manifest."
+        "Mouse records are resolved through reviewed mouse UniProt entries where one exists, and otherwise through the RefSeq sequence in the precomputed ortholog table; each report states which it used. The build records skipped human targets, including missing mouse orthologs and duplicate mouse targets, in a separate manifest."
         if is_mouse
         else "Each input row is resolved primarily through reviewed human UniProt records. Resolution prefers stable UniProt entry names or accessions when available and preserves the original input identifiers for traceability. Ambiguous or unresolved rows remain represented in batch outputs with explicit error status."
     )
@@ -2025,7 +2079,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         else "Human, mouse, and cynomolgus monkey primary databases use reviewed UniProt protein sets. For cynomolgus monkey, targets without hits in the reviewed set are searched against a broader local UniProt proteome database when that database is configured."
     )
     ortholog_source = (
-        "Reviewed UniProt homolog lookup"
+        "Reviewed UniProt homolog lookup, with the ortholog table's RefSeq sequence as the fallback"
         if is_mouse
         else "Precomputed RefSeq/HCOP-derived ortholog table"
     )
@@ -2125,7 +2179,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         </table>
       </div>
       <p>The pipeline also calculates SASA within PAE blocks to inspect residues that may be hidden by uncertain packing between blocks. Recomputing SASA within a block shows how its calculated accessibility changes when other blocks are removed; it does not establish accessibility in solution or on cells.</p>
-      <p>SASA calculations use the target-chain model and selected structural blocks, without partner chains. The pipeline does not reconstruct biological homo-oligomeric assemblies or incorporate their interfaces into boundary selection. A residue exposed in the model may be buried against another subunit, including an identical copy, in the biological assembly.</p>
+      <p>SASA calculations use the target-chain model and selected structural blocks, without partner chains. The pipeline does not reconstruct biological homo-oligomeric assemblies or incorporate their interfaces into boundary selection. A residue exposed in the model may be buried against another subunit, including an identical copy, in the biological assembly. No solvent-exposure call is made inside a transmembrane or intramembrane span: solvent accessibility is undefined there without a membrane model, and lipid-facing cannot be told from bundle-facing in a monomer. Curated UniProt disulfides take precedence over model geometry when both ends lie in the analyzed range.</p>
       <p>The extracellular accessible identity reported in homolog, family, and BLAST sections is calculated only over aligned primary-target residues that are both extracellular and classified as exposed or conditional.</p>
     </section>
 
@@ -2181,7 +2235,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
           <tbody>
             <tr><td>Bit score</td><td>BLAST alignment score normalized for database-independent comparison.</td><td>Primary ranking field. Higher values indicate stronger sequence similarity.</td></tr>
             <tr><td>E-value</td><td>Expected number of alignments of similar quality by chance.</td><td>Lower values indicate more statistically significant alignments.</td></tr>
-            <tr><td>Identity</td><td>Fraction of identical residues across the aligned region.</td><td>Useful for local similarity, but must be interpreted with coverage.</td></tr>
+            <tr><td>Identity</td><td>Fraction of identical residues across the aligned region, from a BLOSUM62 alignment (gap open 11, extend 1) with free end gaps, so a short sequence is not dragged across a long one to collect chance matches.</td><td>Useful for local similarity, but must be interpreted with coverage. Where too little of either sequence aligns, no identity is reported rather than a number that would read as a claim about the whole protein.</td></tr>
             <tr><td>Coverage</td><td>Aligned query span divided by query length, capped at 100%.</td><td>Distinguishes full-region similarity from short conserved motifs.</td></tr>
             <tr><td>Alignment text</td><td>Original BLAST alignment block.</td><td>Inspect this to determine whether similarity overlaps the selected construct or only a small motif.</td></tr>
           </tbody>
@@ -3478,20 +3532,34 @@ def _render_obligatory_partner_warning(requirements: list[dict[str, Any]]) -> st
     """
 
 
+NO_DESIGN_REGION_LABEL = "No Extracellular Design Region"
+
+
+def _has_design_region(report: dict[str, Any]) -> bool:
+    ectodomain = report.get("ectodomain") or {}
+    return ectodomain.get("start") is not None and ectodomain.get("end") is not None
+
+
 def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
     bucket = str(entry.get("topology_bucket") or entry.get("track") or "").strip().lower()
     if bucket:
+        # F13B/OA-017: the catalogue bucket is an inclusion rationale, not a
+        # finding about this record. Where the analysed record has no design
+        # region, a bucket-derived heading printed "Extracellular Region" over
+        # an empty Boundary/Label/Source on 133 human / 229 mouse pages. The
+        # multipass branch already consulted the record and keeps its own
+        # answer ("Full-Length Membrane Protein" is a real scope, not an empty
+        # one); the other three did not.
+        if "multi" in bucket:
+            return "Extracellular Region" if _has_design_region(report) else "Full-Length Membrane Protein"
+        if not _has_design_region(report):
+            return NO_DESIGN_REGION_LABEL
         if "gpi" in bucket:
             return "GPI-Anchored Extracellular Region"
         if "secret" in bucket:
             return "Secreted Region"
         if "single" in bucket:
             return "Extracellular Region"
-        if "multi" in bucket:
-            ectodomain = report.get("ectodomain") or {}
-            if ectodomain.get("start") is not None and ectodomain.get("end") is not None:
-                return "Extracellular Region"
-            return "Full-Length Membrane Protein"
 
     topology = report.get("topology")
     track = " ".join(
@@ -3503,6 +3571,10 @@ def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
             topology.get("topology_class") if isinstance(topology, dict) else "",
         )
     )
+    if not _has_design_region(report):
+        # Reachable: mouse_portal._topology_bucket returns "" for any topology
+        # class that is not secreted/gpi/single/multi.
+        return "Full-Length Membrane Protein" if "multi" in track else NO_DESIGN_REGION_LABEL
     if "gpi" in track or "single" in track or "multi" in track or "membrane" in track or "surface" in track:
         return "Extracellular Region"
     if "secret" in track:
@@ -3518,6 +3590,8 @@ def _design_region_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
 
 def _soluble_construct_label(entry: dict[str, Any], report: dict[str, Any]) -> str:
     bucket = str(entry.get("topology_bucket") or entry.get("track") or "").strip().lower()
+    if not _has_design_region(report) and "multi" not in bucket:
+        return "Soluble Constructs"
     if "gpi" in bucket:
         return "Soluble GPI-Anchored Extracellular-region Constructs"
     if "secret" in bucket:
@@ -3532,10 +3606,24 @@ def _soluble_construct_label(entry: dict[str, Any], report: dict[str, Any]) -> s
     return "Soluble Design-region Constructs"
 
 
-def _render_entry_track(entry: dict[str, Any]) -> str:
+def _render_entry_track(entry: dict[str, Any], report: dict[str, Any] | None = None) -> str:
     track = str(entry.get("topology_bucket") or entry.get("track") or "").strip()
     if not track:
         return ""
+    # Name the source. On the F13B pages the catalogue track and the analysed
+    # record disagree, and the page used to show only the track.
+    if (
+        report is not None
+        and not _has_design_region(report)
+        and "multi" not in track.lower()
+    ):
+        topology_class = str((report.get("topology") or {}).get("topology_class") or "")
+        detail = f"; analysed record: {topology_class}" if topology_class else ""
+        return (
+            f"<dt>Track</dt><dd>{escape(track)} "
+            f"<span class=\"muted\">(target-universe inclusion rationale{escape(detail)}; "
+            "no extracellular design region was derived for this record)</span></dd>"
+        )
     return f"<dt>Track</dt><dd>{escape(track)}</dd>"
 
 
@@ -3595,6 +3683,113 @@ def _target_aliases(target: dict[str, Any], *, entry: dict[str, Any] | None = No
     return names
 
 
+def _cysteine_empty_reason(report: dict[str, Any]) -> str:
+    """Why the cysteine table is empty — a bare negative read as "no liabilities".
+
+    The analysis needs a structure, and the structure is only fetched when there
+    is a design region or the target is multipass (pipeline.py:254).
+    """
+    topology_class = str((report.get("topology") or {}).get("topology_class") or "")
+    if not report.get("ectodomain") and not topology_class.startswith("multipass"):
+        return (
+            "No design region was defined and the target is not multipass, so no "
+            "structure was loaded and no cysteine analysis was run."
+        )
+    for note in report.get("notes") or []:
+        if not isinstance(note, dict):
+            continue
+        message = str(note.get("message") or "").lower()
+        # The note that fires most often is "Structure-driven analyses were
+        # skipped: No AlphaFold model matches the canonical UniProt sequence"
+        # (pipeline.py:419) — no "failed", no "error".
+        if "structure" in message and any(
+            word in message for word in ("skip", "fail", "unavailable", "error")
+        ):
+            return (
+                "Structure-driven analyses were skipped for this report, so no cysteine "
+                "analysis was run; see Notes."
+            )
+    return "The analyzed region contains no cysteines."
+
+
+def _interpro_lookup_failed(report: dict[str, Any]) -> bool:
+    for note in report.get("notes") or []:
+        if not isinstance(note, dict):
+            continue
+        if "interpro" not in str(note.get("source") or "").strip().lower():
+            continue
+        if "lookup failed" in str(note.get("message") or "").strip().lower():
+            return True
+    return False
+
+
+def _interpro_empty_reason(report: dict[str, Any]) -> str:
+    """Why the InterPro table is empty — three causes, three sentences.
+
+    F04a: the stored list is already filtered to domain-like entries inside the
+    design region (pipeline.py:237, :1746-1753), so "No InterPro annotations."
+    sat beside a cited family accession on 2,205 human / 1,916 mouse pages.
+    """
+    if _interpro_lookup_failed(report):
+        return "The InterPro lookup failed for this report; see Notes."
+    if not report.get("ectodomain"):
+        return (
+            "No design region was defined for this target, so no region-restricted "
+            "domain entries could be listed."
+        )
+    return (
+        "No InterPro domain, repeat or homologous-superfamily entry lies entirely "
+        "inside the design region."
+    )
+
+
+def _motif_status_from_stored(motif: dict[str, Any]) -> str:
+    """Recompute a conserved motif's status from the residues the report stores.
+
+    F15: reports built before the producer fix carry ``status="detected"``,
+    which only ever meant "GPCRdb annotated every position". The stored
+    ``generic_numbers`` and ``sequence`` are enough to check the residues, so
+    the pages already built read correctly on re-render.
+    """
+    generics = [str(item or "") for item in (motif.get("generic_numbers") or [])]
+    sequence = str(motif.get("sequence") or "")
+    name = str(motif.get("name") or "")
+    if not generics or len(generics) != len(sequence):
+        return str(motif.get("status") or "")
+    residues = {
+        generic.split("x", 1)[0].strip(): residue
+        for generic, residue in zip(generics, sequence)
+        if generic
+    }
+    definition = dict(MOTIF_DEFINITIONS).get(name)
+    all_present = definition is not None and len(residues) == len(definition)
+    return motif_status(name, residues, all_present)
+
+
+def _dedupe_notes(notes: Any) -> list[Any]:
+    """Collapse repeated notes for display.
+
+    Mouse reports built before the idempotency fix carry every note twice; this
+    keeps those already-built pages honest without a rebuild.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    out: list[Any] = []
+    for note in notes or []:
+        if not isinstance(note, dict):
+            out.append(note)
+            continue
+        key = (
+            str(note.get("severity") or ""),
+            str(note.get("message") or ""),
+            str(note.get("source") or ""),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(note)
+    return out
+
+
 def _blast_search_unavailable(report: dict[str, Any], *, full_length: bool) -> bool:
     for note in report.get("notes") or []:
         if not isinstance(note, dict):
@@ -3645,7 +3840,7 @@ def render_detail_page(
     experimental_constructs = report.get("experimental_constructs") or []
     interpro_annotations = report.get("interpro_annotations") or []
     ptms = _report_ptms(report)
-    notes = report.get("notes") or []
+    notes = _dedupe_notes(report.get("notes"))
     has_matching_alphafold = bool(entry.get("has_alphafold_structure"))
     report_json_path = _resolve_existing_path(entry.get("json_report"), batch_dir)
     report_md_path = _resolve_existing_path(entry.get("markdown_report"), batch_dir)
@@ -3661,15 +3856,38 @@ def render_detail_page(
     soluble_constructs, membrane_constructs = _partition_construct_dicts(constructs)
 
     homology_rows_list: list[str] = []
+    has_design_region = bool(report.get("ectodomain"))
+    # SF5: the page carries four identity numbers computed four ways and the
+    # column was headed just "Identity". Name the reference and the region.
+    homology_species = _species_display_label(_target_species_key(target))
+    homology_identity_header = f"Identity to this {homology_species} protein"
+    homology_scope_note = escape(
+        f"Identity and coverage compare each species record with this {homology_species} "
+        + (
+            f"protein over the {design_region_lower} ({_format_region(ectodomain)}), "
+            if has_design_region
+            else "protein over its full length, "
+        )
+        + "aligned positions only. The BLAST, construct and family-context tables on this "
+        "page use different references and denominators, so their numbers are not "
+        "directly comparable."
+    )
     for item in homology:
         homolog_target = _fetch_homolog_target(item, batch_dir=batch_dir) or {}
+        blank_reason = _homolog_cell_reason(item, report)
+        # F24: an accessible-identity number on a page that has no
+        # extracellular region is meaningless (86 human / 67 mouse pages).
+        surface_identity = _fmt_surface_identity(item) if has_design_region else ""
         homology_rows_list.append(
             "<tr><td>{species}</td><td>{entry}</td><td>{identity}</td><td>{surface_identity}</td><td>{coverage}</td><td>{links}</td></tr>".format(
                 species=escape(_species_display_label(item.get("species"))),
-                entry=escape(str(item.get("entry_name") or item.get("accession") or "")),
-                identity=escape(_fmt_pct(item.get("identity"))),
-                surface_identity=escape(_fmt_surface_identity(item)),
-                coverage=escape(_fmt_pct(item.get("coverage"))),
+                entry=(
+                    escape(str(item.get("entry_name") or item.get("accession") or blank_reason))
+                    + _homolog_entry_note(item)
+                ),
+                identity=escape(_fmt_pct_or_reason(item.get("identity"), blank_reason)),
+                surface_identity=escape(surface_identity or blank_reason),
+                coverage=escape(_fmt_pct_or_reason(item.get("coverage"), blank_reason)),
                 links=_render_resource_links(
                     accession=str(homolog_target.get("accession") or item.get("accession") or ""),
                     entry_name=str(homolog_target.get("entry_name") or item.get("entry_name") or ""),
@@ -3678,7 +3896,17 @@ def render_detail_page(
                 ),
             )
         )
-    homology_rows = "".join(homology_rows_list) or "<tr><td colspan=\"6\">No homolog records.</td></tr>"
+    homology_rows = "".join(homology_rows_list) or (
+        # SF7: a build-time network failure is not a negative result.
+        "<tr><td colspan=\"6\">The species homolog lookup failed when this report was built; "
+        "see Notes. No homolog records are shown.</td></tr>"
+        if any(
+            "species homolog lookup failed" in str(note.get("message") or "").lower()
+            for note in notes
+            if isinstance(note, dict)
+        )
+        else "<tr><td colspan=\"6\">No homolog records.</td></tr>"
+    )
 
     target_sequence = str(target.get("sequence") or "")
     ecto_start = ectodomain.get("start")
@@ -3695,6 +3923,7 @@ def render_detail_page(
             cross_hits,
             batch_dir=batch_dir,
             query_label=query_species_label,
+            query_origin=int(ectodomain.get("start") or 1),
         )
         if cross_hits
         else ""
@@ -3705,6 +3934,16 @@ def render_detail_page(
         query_label=query_species_label,
     )
     blast_unavailable = _blast_search_unavailable(report, full_length=False)
+    # F03: with no design region the pipeline never runs the region search and
+    # stores [] (pipeline.py:580, module_refresh.py:166). Printing a completed
+    # negative here put "returned no hits" directly above a full-length hit
+    # table on 1,658 human and 1,598 mouse pages.
+    region_blast_ran = bool(report.get("ectodomain"))
+    # Mirror pipeline.py:667 / module_refresh.py:132 exactly.
+    full_length_blast_ran = (
+        str((report.get("topology") or {}).get("topology_class") or "").startswith("multipass")
+        or report.get("ectodomain") is None
+    )
     if cross_hits:
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
@@ -3720,6 +3959,11 @@ def render_detail_page(
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
       <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
+        """
+    elif not region_blast_ran:
+        design_region_cross_html = f"""
+      <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
+      <p class="section-note">No design region was defined for this target, so no region-restricted BLAST search was run. The full-length search below covers the whole sequence.</p>
         """
     else:
         design_region_cross_html = f"""
@@ -3738,6 +3982,22 @@ def render_detail_page(
           </table>
         </div>
         """
+    elif _blast_search_unavailable(report, full_length=True):
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">This BLAST sequence similarity search was not completed for the current report.</p>
+        """
+    elif full_length_blast_ran:
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">The completed full-length BLAST search returned no sequence similarity hits.</p>
+        """
+    else:
+        # The design-region search above is the only one that ran.
+        full_length_cross_html = """
+        <h3>Full-length BLAST sequence similarity hits</h3>
+        <p class="section-note">No full-length BLAST search was run for this target; the design-region search above covers it.</p>
+        """
 
     cysteine_rows = "".join(
         "<tr><td>{position}</td><td>{paired}</td><td>{surface}</td><td>{nearest}</td><td>{warning}</td></tr>".format(
@@ -3748,18 +4008,30 @@ def render_detail_page(
             warning=escape(str(item.get("warning") or "")),
         )
         for item in (report.get("cysteine_analysis") or [])
-    ) or "<tr><td colspan=\"5\">No cysteine analysis available.</td></tr>"
+    ) or f"<tr><td colspan=\"5\">{escape(_cysteine_empty_reason(report))}</td></tr>"
 
     furin_rows = "".join(
-        "<tr><td>{boundary}</td><td><code>{motif}</code></td><td>{suggestions}</td></tr>".format(
+        "<tr><td>{boundary}</td><td><code>{motif}</code></td><td>{suggestions}</td><td>{annotation}</td></tr>".format(
             boundary=escape(f"{item.get('start')}-{item.get('end')}" if item.get("start") is not None and item.get("end") is not None else ""),
             motif=escape(str(item.get("motif") or "")),
             suggestions=escape(", ".join(item.get("suggestions") or [])),
+            annotation=(
+                escape(str(item.get("curated_annotation")))
+                if item.get("curated_annotation")
+                else '<span class="muted">no curated cleavage annotation here</span>'
+            ),
         )
         for item in (report.get("furin_sites") or [])
-    ) or "<tr><td colspan=\"3\">No candidate furin-like motifs found.</td></tr>"
+    ) or (
+        "<tr><td colspan=\"4\">No candidate furin-like motif was found in the design "
+        "region.</td></tr>"
+        if region_blast_ran
+        else "<tr><td colspan=\"4\">No design region was defined, so no furin-like motif "
+        "search was run. The search covers the design region only, never the full "
+        "sequence.</td></tr>"
+    )
 
-    ptm_rows = _render_ptm_rows(ptms)
+    ptm_rows = _render_ptm_rows(ptms, report)
 
     obligatory_assembly_requirements = [
         item for item in assembly_requirements if item.get("obligatory")
@@ -3792,10 +4064,34 @@ def render_detail_page(
         if portal_title != "OpenAntigens Mouse"
         else ""
     )
+    # F05: an empty assembly table is not "no partners". The module only
+    # evaluates canonical integrin chains (pipeline.py:3305), and the mouse
+    # portal does not query Complex Portal at all (mouse_portal.py:157), so the
+    # bare negative stood on all 4,702 mouse pages — 588 of them twins of a
+    # human page that does list curated complexes.
+    non_obligatory_count = len(assembly_requirements) - len(obligatory_assembly_requirements)
+    if obligatory_assembly_requirements or complex_portal_complexes:
+        assembly_scope_note = ""
+    elif non_obligatory_count:
+        assembly_scope_note = (
+            '<p class="section-note">'
+            f"{non_obligatory_count} non-obligatory interaction annotation(s) are recorded "
+            "for this target and are not shown here; this section lists obligate assembly "
+            "requirements only.</p>"
+        )
+    else:
+        assembly_scope_note = (
+            '<p class="section-note">Obligate assembly requirements are only evaluated for '
+            "canonical integrin chains; an empty result here does not rule out an obligate "
+            "partner.</p>"
+        )
+    if portal_title == "OpenAntigens Mouse":
+        assembly_scope_note += (
+            '<p class="section-note">Complex Portal is not queried for mouse targets; '
+            "see the human page for curated complexes.</p>"
+        )
     interaction_assembly_html = (
-        complex_portal_html
-        + assembly_requirements_html
-        or '<p class="section-note">No assembly requirements reported.</p>'
+        complex_portal_html + assembly_requirements_html + assembly_scope_note
     )
 
     soluble_construct_summary_rows = _render_precomputed_construct_summary_rows(
@@ -3840,7 +4136,12 @@ def render_detail_page(
             name=escape(str(item.get("name") or "")),
         )
         for item in interpro_annotations[:50]
-    ) or "<tr><td colspan=\"6\">No InterPro annotations.</td></tr>"
+    ) or f"<tr><td colspan=\"6\">{escape(_interpro_empty_reason(report))}</td></tr>"
+    interpro_scope_note = (
+        "This table lists InterPro and Pfam domain, repeat and homologous-superfamily "
+        "entries that lie entirely inside the design region. Family-level entries are "
+        "shown under Family Context."
+    )
 
     family_html = _render_family_context_section(
         family_context,
@@ -3969,7 +4270,7 @@ def render_detail_page(
           <dt>Sequence length</dt><dd>{len(target.get('sequence') or '')} aa</dd>
           {human_source_html}
           <dt>Sequence analyzed</dt><dd>UniProt canonical{(' (' + escape(str(target['canonical_isoform_id'])) + ')') if target.get('canonical_isoform_id') else ''}</dd>
-          {_render_entry_track(entry)}
+          {_render_entry_track(entry, report)}
           {target_aliases_html}
           <dt>Status</dt><dd>{escape(str(entry.get('status') or ''))}</dd>
           <dt>Links</dt><dd>{target_links_html}</dd>
@@ -3984,7 +4285,7 @@ def render_detail_page(
           <dt>Label</dt><dd>{escape(str(ectodomain.get('label') or ''))}</dd>
           <dt>Source</dt><dd>{escape(str(ectodomain.get('source') or ''))}</dd>
           <dt>Constructs</dt><dd>{len(constructs)}</dd>
-          <dt>BLAST sequence similarity hits</dt><dd>{len(cross_hits)}</dd>
+          <dt>{escape(_cross_reactivity_count_label(report, design_region_label))}</dt><dd>{_index_cross_reactivity_count(report)}</dd>
         </dl>
       </article>
     </section>
@@ -4014,8 +4315,9 @@ def render_detail_page(
 
     <section class="card" id="homology" data-report-section="Homology">
       <h2>Homology</h2>
+      <p class="section-note">{homology_scope_note}</p>
       <table>
-        <thead><tr><th>Species</th><th>Entry</th><th>Identity</th><th>Extracellular accessible identity</th><th>Coverage</th><th>Links</th></tr></thead>
+        <thead><tr><th>Species</th><th>Entry</th><th>{escape(homology_identity_header)}</th><th>Extracellular accessible identity</th><th>Coverage</th><th>Links</th></tr></thead>
         <tbody>{homology_rows}</tbody>
       </table>
     </section>
@@ -4029,7 +4331,7 @@ def render_detail_page(
     <section class="stack">
       <article class="card" id="cysteines" data-report-section="Cysteines">
         <h2>Cysteines</h2>
-        <p class="section-note">Exposure is calculated from the target-chain model and selected structural blocks, without partner chains. A residue exposed here may be buried against another subunit, including an identical copy. Review <a class="inline-link" href="#interactions-assembly">Interactions / Assembly</a> when interpreting exposure.</p>
+        <p class="section-note">Exposure is calculated from the target-chain model and selected structural blocks, without partner chains. A residue exposed here may be buried against another subunit, including an identical copy. Review <a class="inline-link" href="#interactions-assembly">Interactions / Assembly</a> when interpreting exposure. No solvent-exposure call is made inside a transmembrane or intramembrane span: solvent accessibility is undefined there without a membrane model, and lipid-facing cannot be told from bundle-facing in a monomer. Curated UniProt disulfides take precedence over model geometry when both ends lie in the analyzed range.</p>
         <table>
           <thead><tr><th>Residue</th><th>Paired with</th><th>Surface exposed</th><th>Closest unpaired cysteine</th><th>Warning</th></tr></thead>
           <tbody>{cysteine_rows}</tbody>
@@ -4038,7 +4340,7 @@ def render_detail_page(
       <article class="card" id="furin-cleavage-sites" data-report-section="Furin Cleavage Sites">
         <h2>Candidate Furin-like Motifs</h2>
         <table>
-          <thead><tr><th>Boundary</th><th>Motif</th><th>Suggested edits</th></tr></thead>
+          <thead><tr><th>Boundary</th><th>Motif</th><th>Suggested edits</th><th>Curated annotation</th></tr></thead>
           <tbody>{furin_rows}</tbody>
         </table>
       </article>
@@ -4073,6 +4375,7 @@ def render_detail_page(
 
     <section class="card" id="interpro-pfam" data-report-section="InterPro / Pfam">
       <h2>InterPro / Pfam</h2>
+      <p class="section-note">{escape(interpro_scope_note)}</p>
       <table>
         <thead><tr><th>Start</th><th>End</th><th>Source</th><th>Accession</th><th>Type</th><th>Name</th></tr></thead>
         <tbody>{interpro_rows}</tbody>
@@ -4295,6 +4598,27 @@ def _render_construct_tabs(
     )
 
 
+# Row 46: constructs up to 14,451 aa (MUC16's full ectodomain) were offered with
+# no comment on size. The threshold is a judgement, not a published limit: it
+# sits just above the 99th percentile of every construct in both snapshots
+# (1,436 aa), so the warning stays rare enough to mean something — 759
+# constructs on 421 pages.
+CONSTRUCT_SIZE_WARNING_AA = 1500
+
+
+def _construct_size_warning(construct: dict[str, Any]) -> str:
+    try:
+        length = int(construct.get("end")) - int(construct.get("start")) + 1
+    except (TypeError, ValueError):
+        return ""
+    if length <= CONSTRUCT_SIZE_WARNING_AA:
+        return ""
+    return (
+        f"Very large construct ({length:,} aa): expression and purification at this size are "
+        "rarely routine. Consider a smaller domain-bounded construct from this page."
+    )
+
+
 def _render_construct_card(
     construct: dict[str, Any],
     *,
@@ -4308,8 +4632,19 @@ def _render_construct_card(
 ) -> str:
     human_entry = construct.get("human_entry_name") or target.get("entry_name") or ""
     evidence = construct.get("evidence") or []
-    warnings = construct.get("warnings") or []
-    homologs = construct.get("homologs") or []
+    warnings = list(construct.get("warnings") or [])
+    size_warning = _construct_size_warning(construct)
+    if size_warning:
+        warnings.insert(0, size_warning)
+    # F06a: reports built before the pipeline fix carry a self-species homolog
+    # row. Drop it here and the HTML table, the TSV/FASTA export rows and the
+    # viewer's unavailableRows all lose it, since they derive from this list.
+    target_species_key = _target_species_key(target)
+    homologs = [
+        item
+        for item in (construct.get("homologs") or [])
+        if str(item.get("species") or "") != target_species_key
+    ]
     structural_metrics = construct.get("structural_metrics") or {}
     safe_name = _safe_filename(str(construct.get("name") or "construct"))
     assets_dir = batch_dir / f"{str(target.get('entry_name') or '').lower()}_report_assets"
@@ -4348,8 +4683,8 @@ def _render_construct_card(
         else ""
     )
 
-    evidence_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in evidence) or "<li>None</li>"
-    warning_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in warnings) or "<li>None</li>"
+    evidence_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in evidence) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+    warning_list = "".join(f"<li>{escape(_scientific_region_text(item))}</li>" for item in warnings) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
     construct_ptms = _features_in_region(ptms, construct.get("start"), construct.get("end")) if ptms else construct.get("ptms") or []
     ptm_list = "".join(
         "<li>{label} <strong>{category}</strong>: {description}</li>".format(
@@ -4358,7 +4693,7 @@ def _render_construct_card(
             description=escape(str(item.get("description") or item.get("type") or "")),
         )
         for item in construct_ptms
-    ) or "<li>None</li>"
+    ) or "<li class=\"muted\">No annotated PTM lies inside this construct.</li>"
     gene_symbol = str(target.get("gene_symbol") or target.get("entry_name") or "TARGET")
     name_symbol = _export_name_symbol(target)
     primary_species = _target_species_key(target)
@@ -4484,7 +4819,7 @@ def _render_construct_card(
             int(finding.get("position"))
             for finding in (construct.get("cysteine_analysis") or [])
             if finding.get("position") is not None and finding.get("paired_with") is None
-            and not str(finding.get("warning") or "").startswith("Ambiguous")
+            and not str(finding.get("warning") or "").startswith(_NO_CYS_TO_SER_WARNING_PREFIXES)
         }
     )
     construct_start = construct.get("start")
@@ -4571,7 +4906,7 @@ def _render_construct_card(
             ),
         )
         for segment in gpcr_segments
-    ) or "<li>None</li>"
+    ) or "<li class=\"muted\">No GPCRdb segment overlaps this construct.</li>"
     gpcr_range = construct.get("gpcr_generic_range")
     gpcr_construct_html = ""
     if gpcr_segments or gpcr_range:
@@ -4637,7 +4972,7 @@ def _render_construct_card(
           </div>
           <div>
             <h4>Structural Metrics</h4>
-            <ul>{metrics_html or '<li>None</li>'}</ul>
+            <ul>{metrics_html or '<li class="muted">No structural metric was computed for this construct.</li>'}</ul>
           </div>
           {gpcr_construct_html}
         </div>
@@ -4920,7 +5255,17 @@ def _render_cross_reactivity_rows(
     *,
     batch_dir: Path,
     query_label: str = "human",
+    query_origin: int = 1,
 ) -> str:
+    """Render BLAST hits.
+
+    ``query_origin`` is the protein position the query sequence started at. The
+    design-region search is run on the ectodomain slice, so BLAST reports
+    ``query_start``/``query_end`` relative to that slice; printed unconverted
+    and unlabelled they read as protein positions and are wrong by
+    ``ectodomain.start - 1`` on every design-region hit (OA-002: 3,333 human /
+    2,874 mouse pages). The full-length search has origin 1.
+    """
     rows: list[str] = []
     for index, item in enumerate(hits, start=1):
         cross_target = _fetch_cross_reactivity_target(item, batch_dir=batch_dir) or {}
@@ -4928,6 +5273,7 @@ def _render_cross_reactivity_rows(
             item,
             rank=index,
             query_label=query_label,
+            query_origin=query_origin,
         )
         hit_links = _render_resource_links(
             accession=str(cross_target.get("accession") or extract_accession(str(item.get("subject_id") or "")) or ""),
@@ -4958,7 +5304,14 @@ def _render_cross_reactivity_rows(
 def _report_ptms(report: dict[str, Any]) -> list[dict[str, Any]]:
     explicit = report.get("ptms")
     if explicit:
-        return list(explicit)
+        return [
+            item
+            for item in explicit
+            if not (
+                str(item.get("type") or "").upper() == "SITE"
+                and str(item.get("description") or "").lower().startswith(("not ", "no "))
+            )
+        ]
     return [feature for feature in (report.get("features") or []) if _is_ptm_feature_dict(feature)]
 
 
@@ -4978,6 +5331,8 @@ def _is_ptm_feature_dict(feature: dict[str, Any]) -> bool:
         "CHAIN",
     }:
         return True
+    if feature_type == "SITE" and description.startswith(("not ", "no ")):
+        return False  # F28: a negative annotation is not a PTM.
     return feature_type == "SITE" and any(
         keyword in description
         for keyword in ("cleavage", "glycosyl", "phospho", "acetyl", "methyl", "ubiquitin", "sumoyl", "lipid")
@@ -5042,7 +5397,37 @@ def _ptm_display_label(feature: dict[str, Any]) -> str:
     return f"{start}-{end}"
 
 
-def _render_ptm_rows(ptms: list[dict[str, Any]]) -> str:
+_PTM_TYPES_NEVER_IN_A_MEMBRANE = {"CARBOHYD", "DISULFID"}
+
+
+def _membrane_spans(report: dict[str, Any]) -> list[tuple[int, int]]:
+    topology = report.get("topology") or {}
+    spans: list[tuple[int, int]] = []
+    for key in ("transmembrane_regions", "intramembrane_regions"):
+        for region in topology.get(key) or []:
+            if region.get("start") is not None and region.get("end") is not None:
+                spans.append((int(region["start"]), int(region["end"])))
+    return spans
+
+
+def _ptm_membrane_conflict(feature: dict[str, Any], spans: list[tuple[int, int]]) -> str:
+    if str(feature.get("type") or "").upper() not in _PTM_TYPES_NEVER_IN_A_MEMBRANE:
+        return ""
+    try:
+        position = int(feature.get("start"))
+    except (TypeError, ValueError):
+        return ""
+    for start, end in spans:
+        if start <= position <= end:
+            return (
+                f"Sits inside an annotated transmembrane span ({start}-{end}); "
+                "the topology boundary and this annotation cannot both be right."
+            )
+    return ""
+
+
+def _render_ptm_rows(ptms: list[dict[str, Any]], report: dict[str, Any] | None = None) -> str:
+    spans = _membrane_spans(report or {})
     rows = []
     for feature in sorted(ptms, key=lambda item: (int(item.get("start") or 0), int(item.get("end") or 0), str(item.get("type") or ""))):
         rows.append(
@@ -5052,7 +5437,13 @@ def _render_ptm_rows(ptms: list[dict[str, Any]]) -> str:
                 type=escape(str(feature.get("type") or "")),
                 category=escape(_ptm_category(feature)),
                 description=escape(str(feature.get("description") or "")),
-                warning=escape(_ptm_warning(feature)),
+                warning=escape(
+                    " ".join(
+                        part
+                        for part in (_ptm_warning(feature), _ptm_membrane_conflict(feature, spans))
+                        if part
+                    )
+                ),
             )
         )
     return "".join(rows) or "<tr><td colspan=\"6\">No curated UniProt PTM annotations available.</td></tr>"
@@ -5234,7 +5625,7 @@ def _render_gpcr_annotation_section(annotation: dict[str, Any] | None) -> str:
             positions=escape(", ".join(str(item) for item in motif.get("positions") or [])),
             generic=escape(", ".join(str(item) for item in motif.get("generic_numbers") or [])),
             sequence=escape(str(motif.get("sequence") or "")),
-            status=escape(str(motif.get("status") or "")),
+            status=escape(_motif_status_from_stored(motif)),
         )
         for motif in annotation.get("conserved_motifs") or []
     ) or '<tr><td colspan="5">No conserved motif positions detected from GPCRdb numbering.</td></tr>'
@@ -5280,19 +5671,19 @@ def _render_advanced_membrane_suggestions_section(suggestions: list[dict[str, An
         rationale = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("rationale") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         actions = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("suggested_actions") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         evidence = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("evidence") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         warnings = "".join(
             f"<li>{escape(str(item))}</li>"
             for item in (suggestion.get("warnings") or [])
-        ) or "<li>None</li>"
+        ) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         region = ""
         if suggestion.get("start") is not None and suggestion.get("end") is not None:
             region = f"<p><strong>Region:</strong> {escape(str(suggestion.get('start')))}-{escape(str(suggestion.get('end')))}</p>"
@@ -5359,6 +5750,33 @@ def _public_gpcr_variant(variant: dict[str, Any]) -> dict[str, Any]:
 def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) -> str:
     if not variants:
         return ""
+    # F02-A: on the pages where every variant is blocked the section would
+    # otherwise be a list of refusals with no statement of what happened.
+    if all(
+        str(variant.get("category") or "") == "gpcr_loop_fusion_skipped"
+        for variant in variants
+    ):
+        reasons = _dedupe_notes(
+            [
+                {"severity": "", "message": warning, "source": ""}
+                for variant in variants
+                for warning in (variant.get("warnings") or [])
+            ]
+        )
+        reason_items = "".join(
+            f"<li>{escape(str(item['message']))}</li>" for item in reasons
+        ) or "<li>No eligible intracellular loop was found.</li>"
+        return f"""
+    <section class="card" id="gpcr-engineering" data-report-section="GPCR Engineering">
+      <h2>GPCR Expression and Stabilization Strategy</h2>
+      <p class="section-note">No loop-fusion variant is offered for this receptor. Every candidate
+      intracellular loop would place the cassette outside the published ICL3-fusion window, or would
+      cut through an annotation this page also carries:</p>
+      <ul>{reason_items}</ul>
+      <p class="section-note">This is the absence of a recommendation, not a prediction that a fusion
+      construct would fail. Screen the native full-length and trimmed membrane constructs instead.</p>
+    </section>
+    """
     rows: list[str] = []
     cards: list[str] = []
     for variant in variants:
@@ -5384,9 +5802,9 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
                 action=focus_button,
             )
         )
-        warnings = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("warnings") or [])) or "<li>None</li>"
-        evidence = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("evidence") or [])) or "<li>None</li>"
-        actions = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("suggested_actions") or [])) or "<li>None</li>"
+        warnings = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("warnings") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+        evidence = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("evidence") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
+        actions = "".join(f"<li>{escape(str(item))}</li>" for item in (variant.get("suggested_actions") or [])) or "<li class=\"muted\">None recorded by this report's automated checks.</li>"
         replacement = ""
         if variant.get("replaced_start") is not None and variant.get("replaced_end") is not None:
             replacement = (
@@ -5564,10 +5982,14 @@ def _construct_workbench_js() -> str:
           builder.replaceChildren(header, shell);
 
           function findConstructSources() {
-            const titles = new Set([
-              "Precomputed Construct Summary",
-              "GPCR Expression and Stabilization Strategy",
-            ]);
+            // OA-019: the workbench re-slices the CANONICAL sequence for the
+            // row's boundary, so a GPCR engineering variant picked here would
+            // export the unmodified native loop under the fusion's name. The
+            // fusion sequences live on their own cards, which carry the real
+            // cassette; only native constructs belong in this picker. The
+            // variant rows keep their own "View in 3D" button, which only
+            // highlights and never exports.
+            const titles = new Set(["Precomputed Construct Summary"]);
             return Array.from(document.querySelectorAll("section.card")).filter(
               (section) => titles.has(section.querySelector(":scope > h2")?.textContent.trim()),
             );
@@ -7025,11 +7447,13 @@ def _render_structure_widget(
           );
         }}
 
+        const NO_CYS_TO_SER_PREFIXES = {_js_json(list(_NO_CYS_TO_SER_WARNING_PREFIXES))};
+
         function selectionMutationCandidatePositions(start, end) {{
           const cysteines = viewerData.cysteineAnalysis || [];
           return cysteines
             .filter((finding) => Number(finding.position) >= start && Number(finding.position) <= end)
-            .filter((finding) => !String(finding.warning || '').startsWith('Ambiguous'))
+            .filter((finding) => !NO_CYS_TO_SER_PREFIXES.some((prefix) => String(finding.warning || '').startsWith(prefix)))
             .filter((finding) => finding.paired_with === null || finding.paired_with === undefined || Number(finding.paired_with) < start || Number(finding.paired_with) > end)
             .map((finding) => Number(finding.position))
             .filter((value) => Number.isFinite(value))
@@ -8098,7 +8522,12 @@ def _build_index_entry(
             "ectodomain_end": ectodomain.get("end"),
             "detail_page": f"{_safe_filename(str(entry_name).lower())}.html",
             "has_family_context": bool(report_data.get("family_context")),
-            "has_assembly_requirements": bool(report_data.get("assembly_requirements")),
+            # Row 41: count what the page shows — obligatory requirements
+            # only. Non-obligatory SUBUNIT rows made this true on 1,771 mouse
+            # rows against 26 human, contradicting the page.
+            "has_assembly_requirements": any(
+                item.get("obligatory") for item in (report_data.get("assembly_requirements") or [])
+            ),
             "has_alphafold_structure": has_alphafold,
             "structure_source": _structure_source_label(alphafold_path) if has_alphafold and alphafold_path is not None else "",
             "has_pdb": has_pdb,
@@ -8126,6 +8555,20 @@ def _index_family_name(report_data: dict[str, Any]) -> str:
         if cleaned:
             return cleaned
     return ""
+
+
+def _cross_reactivity_count_label(report_data: dict[str, Any], design_region_label: str) -> str:
+    """Name which BLAST search the card is counting.
+
+    ``_index_cross_reactivity_count`` returns the full-length count for
+    multipass targets and for targets with no design region. On a multipass
+    page that does have a region and region hits, the unlabelled number
+    contradicted the region table right below it.
+    """
+    topology = report_data.get("topology") or {}
+    if str(topology.get("topology_class") or "").startswith("multipass") or report_data.get("ectodomain") is None:
+        return "Full-length BLAST sequence similarity hits"
+    return f"{design_region_label} BLAST sequence similarity hits"
 
 
 def _index_cross_reactivity_count(report_data: dict[str, Any]) -> int:
@@ -8412,6 +8855,11 @@ def _rcsb_structure_url(pdb_id: str) -> str:
     return f"https://www.rcsb.org/structure/{quote(pdb_id.strip().upper())}"
 
 
+# F12-C, 207 human / 159 mouse pages. Defined beside the warnings themselves so
+# the construct card and the Cys->Ser offer cannot drift apart.
+_NO_CYS_TO_SER_WARNING_PREFIXES = NOT_A_FREE_THIOL_WARNING_PREFIXES
+
+
 def _construct_name_html(construct: dict[str, Any]) -> str:
     """Escaped construct name, linked to its RCSB entry when PDB-backed."""
     name = str(construct.get("name") or "")
@@ -8586,6 +9034,7 @@ def _render_cross_reactivity_alignment(
     *,
     rank: int,
     query_label: str = "human",
+    query_origin: int = 1,
 ) -> str:
     query_alignment = str(hit.get("query_alignment") or "")
     subject_alignment = str(hit.get("subject_alignment") or "")
@@ -8597,7 +9046,11 @@ def _render_cross_reactivity_alignment(
         subject_end = hit.get("subject_end")
         range_text = "n/a"
         if None not in (query_start, query_end, subject_start, subject_end):
-            range_text = f"{query_label} {query_start}-{query_end} | hit {subject_start}-{subject_end}"
+            offset = int(query_origin) - 1
+            range_text = (
+                f"{query_label} {int(query_start) + offset}-{int(query_end) + offset} "
+                f"| hit {subject_start}-{subject_end}"
+            )
         return (
             f"<div class=\"alignment-meta\"><span><strong>Rank:</strong> {escape(str(rank))}</span>"
             f"<span><strong>Bit score:</strong> {escape(_fmt_number(hit.get('bitscore')))}</span>"
@@ -9242,18 +9695,15 @@ def _fetch_refseq_target(accession: str, *, batch_dir: Path) -> dict[str, Any] |
         lines = [line.strip() for line in fasta_text.splitlines() if line.strip()]
         if not lines or not lines[0].startswith(">"):
             return _fetch_refseq_target_from_ortholog_table(accession, batch_dir=batch_dir)
-        header = lines[0][1:]
         sequence = "".join(lines[1:])
-        gene_symbol = accession
-        for token in header.replace(",", " ").split():
-            cleaned = token.strip("[]();")
-            if cleaned.isupper() and 2 <= len(cleaned) <= 10 and "_" not in cleaned and not cleaned.startswith(("XP", "NP")):
-                gene_symbol = cleaned
-                break
+        # F19-2: do not guess a gene symbol from the FASTA header. Its first
+        # all-capital token is "X1" in "... isoform X1 [Macaca fascicularis]",
+        # which produced gene_exact:X1 UniProt and Gene links on 1,815 mouse
+        # pages. None lets the caller fall back to the page's own symbol.
         return {
             "accession": accession,
             "entry_name": accession,
-            "gene_symbol": gene_symbol,
+            "gene_symbol": None,
             "sequence": sequence,
         }
     except Exception:
@@ -9366,6 +9816,62 @@ def _fmt_pct(value: Any) -> str:
         return f"{float(value):.2f}%"
     except Exception:
         return str(value)
+
+
+_HOMOLOG_BLANK_REASONS = {
+    "no_region": "no extracellular region",
+    "unresolved": "no ortholog resolved",
+    "unmapped": "boundaries could not be mapped confidently",
+}
+
+
+def _homolog_entry_note(item: dict[str, Any]) -> str:
+    """Co-orthologs and the accession's provenance, under the Entry cell.
+
+    §5.5: where the primary source gives several co-orthologs — MGI holds both
+    Akr1b8 and Akr1b10 for human AKR1B10 — the page must not hide them behind
+    the winner. For a cross-reactivity question two rows beat one.
+    """
+    parts: list[str] = []
+    candidates = str(item.get("candidates") or "").strip()
+    if candidates:
+        parts.append(f"also reported: {candidates}")
+    source = str(item.get("accession_source") or "").strip()
+    if source:
+        parts.append({"uniprot": "reviewed UniProt", "uniprot-trembl": "UniProt TrEMBL"}.get(source, source))
+    if not parts:
+        return ""
+    return f'<div class="muted">{escape("; ".join(parts))}</div>'
+
+
+def _homolog_cell_reason(item: dict[str, Any], report: dict[str, Any]) -> str:
+    """Why a Homology cell has no number.
+
+    SF4a: ``_fmt_pct(None)`` rendered an empty cell, so 92 human / 1,681 mouse
+    pages printed a species row whose identity and coverage were simply blank,
+    with no reason. Three causes, and PR-8 adds a fourth by withholding rows
+    that fail the ortholog gate (207 human pages lose every species row).
+    """
+    status = str(item.get("selection_status") or "").strip()
+    if status and status.lower() != "selected":
+        # The table already writes "withheld: <reason>"; prefixing it again
+        # rendered "withheld: withheld: ..." on every withheld cell.
+        return status
+    if not (item.get("entry_name") or item.get("accession")):
+        return _HOMOLOG_BLANK_REASONS["unresolved"]
+    if not report.get("ectodomain"):
+        return _HOMOLOG_BLANK_REASONS["no_region"]
+    if item.get("ectodomain_start") is None or item.get("ectodomain_end") is None:
+        # The ortholog resolved and the target has a region, but projecting the
+        # boundary onto the homolog failed the 0.70 coverage gate
+        # (sequence_utils._MIN_BOUNDARY_MAPPING_COVERAGE).
+        return _HOMOLOG_BLANK_REASONS["unmapped"]
+    return "n/a"
+
+
+def _fmt_pct_or_reason(value: Any, reason: str) -> str:
+    formatted = _fmt_pct(value)
+    return formatted if formatted else reason
 
 
 def _fmt_surface_identity(item: dict[str, Any]) -> str:

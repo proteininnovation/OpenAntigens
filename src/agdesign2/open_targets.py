@@ -289,6 +289,15 @@ def build_open_targets_associations_from_bulk_downloads(
     target_rows_from_summary = _summary_target_rows(summary_file, batch_dir)
     target_lookup = _load_open_targets_bulk_targets(release_dir / "target")
     disease_lookup = _load_open_targets_bulk_diseases(release_dir / "disease")
+    therapeutic_area_ids = {
+        str(area)
+        for record in disease_lookup.values()
+        for area in (record.get("therapeuticAreas") or [])
+    }
+    if not therapeutic_area_ids:
+        # An empty set silently restores F18: a therapeutic area such as
+        # "cancer" becomes the top disease again.
+        raise ExternalServiceError(f"Open Targets {release} disease data lists no therapeuticAreas.")
     ensembl_ids = {
         target_lookup[str(row.get("gene_symbol") or "").upper()]["ensembl_id"]
         for row in target_rows_from_summary
@@ -373,7 +382,7 @@ def build_open_targets_associations_from_bulk_downloads(
             disease_rows=disease_rows,
         )
         _sort_and_rank_associations(associations)
-        top = associations[0] if associations else {}
+        top = _top_specific_association(associations, therapeutic_area_ids)
         disease_names = sorted({str(item.get("disease_name") or "") for item in associations if item.get("disease_name")}, key=str.lower)
         target_rows.append(
             {
@@ -602,7 +611,7 @@ def _read_open_targets_disease_dataset(path: Path) -> list[dict[str, Any]]:
     dataset = ds.dataset(path, format="parquet")
     available = set(dataset.schema.names)
     columns = [column for column in ("id", "name", "ancestors", "therapeuticAreas") if column in available]
-    missing = [column for column in ("id", "name") if column not in available]
+    missing = [column for column in ("id", "name", "therapeuticAreas") if column not in available]
     if missing:
         raise ExternalServiceError(f"Open Targets disease dataset {path} is missing expected columns: {', '.join(missing)}")
     return dataset.to_table(columns=columns).to_pylist()
@@ -1052,6 +1061,22 @@ def _safe_float(value: Any) -> float:
 
 def _blank_if_none(value: Any) -> Any:
     return "" if value is None else value
+
+
+def _top_specific_association(
+    associations: list[dict[str, Any]], therapeutic_area_ids: set[str]
+) -> dict[str, Any]:
+    """The highest-ranked association that is a disease, not a disease area.
+
+    Row 41: indirect association scores propagate up the ontology, so a root
+    therapeutic-area node always outscores the diseases under it. The index's
+    "top disease" was one on 5,189 of 5,328 human rows. Falls back to the plain
+    top row when every association is a therapeutic area.
+    """
+    for row in associations:
+        if str(row.get("disease_id") or "") not in therapeutic_area_ids:
+            return row
+    return associations[0] if associations else {}
 
 
 def _sort_and_rank_associations(rows: list[dict[str, Any]]) -> None:

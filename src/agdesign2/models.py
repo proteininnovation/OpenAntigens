@@ -105,6 +105,12 @@ class FurinSite(Serializable):
     end: int
     motif: str
     suggestions: list[str]
+    # F32: when the motif sits on an annotated processing site, the protein is
+    # *meant* to be cleaved there. Abolishing it is a legitimate design goal —
+    # an uncleavable variant — but the page offered R210A/R213A over
+    # ADAM10's curated "Cleavage; by furin and PCSK7" site with no sign that
+    # the site is real and functional.
+    curated_annotation: str | None = None
 
 
 @dataclass(slots=True)
@@ -113,6 +119,10 @@ class CysteineFinding(Serializable):
     paired_with: int | None
     surface_exposed: bool | None
     warning: str | None = None
+    # F12-B: a curated partner outside the analysed range. The residue stays
+    # unpaired (it is, in this construct), but "unpaired" alone read as "no
+    # partner exists" on 74 human / 53 mouse pages.
+    partner_outside_range: int | None = None
     closest_unpaired_cysteine: int | None = None
     closest_unpaired_cysteine_distance: float | None = None
     closest_unpaired_cysteine_distance_atom: str | None = None
@@ -289,6 +299,17 @@ class HomologyRecord(Serializable):
     extracellular_surface_aligned_positions: int | None = None
     available: bool = True
     notes: list[str] = field(default_factory=list)
+    # PR-8: "selected", or "withheld: <reason>" when the ortholog gate refused
+    # the row. PR-3's renderer turns this into the cell text instead of a
+    # blank; 207 human pages lose every species row under the gate.
+    selection_status: str | None = None
+    # SF2b/§5.5: where the primary source gives several co-orthologs, or where
+    # one accession is claimed by more than one human gene.
+    candidates: str | None = None
+    evidence_count: int | None = None
+    # What kind of accession `accession` is: the ortholog table resolves from
+    # reviewed UniProt, TrEMBL or RefSeq, and the column was named "refseq".
+    accession_source: str | None = None
 
 
 @dataclass(slots=True)

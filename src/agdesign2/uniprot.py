@@ -63,13 +63,36 @@ class UniProtClient:
         except Exception:
             return None
 
-    def get_features(self, entry: dict[str, Any]) -> list[Feature]:
+    def get_features(self, entry: dict[str, Any], *, sequence_length: int | None = None) -> list[Feature]:
+        """Features of the analysed sequence.
+
+        RSM-002: a feature's ``location.sequence`` names the isoform it belongs
+        to; canonical features carry none. Such a feature is dropped whether or
+        not its coordinates happen to fit inside the canonical length — the
+        length check alone missed VCAM-1, brevican, AChE and NCAM1, whose
+        isoform-only GPI sites truncated the canonical design region by up to
+        379 residues. Coordinates past the sequence end are dropped too (PPAP's
+        TRANSMEM 382-404 on a 386-aa record).
+        """
+        if sequence_length is None:
+            sequence_length = len(str((entry.get("sequence") or {}).get("value") or "")) or None
+        canonical_ids = {
+            value
+            for value in (self._canonical_isoform_id(entry), str(entry.get("primaryAccession") or ""))
+            if value
+        }
         features: list[Feature] = []
         for feature in entry.get("features", []):
             location = feature.get("location", {})
+            owner = str(location.get("sequence") or "").strip()
+            if owner and owner not in canonical_ids:
+                # Belongs to another isoform; its coordinates are not ours.
+                continue
             start = self._location_value(location.get("start"))
             end = self._location_value(location.get("end"))
             if not start or not end:
+                continue
+            if sequence_length is not None and (start > sequence_length or end > sequence_length):
                 continue
             description = feature.get("description")
             raw_type = feature.get("type", "UNKNOWN")
@@ -132,10 +155,23 @@ class UniProtClient:
             if isinstance(gene_name, dict):
                 gene_symbol = gene_name.get("value")
         protein_description = entry.get("proteinDescription", {})
+        submitted = protein_description.get("submissionNames") or protein_description.get("submittedName") or []
+        if isinstance(submitted, dict):
+            submitted = [submitted]
         protein_name = (
             protein_description.get("recommendedName", {})
             .get("fullName", {})
             .get("value")
+            # F19-3: unreviewed TrEMBL entries have only a submitted name, so
+            # 266 mouse pages showed "Q8VF03_MOUSE" as the protein's name.
+            or next(
+                (
+                    str((item.get("fullName") or {}).get("value") or "")
+                    for item in submitted
+                    if isinstance(item, dict) and (item.get("fullName") or {}).get("value")
+                ),
+                None,
+            )
             or entry.get("uniProtkbId", entry.get("primaryAccession", "Unknown protein"))
         )
         return TargetRecord(
@@ -276,6 +312,16 @@ class UniProtClient:
             "disulfide_bond": "DISULFID",
             "glycosylation": "CARBOHYD",
             "modified_residue": "MOD_RES",
+            # OA-018: without these the stored type was PROPEPTIDE/LIPIDATION
+            # while pipeline.py and topology.py test PROPEP/LIPID, so the
+            # propeptide fallback never fired.
+            "propeptide": "PROPEP",
+            "lipidation": "LIPID",
+            "peptide": "PEPTIDE",
+            "chain": "CHAIN",
+            "intramembrane": "INTRAMEM",
+            "transit_peptide": "TRANSIT",
+            "cross-link": "CROSSLNK",
         }
         return aliases.get(normalized, raw_type.upper().replace(" ", "_"))
 

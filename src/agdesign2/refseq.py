@@ -64,7 +64,11 @@ class RefSeqClient:
         candidates = []
         for uid in summary_payload.get("result", {}).get("uids", []):
             item = summary_payload["result"].get(uid, {})
-            accession = item.get("caption")
+            # SF6: esummary's "caption" has no version, so every mouse-page
+            # cynomolgus accession (3,925) was unversioned while every human
+            # page's (4,593, from the ortholog table) was versioned — the same
+            # protein printed two ways across the portals.
+            accession = item.get("accessionversion") or item.get("caption")
             title = item.get("title", "")
             if accession:
                 candidates.append((self._rank_candidate(accession, title), accession, title))

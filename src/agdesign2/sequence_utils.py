@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import os
 import re
 from dataclasses import dataclass
 from functools import lru_cache
 
 
-_ALIGNMENT_BACKEND_ENV = "AGDESIGN2_ALIGNMENT_BACKEND"
-_PARASAIL_ALPHABET = "ARNDCQEGHILKMFPSTWYVBZXJUO*arn dcqeghilkmfpstwyvbzxjuo".replace(" ", "")
 _MIN_BOUNDARY_MAPPING_COVERAGE = 0.70
 
 
@@ -45,62 +42,78 @@ class PositionSubsetIdentity:
         return 100.0 * self.matches / self.aligned_positions
 
 
-def global_align(query: str, subject: str) -> AlignmentResult:
-    return _global_align_cached(query, subject, _alignment_backend())
+# BLOSUM62 with affine gaps 11/1 and FREE END GAPS.
+#
+# F33: the previous scheme scored match +1, **mismatch 0**, gap -1 in all three
+# backends. Mismatches being free lets a short query cherry-pick matches out of
+# a long subject: 20 seeded random pairs of 83 vs 550 aa averaged 75.6%
+# identity at 100% coverage, and 200 vs 1,866 aa averaged 86.9%. That is why a
+# wrong-gene macaque row read 79.7%, and why the mouse family matrix put GPR63
+# at 79.31% to LGR4 (87 aa vs 520 aa; honestly ~38% over the row).
+#
+# mismatch = -1 is not enough (83 vs 550 still scores 77%), and BLOSUM62 with
+# ordinary end gaps still opens ~15 gaps and reaches 38-44%. Free end gaps are
+# the part that removes the artefact: the same pairs then score 14% and 11%.
+#
+# One backend, not three. The parasail and pure-python backends disagreed with
+# Biopython by up to 0.8 points on real rows, which makes any pinned number
+# fragile, and a silent fallback between scoring schemes is exactly how this
+# defect survived. Biopython is a hard dependency (pyproject.toml:16).
+_GAP_OPEN = -11.0
+_GAP_EXTEND = -1.0
 
 
-def _alignment_backend() -> str:
-    backend = os.environ.get(_ALIGNMENT_BACKEND_ENV, "auto").strip().lower()
-    return backend if backend in {"auto", "parasail", "python"} else "auto"
-
-
-@lru_cache(maxsize=1024)
-def _global_align_cached(query: str, subject: str, backend: str) -> AlignmentResult:
-    if backend in {"auto", "parasail"}:
-        try:
-            return _parasail_global_align(query, subject)
-        except Exception:
-            if backend == "parasail":
-                raise
-    if backend == "auto":
-        try:
-            return _biopython_global_align(query, subject)
-        except Exception:
-            pass
-    return _python_global_align(query, subject)
-
-
-def _parasail_global_align(query: str, subject: str) -> AlignmentResult:
-    if not query or not subject:
-        return _python_global_align(query, subject)
-    if set(query) - set(_PARASAIL_ALPHABET) or set(subject) - set(_PARASAIL_ALPHABET):
-        return _python_global_align(query, subject)
-
-    import parasail  # type: ignore[import-not-found]
-
-    matrix = parasail.matrix_create(_PARASAIL_ALPHABET, 1, 0)
-    result = parasail.nw_trace_striped_16(query, subject, 1, 1, matrix)
-    traceback = result.traceback
-    aligned_query = str(traceback.query)
-    aligned_subject = str(traceback.ref)
-    if not aligned_query or not aligned_subject or len(aligned_query) != len(aligned_subject):
-        raise ValueError("parasail returned an invalid traceback alignment")
-    return _alignment_from_strings(aligned_query, aligned_subject, query_length=len(query))
-
-
-def _biopython_global_align(query: str, subject: str) -> AlignmentResult:
-    if not query or not subject:
-        return _python_global_align(query, subject)
-
-    from Bio.Align import PairwiseAligner  # type: ignore[import-not-found]
+@lru_cache(maxsize=1)
+def _aligner():  # pragma: no cover - exercised through global_align
+    from Bio.Align import PairwiseAligner, substitution_matrices
 
     aligner = PairwiseAligner()
     aligner.mode = "global"
-    aligner.match_score = 1
-    aligner.mismatch_score = 0
-    aligner.open_gap_score = -1
-    aligner.extend_gap_score = -1
-    alignment = aligner.align(query, subject)[0]
+    aligner.substitution_matrix = substitution_matrices.load("BLOSUM62")
+    aligner.open_gap_score = _GAP_OPEN
+    aligner.extend_gap_score = _GAP_EXTEND
+    # Free end gaps: a length difference at either terminus costs nothing, so
+    # the aligner stops paying for alignment it cannot justify.
+    aligner.end_insertion_score = 0.0
+    aligner.end_deletion_score = 0.0
+    return aligner
+
+
+@lru_cache(maxsize=1)
+def _scoring_alphabet() -> frozenset[str]:
+    from Bio.Align import substitution_matrices
+
+    return frozenset(substitution_matrices.load("BLOSUM62").alphabet)
+
+
+def _scoring_sequence(sequence: str) -> str:
+    """Map residues BLOSUM62 does not define onto its wildcard.
+
+    BLOSUM62's alphabet is ARNDCQEGHILKMFPSTWYVBZX*; selenocysteine (U),
+    pyrrolysine (O), the ambiguity code J and any placeholder letter in a test
+    fixture are outside it. X is the matrix's own "unknown residue" and scores
+    -1 against everything, which is the honest answer. The ORIGINAL characters
+    are kept in the aligned strings and in the identity count, so a placeholder
+    still matches itself.
+    """
+    alphabet = _scoring_alphabet()
+    return "".join(residue if residue in alphabet else "X" for residue in sequence)
+
+
+def global_align(query: str, subject: str) -> AlignmentResult:
+    return _global_align_cached(query, subject)
+
+
+@lru_cache(maxsize=1024)
+def _global_align_cached(query: str, subject: str) -> AlignmentResult:
+    if not query or not subject:
+        return _alignment_from_strings(
+            query + "-" * len(subject),
+            "-" * len(query) + subject,
+            query_length=len(query),
+        )
+
+    alignment = _aligner().align(_scoring_sequence(query), _scoring_sequence(subject))[0]
     coordinates = alignment.coordinates
 
     aligned_query_parts: list[str] = []
@@ -131,54 +144,6 @@ def _biopython_global_align(query: str, subject: str) -> AlignmentResult:
     return _alignment_from_strings(aligned_query, aligned_subject, query_length=len(query))
 
 
-def _python_global_align(query: str, subject: str) -> AlignmentResult:
-    rows = len(query) + 1
-    cols = len(subject) + 1
-    score = [[0] * cols for _ in range(rows)]
-    trace = [[""] * cols for _ in range(rows)]
-
-    for i in range(1, rows):
-        score[i][0] = -i
-        trace[i][0] = "U"
-    for j in range(1, cols):
-        score[0][j] = -j
-        trace[0][j] = "L"
-
-    for i in range(1, rows):
-        for j in range(1, cols):
-            match_score = 1 if query[i - 1] == subject[j - 1] else 0
-            diag = score[i - 1][j - 1] + match_score
-            up = score[i - 1][j] - 1
-            left = score[i][j - 1] - 1
-            best = max(diag, up, left)
-            score[i][j] = best
-            trace[i][j] = "D" if best == diag else "U" if best == up else "L"
-
-    aligned_query: list[str] = []
-    aligned_subject: list[str] = []
-    i = len(query)
-    j = len(subject)
-    while i > 0 or j > 0:
-        direction = trace[i][j] if i >= 0 and j >= 0 else ""
-        if direction == "D":
-            aligned_query.append(query[i - 1])
-            aligned_subject.append(subject[j - 1])
-            i -= 1
-            j -= 1
-        elif direction == "U":
-            aligned_query.append(query[i - 1])
-            aligned_subject.append("-")
-            i -= 1
-        else:
-            aligned_query.append("-")
-            aligned_subject.append(subject[j - 1])
-            j -= 1
-
-    aligned_query.reverse()
-    aligned_subject.reverse()
-    return _alignment_from_strings("".join(aligned_query), "".join(aligned_subject), query_length=len(query))
-
-
 def _alignment_from_strings(query_text: str, subject_text: str, *, query_length: int) -> AlignmentResult:
     matches = sum(
         1
@@ -195,6 +160,132 @@ def _alignment_from_strings(query_text: str, subject_text: str, *, query_length:
         aligned_positions=aligned_positions,
         query_covered=query_length,
     )
+
+
+# An identity over aligned positions is only a statement about the sequences if
+# the aligned stretch is a real part of them.
+#
+# Free end gaps (PR-4) made this bite: the optimum is free to trim to a tiny
+# high-scoring core, so matches/aligned_positions goes *up* for exactly the
+# wrong-gene pairs the metric fix was about. Measured on the macaque ortholog
+# table, 126 of 4,593 rows aligned fewer than 10 residues and OR8J3 against
+# guanine deaminase would have published "100.00% identity" off one residue.
+#
+# The rule is proportional, with no absolute floor: a genuinely short protein
+# that aligns end to end has an honest identity, and an absolute floor would
+# blank it.
+_MIN_REPORTABLE_ALIGNED_FRACTION = 0.30
+
+
+def reportable_identity(alignment: AlignmentResult, subject_length: int) -> float | None:
+    """Identity, or ``None`` where the alignment is too thin to mean anything.
+
+    For consumers that publish the number on its own, with no coverage beside
+    it to qualify it. A consumer that shows coverage next to identity can use
+    ``alignment.identity`` directly.
+    """
+    shorter = min(alignment.query_covered, subject_length)
+    if shorter <= 0 or alignment.aligned_positions == 0:
+        return None
+    if alignment.aligned_positions / shorter < _MIN_REPORTABLE_ALIGNED_FRACTION:
+        return None
+    return alignment.identity
+
+
+# The ortholog acceptance gate, measured over all 20,801 cached HCOP candidates
+# under the honest metric (plan §3 "F08 — ortholog selection and the gate").
+#
+# Two earlier shapes were refuted. A length-ratio band and a flat
+# "identity >= 70% AND coverage >= 70%" both kill VEGFA, FGF2 and CDH23,
+# because coverage is aligned/len(human) and a shorter ortholog can never pass
+# it; and the 70% identity floor is a macaque number (mouse p25 = 74.2,
+# p10 = 63.0), so it withholds 777 exact-symbol MGI orthologs including
+# CD274/PD-L1 at 69.9%.
+_GATE_MIN_COVERAGE_OF_SHORTER = 0.70
+_GATE_MIN_ALIGNED_LENGTH = 50
+_GATE_MIN_COVERAGE_OF_HUMAN = 0.25
+_GATE_MIN_IDENTITY_ASSERTED = 40.0
+_GATE_MIN_IDENTITY_UNASSERTED = 70.0
+# A curated model-organism database per species, and how much evidence it must
+# carry before its assertion relaxes the identity floor.
+PRIMARY_ORTHOLOG_SOURCES = {"mouse": {"MGI"}, "macaca_fascicularis": {"VGNC"}}
+PRIMARY_SOURCE_MIN_EVIDENCE = 5
+
+
+def primary_source_asserts_ortholog(
+    species: str,
+    *,
+    human_symbol: str | None,
+    ortholog_symbol: str | None,
+    gene_symbol_source: str | None,
+    evidence_count: int | None,
+) -> bool:
+    """Did a curated source assert this ortholog, rather than a name match?"""
+    human = str(human_symbol or "").strip().upper()
+    if human and human == str(ortholog_symbol or "").strip().upper():
+        return True
+    sources = PRIMARY_ORTHOLOG_SOURCES.get(species, set())
+    return (
+        str(gene_symbol_source or "").strip() in sources
+        and int(evidence_count or 0) >= PRIMARY_SOURCE_MIN_EVIDENCE
+    )
+
+
+def ortholog_gate_verdict(
+    alignment: AlignmentResult,
+    *,
+    human_length: int,
+    ortholog_length: int,
+    primary_source_asserted: bool,
+) -> str | None:
+    """``None`` to accept the ortholog, or the reason to withhold it.
+
+    ``primary_source_asserted`` relaxes the identity floor from 70% to 40%,
+    because a curated assertion that two genes are orthologs is evidence the
+    sequence identity does not have to carry on its own.
+
+    The plan phrased that condition as "the symbol matches", but a literal
+    symbol test does not meet the plan's own acceptance criterion. Measured
+    over the cached HCOP candidates: mouse IL6R's ortholog is **Il6ra** (MGI,
+    12 evidence sources, 56.4% identity) and DEFB124's is **Defb25** (MGI, 10
+    sources, 64.8%). Both are genuine, both are named by the plan as orthologs
+    that must survive, and a literal symbol test withholds both. The condition
+    the data supports is "the species' curated model-organism database asserted
+    it" — which an exact symbol match also satisfies.
+
+    Replayed through the production path (cached HCOP, the proteome resolver,
+    this gate): mouse 237 withheld of 5,003 pairs, macaque 79 of 4,456. The
+    clause admits 148 mouse rows a literal symbol test would withhold, 54 of
+    them onto a mouse protein another human gene also claims. All eight named short orthologs survive (VEGFA, FGF2, CDH23,
+    IL6R, DEFB124, TFF3, GNRH1, PYY) and so does CD274/PD-L1 at 69.9%, while
+    the macaque ABCB6→ATG9A, A2M→PRPF40B and KLK2→TRPM7 rows are withheld.
+    """
+    shorter = min(human_length, ortholog_length)
+    if shorter <= 0 or alignment.aligned_positions == 0:
+        return "no aligned residues"
+    if alignment.aligned_positions < _GATE_MIN_ALIGNED_LENGTH:
+        return f"only {alignment.aligned_positions} aligned residues"
+    coverage_shorter = alignment.aligned_positions / shorter
+    if coverage_shorter < _GATE_MIN_COVERAGE_OF_SHORTER:
+        return f"{coverage_shorter:.0%} of the shorter sequence aligned"
+    coverage_human = alignment.aligned_positions / human_length if human_length else 0.0
+    if coverage_human < _GATE_MIN_COVERAGE_OF_HUMAN:
+        return f"{coverage_human:.0%} of the human sequence aligned"
+    floor = (
+        _GATE_MIN_IDENTITY_ASSERTED
+        if primary_source_asserted
+        else _GATE_MIN_IDENTITY_UNASSERTED
+    )
+    if alignment.identity < floor:
+        return (
+            f"{alignment.identity:.1f}% identity, below the {floor:.0f}% floor for "
+            + (
+                "a curated ortholog assertion"
+                if primary_source_asserted
+                else "an ortholog with no curated assertion"
+            )
+        )
+    return None
 
 
 def find_furin_sites(sequence: str, pattern: str) -> list[tuple[int, int, str]]:
@@ -251,7 +342,17 @@ def map_query_region_to_subject(
     query_start: int,
     query_end: int,
     subject_sequence: str,
+    requested_length: int | None = None,
 ) -> tuple[int | None, int | None, str | None, list[str]]:
+    """Project a query range onto the subject through ``alignment``.
+
+    ``requested_length`` is how many residues were *asked for*. Without it the
+    coverage denominator is only the residues the alignment happens to contain,
+    so projecting a full-length construct through an ectodomain-only alignment
+    passed the 70% gate on the ectodomain's own length (OA-012: 422 human / 365
+    mouse reports, 2,834 constructs with under 70% of their span inside the
+    ectodomain).
+    """
     query_position = 0
     subject_position = 0
     mapped_positions: list[int] = []
@@ -276,11 +377,12 @@ def map_query_region_to_subject(
     if not mapped_positions:
         return None, None, None, ["No aligned residues mapped to the homolog ectodomain."]
 
-    coverage = len(mapped_positions) / query_residue_count if query_residue_count else 0.0
+    denominator = requested_length if requested_length else query_residue_count
+    coverage = len(mapped_positions) / denominator if denominator else 0.0
     if coverage < _MIN_BOUNDARY_MAPPING_COVERAGE:
         return None, None, None, [
             "Boundary projection rejected: "
-            f"{len(mapped_positions)}/{query_residue_count} query residues aligned to the homolog "
+            f"{len(mapped_positions)}/{denominator} query residues aligned to the homolog "
             f"({coverage:.1%} < {_MIN_BOUNDARY_MAPPING_COVERAGE:.1%} minimum)."
         ]
 

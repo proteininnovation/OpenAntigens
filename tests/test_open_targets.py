@@ -150,6 +150,50 @@ class OpenTargetsBuildTests(unittest.TestCase):
         self.assertNotIn("level of alpha-1B-glycoprotein", tsv)
         self.assertIn("chembl:0.8", tsv)
 
+    def test_a_release_without_therapeutic_areas_is_refused(self) -> None:
+        """An empty set silently restores F18, so it must raise, not pass."""
+        from agdesign2.exceptions import ExternalServiceError
+        from agdesign2.open_targets import _read_open_targets_disease_dataset
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            import pyarrow as pa
+            import pyarrow.parquet as parquet
+
+            dataset_dir = Path(tmpdir) / "disease"
+            dataset_dir.mkdir()
+            parquet.write_table(
+                pa.table({"id": ["EFO_1"], "name": ["x"]}),
+                dataset_dir / "part-00000.parquet",
+            )
+            with self.assertRaises(ExternalServiceError) as caught:
+                _read_open_targets_disease_dataset(dataset_dir)
+        self.assertIn("therapeuticAreas", str(caught.exception))
+
+    def test_a_disease_set_with_no_therapeutic_areas_is_refused(self) -> None:
+        from agdesign2.exceptions import ExternalServiceError
+        import agdesign2.open_targets as module
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            report_json = root / "egfr_human_report.json"
+            report_json.write_text(json.dumps({"target": {"accession": "P00533", "entry_name": "EGFR_HUMAN", "gene_symbol": "EGFR"}}), encoding="utf-8")
+            summary_path = root / "batch_summary.json"
+            summary_path.write_text(json.dumps([{"query": "EGFR_HUMAN", "status": "ok", "batch_index": 1, "json_report": str(report_json)}]), encoding="utf-8")
+
+            def fake_read(path, *, columns, filter_target_ids=None, column_aliases=None):
+                if str(path).endswith("target"):
+                    return [{"id": "ENSG1", "approvedSymbol": "EGFR", "approvedName": "EGFR"}]
+                return []
+
+            with mock.patch.object(module, "_read_parquet_dataset", side_effect=fake_read), \
+                    mock.patch.object(module, "_read_open_targets_disease_dataset",
+                                      side_effect=lambda path: [{"id": "EFO_1", "name": "x", "ancestors": ["EFO_0000408"], "therapeuticAreas": []}]):
+                with self.assertRaises(ExternalServiceError) as caught:
+                    build_open_targets_associations_from_bulk_downloads(
+                        summary_path, release="26.03", data_dir=root / "ot", download=False, verbose=False,
+                    )
+        self.assertIn("therapeuticAreas", str(caught.exception))
+
     def test_builds_association_artifacts_from_bulk_tables(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -205,10 +249,12 @@ class OpenTargetsBuildTests(unittest.TestCase):
                     )
                     return [
                         {
+                            # A therapeutic area outscoring the specific disease:
+                            # only the therapeuticAreas filter keeps it off the top.
                             "targetId": "ENSG00000146648",
                             "diseaseId": "EFO_0000616",
                             "datasourceId": "europepmc",
-                            "score": 0.88,
+                            "score": 0.97,
                         },
                         {
                             "targetId": "ENSG00000146648",
@@ -233,8 +279,10 @@ class OpenTargetsBuildTests(unittest.TestCase):
 
             def fake_disease_read(path):
                 return [
-                    {"id": "EFO_0000616", "name": "neoplasm", "ancestors": ["EFO_0000408"]},
-                    {"id": "MONDO_0007254", "name": "breast cancer", "ancestors": []},
+                    {"id": "EFO_0000616", "name": "neoplasm", "ancestors": ["EFO_0000408"],
+                     "therapeuticAreas": ["EFO_0000616"]},
+                    {"id": "MONDO_0007254", "name": "breast cancer", "ancestors": [],
+                     "therapeuticAreas": ["EFO_0000616"]},
                     {"id": "EFO_0001444", "name": "measurement", "ancestors": []},
                     {"id": "OBA_2050465", "name": "level of alpha-1B-glycoprotein in blood", "ancestors": []},
                 ]
@@ -257,9 +305,10 @@ class OpenTargetsBuildTests(unittest.TestCase):
         self.assertEqual(payload["targets"][0]["ensembl_id"], "ENSG00000146648")
         self.assertEqual(payload["targets"][0]["top_disease_name"], "breast cancer")
         self.assertEqual(payload["targets"][0]["top_disease_score"], 0.93)
-        self.assertEqual(payload["associations"][0]["direct_score"], 0.72)
-        self.assertEqual(payload["associations"][0]["indirect_score"], 0.93)
-        self.assertIn("indirect_datasource_scores", payload["associations"][0])
+        breast = next(a for a in payload["associations"] if a["disease_id"] == "MONDO_0007254")
+        self.assertEqual(breast["direct_score"], 0.72)
+        self.assertEqual(breast["indirect_score"], 0.93)
+        self.assertIn("indirect_datasource_scores", breast)
         self.assertIn("breast cancer", tsv)
         self.assertNotIn("measurement", tsv)
         self.assertNotIn("level of alpha-1B-glycoprotein", tsv)

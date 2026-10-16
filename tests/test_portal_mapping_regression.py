@@ -22,15 +22,14 @@ class PortalMappingRegressionTests(unittest.TestCase):
                 with self.subTest(snapshot=snapshot, sequence=sequence):
                     self.assertEqual(_fetch_homolog_target({"accession": "P99998"}, batch_dir=batch_dir)["sequence"], sequence)
 
-    def test_portal_alignment_observes_backend_changes(self):
-        with mock.patch.dict(os.environ, {"AGDESIGN2_ALIGNMENT_BACKEND": "python"}):
-            _portal_align_sequences("A", "AA")
-        with mock.patch.dict(os.environ, {"AGDESIGN2_ALIGNMENT_BACKEND": "auto"}):
-            expected = global_align("A", "AA")
-            self.assertEqual(_portal_align_sequences("A", "AA"), {
-                "aligned_query": expected.aligned_query,
-                "aligned_subject": expected.aligned_subject,
-            })
+    def test_portal_alignment_matches_the_shared_scorer(self):
+        # There is one scoring scheme now (PR-4); the viewer must show the same
+        # alignment the numbers were computed from.
+        expected = global_align("A", "AA")
+        self.assertEqual(_portal_align_sequences("A", "AA"), {
+            "aligned_query": expected.aligned_query,
+            "aligned_subject": expected.aligned_subject,
+        })
 
     def test_shared_alignment_for_unrelated_sequences(self):
         import random

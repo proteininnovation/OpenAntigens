@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 from pathlib import Path
 from urllib.parse import quote
@@ -59,6 +59,10 @@ class OrthologPrediction:
     mod_id: str | None
     gene_symbol_source: str | None
     evidence_count: int
+    # §5.5 co-orthology: the other symbols the primary source gives for this
+    # human gene, best-ranked first. MGI holds Akr1b8 AND Akr1b10 for human
+    # AKR1B10, and the exact-symbol rule alone would silently pick Akr1b10.
+    alternatives: list[str] = field(default_factory=list)
 
 
 @dataclass(slots=True)
@@ -149,6 +153,9 @@ class HGNCClient:
             "q_tax_id=9606",
             "t_tax_id=10090",
             "t_tax_id=9541",
+            # HCOP answers this with rhesus (9544) rows under "macaque": they
+            # supply the gene symbol only. The protein is resolved by symbol
+            # from the cynomolgus (9541) RefSeq proteome (ortholog_proteomes).
         ]
         url = f"https://www.genenames.org/cgi-bin/orthologs/hcop?{'&'.join(params)}"
         payload = self.http.fetch_json(
@@ -168,7 +175,11 @@ class HGNCClient:
                 values = predictions.get(alias)
                 if isinstance(values, list):
                     candidates.extend(item for item in values if isinstance(item, dict))
-            best = self._select_best_hcop_prediction(species, candidates)
+            best = self._select_best_hcop_prediction(
+                species,
+                candidates,
+                human_gene_symbol=str(payload.get("gene_symbol") or gene_symbol),
+            )
             if best is not None:
                 selected[species] = best
         return OrthologLookup(
@@ -304,36 +315,82 @@ class HGNCClient:
         )
         return payload.get("response", {}).get("docs", [])
 
-    def _select_best_hcop_prediction(
+    def _rank_hcop_candidates(
         self,
         species: str,
         candidates: list[dict],
-    ) -> OrthologPrediction | None:
+        *,
+        human_gene_symbol: str | None = None,
+    ) -> list[dict]:
+        """Rank HCOP ortholog candidates, best first.
+
+        SF1/SF2: the old key was ``(source rank, -evidence count, symbol)``, so
+        the **alphabet** was a primary key once source and evidence tied — it
+        decided 195 mouse picks, and it is why a wrong-gene cynomolgus row
+        reached 583 human pages. An exact human-symbol match, where it carries
+        at least half the best candidate's evidence, now leads.
+        """
         if not candidates:
-            return None
+            return []
         preferred_sources = {
             "mouse": {"MGI": 0, "VGNC": 1, "NCBI": 2},
             "macaca_fascicularis": {"VGNC": 0, "NCBI": 1},
         }.get(species, {})
+        best_evidence = max(len(candidate.get("evidence") or []) for candidate in candidates)
+        wanted_symbol = str(human_gene_symbol or "").strip().upper()
 
-        def sort_key(candidate: dict) -> tuple[int, int, str]:
-            source = str(candidate.get("gene_symbol_source") or "")
-            source_rank = preferred_sources.get(source, 5)
+        def sort_key(candidate: dict) -> tuple[int, int, int, str]:
+            symbol = str(candidate.get("gene_symbol") or "")
             evidence_count = len(candidate.get("evidence") or [])
-            gene_symbol = str(candidate.get("gene_symbol") or "")
-            return (source_rank, -evidence_count, gene_symbol)
+            exact = (
+                0
+                if (
+                    wanted_symbol
+                    and symbol.strip().upper() == wanted_symbol
+                    and evidence_count * 2 >= best_evidence
+                )
+                else 1
+            )
+            source_rank = preferred_sources.get(str(candidate.get("gene_symbol_source") or ""), 5)
+            return (exact, -evidence_count, source_rank, symbol)
 
-        chosen = sorted(candidates, key=sort_key)[0]
+        return sorted(candidates, key=sort_key)
+
+    def _prediction_from_candidate(self, species: str, candidate: dict) -> OrthologPrediction:
         return OrthologPrediction(
             species=species,
-            gene_symbol=str(chosen.get("gene_symbol") or "") or None,
-            gene_name=str(chosen.get("gene_name") or "") or None,
-            ncbi_gene_id=str(chosen.get("ncbi_gene_id") or "") or None,
-            ensembl_id=str(chosen.get("ensembl_id") or "") or None,
-            mod_id=str(chosen.get("mod_id") or "") or None,
-            gene_symbol_source=str(chosen.get("gene_symbol_source") or "") or None,
-            evidence_count=len(chosen.get("evidence") or []),
+            gene_symbol=str(candidate.get("gene_symbol") or "") or None,
+            gene_name=str(candidate.get("gene_name") or "") or None,
+            ncbi_gene_id=str(candidate.get("ncbi_gene_id") or "") or None,
+            ensembl_id=str(candidate.get("ensembl_id") or "") or None,
+            mod_id=str(candidate.get("mod_id") or "") or None,
+            gene_symbol_source=str(candidate.get("gene_symbol_source") or "") or None,
+            evidence_count=len(candidate.get("evidence") or []),
         )
+
+    def _select_best_hcop_prediction(
+        self,
+        species: str,
+        candidates: list[dict],
+        *,
+        human_gene_symbol: str | None = None,
+    ) -> OrthologPrediction | None:
+        ranked = self._rank_hcop_candidates(
+            species, candidates, human_gene_symbol=human_gene_symbol
+        )
+        if not ranked:
+            return None
+        prediction = self._prediction_from_candidate(species, ranked[0])
+        # §5.5: where the primary source gives several co-orthologs, do not
+        # hide them. AKR1B10 is a genuine 2x2 co-orthology in MGI, and the
+        # exact-symbol rule would silently pick Akr1b10 alone.
+        prediction.alternatives = [
+            str(candidate.get("gene_symbol") or "")
+            for candidate in ranked[1:]
+            if candidate.get("gene_symbol")
+            and str(candidate.get("gene_symbol")) != prediction.gene_symbol
+        ]
+        return prediction
 
     def _build_family_members_from_docs(self, docs: list[dict]) -> list[FamilyMember]:
         members: dict[str, FamilyMember] = {}

@@ -47,6 +47,7 @@ from .precomputed import PrecomputedReferenceStore
 from .refseq import RefSeqClient
 from .sequence_utils import find_furin_sites, global_align, identity_for_query_positions, map_query_region_to_subject, slice_sequence
 from .structure_utils import (
+    NOT_A_FREE_THIOL_WARNING_PREFIXES,
     analyze_cysteines,
     build_pae_stats,
     classify_surface_accessibility,
@@ -58,7 +59,13 @@ from .structure_utils import (
     split_domains_from_pae,
     summarize_construct_quality,
 )
-from .topology import TopologyResult, apply_surfy_topology_fallback, derive_ectodomain
+from .topology import (
+    TopologyResult,
+    apply_surfy_topology_fallback,
+    derive_ectodomain,
+    feature_type as topology_feature_type,
+    replace_region,
+)
 from .uniprot import UniProtClient
 from .visualization import ConstructAssetGenerator
 
@@ -122,6 +129,146 @@ class _TerminalTrimDecision:
     evidence: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     blocked_reason: str | None = None
+
+
+# The ICL3-fusion window, in GPCRdb generic numbering.
+#
+# F02-A: the only guard on a fusion window was overlap with UniProt TRANSMEM.
+# GPCRdb's own helices run well past the membrane core — for A2A, TM5 is
+# 173-213 (5.34x36 -> 5.74x74) and TM6 is 219-259 (6.21x21 -> 6.61x61) — so a
+# window that clears UniProt can still remove ~14 residues of TM5 and ~16 of
+# TM6. 683 human / 261 mouse pages published such a window.
+#
+# "Any overlap with an annotated segment" is the wrong rule: GPCRdb's NAR 2021
+# paper notes the cytosolic ends of TM5 and TM6 are distorted by the very
+# fusion proteins used to crystallise these receptors, so the canonical
+# constructs *do* cut inside the annotated helices. The rule is therefore a
+# band in generic numbers relative to the conserved x.50 positions.
+#
+# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window. The
+# literature reports that construct two ways — the crystallisation construct
+# replaces Lys209-Gly218, and the original insertion work cut between L208 and
+# R222 — and the follow-up decision took the wider reading so both are allowed.
+#
+# OWNER DECISION 2026-10-16: keep that construct as the reference, but express
+# it as a DEPTH into the helix rather than an absolute generic number. The
+# window [5.69, 6.24] is A2A's own numbering and does not travel: GPCRdb ends
+# the median receptor's TM5 at 5.68 and starts its TM6 at 6.26, so only 166 of
+# 693 receptors have a TM5 reaching 5.69. For the rest the window sat outside
+# the annotated helix and blocked every cut touching it — 1,374 of 1,570 human
+# variants on 692 of 800 pages. A2A's own cut points are 5 residues before the
+# end of its TM5 and 3 after the start of its TM6; measured that way the same
+# rule blocks 558 of 1,570 on 282 pages and still allows the published
+# construct while blocking the portal's deeper 204-229 variant.
+GPCR_ICL3_FUSION_DEPTH: dict[str, int] = {
+    # helix -> how many residues of it the cut may keep, measured from the end
+    # the loop meets: TM5's C-terminal end, TM6's N-terminal start.
+    "5": 5,
+    "6": 3,
+}
+
+
+_DISORDER_REGION_TOKENS = ("disorder", "low complexity", "low-complexity")
+
+
+def _is_disorder_region(feature: Feature) -> bool:
+    if str(feature.type or "").upper() != "REGION":
+        return False
+    description = str(feature.description or "").lower()
+    return any(token in description for token in _DISORDER_REGION_TOKENS)
+
+
+def _construct_name_from_feature(feature: Feature) -> str:
+    base = (feature.description or feature.type or "region").lower().replace(" ", "_")
+    base = re.sub(r"[^a-z0-9_]+", "_", base).strip("_") or "region"
+    return f"{base}_{feature.start}_{feature.end}"
+
+
+def _curated_disulfides(features: list[Feature]) -> list[Feature]:
+    return [feature for feature in features if str(feature.type or "").upper() == "DISULFID"]
+
+
+# Protein-name and InterPro-family tokens that identify a GPCR positively.
+#
+# F01: GPCR advice was gated on `tm_count >= 7`, which is a proxy, not a
+# classification: 536 human and 508 mouse non-GPCRs — ABC and SLC transporters,
+# CNG and TRP channels, Na+/H+ exchangers, adenylate cyclases, PAQR receptors —
+# were handed a "Conservative 7TM expression series", an ICL loop screen and, on
+# 329 human / 295 mouse pages, a generated BRIL/T4L fusion sequence.
+#
+# The owner's decision (plan §5.1) is to keep known GPCRs: the list therefore
+# carries the family names whose protein names lack the generic "G
+# protein-coupled receptor" string — olfactory and odorant, vomeronasal, taste,
+# opsins, and the named ligand families — so the 222 GPCR-named reports with no
+# GPCRdb entry keep their advice. The tokens were derived from the protein names
+# actually shipped in the two snapshots, not from memory.
+_GPCR_NAME_TOKENS: tuple[str, ...] = (
+    "g protein-coupled receptor", "g-protein coupled receptor", "gpcr",
+    "olfactory receptor", "odorant receptor", "vomeronasal",
+    "taste receptor", "opsin", "rhodopsin",
+    # "smoothened", not "smoothened homolog": SMO's protein name is "Protein
+    # smoothened" (the negative list already excludes its modulator). And
+    # "adhesion g protein"/"adhesion g-protein", not "adhesion g", which also
+    # matched "Small cell adhesion glycoprotein".
+    "frizzled", "smoothened", "adhesion g protein", "adhesion g-protein",
+    "trace amine-associated receptor", "mas-related",
+    "chemokine receptor", "metabotropic glutamate receptor",
+    "adrenergic receptor", "muscarinic acetylcholine receptor",
+    "hydroxytryptamine receptor", "dopamine receptor",
+    "somatostatin receptor", "leukotriene",
+    "lysophosphatidic acid receptor", "sphingosine 1-phosphate receptor",
+    "neuropeptide", "prostaglandin e2 receptor", "prostacyclin receptor",
+    "thromboxane", "angiotensin", "bradykinin receptor",
+    "melanocortin receptor", "histamine h", "cannabinoid receptor",
+    "relaxin receptor", "orexin receptor", "apelin receptor",
+    "free fatty acid receptor", "succinate receptor",
+    "hydroxycarboxylic acid receptor", "formyl peptide receptor",
+    "complement component c3a receptor", "c5a anaphylatoxin",
+    "platelet-activating factor receptor", "gastrin",
+    "secretin receptor", "glucagon receptor", "calcitonin receptor",
+    "parathyroid hormone", "corticotropin-releasing factor receptor",
+    "vasoactive intestinal", "pituitary adenylate cyclase-activating",
+    "growth hormone-releasing hormone receptor",
+    "gonadotropin-releasing hormone receptor",
+    "thyrotropin", "lutropin", "follitropin",
+    "oxytocin receptor", "vasopressin", "galanin receptor",
+    "motilin receptor", "ghrelin receptor", "bombesin receptor",
+    "neuromedin", "tachykinin", "endothelin receptor",
+    "purinergic receptor p2y", "p2y purinoceptor",
+    "calcium-sensing receptor", "gamma-aminobutyric acid type b receptor",
+    "melatonin receptor", "cysteinyl leukotriene",
+    "chemerin", "prokineticin receptor", "cholecystokinin receptor",
+    "urotensin-2 receptor", "prolactin-releasing peptide receptor",
+    "pyroglutamylated rfamide peptide receptor",
+)
+
+# Names that contain a token above but are not GPCRs. Without these the token
+# list keeps advice on LMBRD2 ("G protein-coupled receptor-associated protein"),
+# on the P2X purinoceptors (ligand-gated ion channels, not the P2Y GPCRs) and on
+# 5-HT3 (a Cys-loop channel, unlike every other 5-HT receptor).
+_NON_GPCR_NAME_TOKENS: tuple[str, ...] = (
+    "g protein-coupled receptor-associated",
+    "modulator of smoothened",
+    "p2x purinoceptor",
+    "hydroxytryptamine receptor 3",
+)
+
+
+def is_gpcr_by_name(target, interpro_annotations: list[DomainAnnotation]) -> bool:
+    """Positive GPCR classification from the protein name and InterPro families.
+
+    Gene symbols are deliberately not searched: GPR108, GPR137C and GPR180 are
+    not GPCRs, and a bare "gpr" token would keep advice on all of them.
+    """
+    text = " ".join(
+        [
+            str(getattr(target, "protein_name", "") or ""),
+            " ".join(annotation.name for annotation in interpro_annotations),
+        ]
+    ).lower()
+    if any(token in text for token in _NON_GPCR_NAME_TOKENS):
+        return False
+    return any(token in text for token in _GPCR_NAME_TOKENS)
 
 
 class AntigenAnalyzer:
@@ -234,13 +381,17 @@ class AntigenAnalyzer:
             )
         else:
             canonical_family = live_canonical_family
-        interpro_annotations = self._filter_design_annotations(interpro_annotations, topology.ectodomain)
         gpcr_annotation = self._fetch_gpcr_annotation(
             target=target,
             topology=topology.topology,
             interpro_annotations=interpro_annotations,
             notes=notes,
         )
+        self._clip_ectodomain_to_gpcrdb_tm1(topology, gpcr_annotation, notes)
+        # After the clip, not before: these annotations become domain_* and
+        # repeat_* constructs, so filtering against the un-clipped region left
+        # an InterPro domain reaching into GPCRdb TM1 on offer.
+        interpro_annotations = self._filter_design_annotations(interpro_annotations, topology.ectodomain)
 
         structural_regions: list[Region] = []
         cysteine_analysis: list[CysteineFinding] = []
@@ -343,10 +494,14 @@ class AntigenAnalyzer:
                         if self.config.sasa_target_accessibility_only
                         else None,
                     )
-                    surface_exposure = {
-                        residue: result.surface_exposed
-                        for residue, result in surface_accessibility.items()
-                    }
+                    surface_exposure = self._withhold_membrane_exposure(
+                        {
+                            residue: result.surface_exposed
+                            for residue, result in surface_accessibility.items()
+                        },
+                        sequence_length=len(target.sequence),
+                        topology=topology.topology,
+                    )
                     residue_annotations = self._build_residue_annotations(
                         sequence=target.sequence,
                         topology=topology.topology,
@@ -359,6 +514,7 @@ class AntigenAnalyzer:
                         topology.ectodomain.start,
                         topology.ectodomain.end,
                         surface_exposure=surface_exposure,
+                        curated_disulfides=_curated_disulfides(features),
                     )
                     self._progress(
                         f"Derived {len(structural_regions)} structural regions and {len(cysteine_analysis)} cysteine findings"
@@ -385,10 +541,14 @@ class AntigenAnalyzer:
                         if self.config.sasa_target_accessibility_only
                         else None,
                     )
-                    surface_exposure = {
-                        residue: result.surface_exposed
-                        for residue, result in surface_accessibility.items()
-                    }
+                    surface_exposure = self._withhold_membrane_exposure(
+                        {
+                            residue: result.surface_exposed
+                            for residue, result in surface_accessibility.items()
+                        },
+                        sequence_length=len(target.sequence),
+                        topology=topology.topology,
+                    )
                     residue_annotations = self._build_residue_annotations(
                         sequence=target.sequence,
                         topology=topology.topology,
@@ -401,6 +561,7 @@ class AntigenAnalyzer:
                         1,
                         len(target.sequence),
                         surface_exposure=surface_exposure,
+                        curated_disulfides=_curated_disulfides(features),
                     )
                     notes.append(
                         AnalysisNote(
@@ -431,7 +592,7 @@ class AntigenAnalyzer:
 
         ligand_interactions = self._collect_ligand_interactions(features, topology.ectodomain)
         ptms = self._collect_ptm_annotations(features)
-        furin_sites = self._find_furin_sites(target.sequence, topology.ectodomain)
+        furin_sites = self._find_furin_sites(target.sequence, topology.ectodomain, features)
 
         self._progress("Building construct recommendations")
         constructs = self._suggest_constructs(
@@ -568,6 +729,8 @@ class AntigenAnalyzer:
             topology=topology.topology,
             interpro_annotations=interpro_annotations,
             gpcr_annotation=gpcr_annotation,
+            ligand_interactions=ligand_interactions,
+            ptms=ptms,
         )
         gpcr_engineering_variants = self._suggest_gpcr_engineering_variants(
             target=target,
@@ -576,6 +739,7 @@ class AntigenAnalyzer:
             ligand_interactions=ligand_interactions,
             ptms=ptms,
             gpcr_annotation=gpcr_annotation,
+            interpro_annotations=interpro_annotations,
         )
         if topology.ectodomain and self.config.run_cross_reactivity:
             ectodomain_sequence = slice_sequence(target.sequence, topology.ectodomain.start, topology.ectodomain.end)
@@ -1005,7 +1169,8 @@ class AntigenAnalyzer:
             (
                 feature.end
                 for feature in features
-                if feature.type.upper() == "PROPEP" and 1 <= feature.start <= feature.end < sequence_length
+                if topology_feature_type(feature) == "PROPEP"
+                and 1 <= feature.start <= feature.end < sequence_length
             ),
             default=0,
         )
@@ -1045,9 +1210,27 @@ class AntigenAnalyzer:
                     position=position,
                     amino_acid=amino_acid,
                     topology_location=locations.get(position, "unknown"),
-                    surface_exposed=accessibility.surface_exposed if accessibility is not None else None,
-                    surface_accessibility=accessibility.classification if accessibility is not None else None,
-                    surface_accessibility_reason=accessibility.reason if accessibility is not None else None,
+                    # F11, second producer: this payload feeds the 3D viewer
+                    # (portal.py:8967), so without the same rule the viewer
+                    # still calls a membrane cysteine exposed.
+                    surface_exposed=(
+                        None
+                        if locations.get(position) == "membrane" or accessibility is None
+                        else accessibility.surface_exposed
+                    ),
+                    # Withhold the classification and its reason too: leaving
+                    # them said "exposed", and why, for a residue the page
+                    # refuses to call.
+                    surface_accessibility=(
+                        None
+                        if locations.get(position) == "membrane" or accessibility is None
+                        else accessibility.classification
+                    ),
+                    surface_accessibility_reason=(
+                        "No solvent-exposure call is made inside a membrane span."
+                        if locations.get(position) == "membrane"
+                        else (accessibility.reason if accessibility is not None else None)
+                    ),
                     full_model_sasa=accessibility.full_model_sasa if accessibility is not None else None,
                     full_model_relative_sasa=accessibility.full_model_relative_sasa if accessibility is not None else None,
                     domain_context_sasa=accessibility.domain_context_sasa if accessibility is not None else None,
@@ -1057,6 +1240,46 @@ class AntigenAnalyzer:
                 )
             )
         return annotations
+
+    def _withhold_membrane_exposure(
+        self,
+        surface_exposure: dict[int, bool | None],
+        *,
+        sequence_length: int,
+        topology: TopologyAnnotation | None,
+    ) -> dict[int, bool | None]:
+        """No solvent-exposure call inside a membrane span.
+
+        F11 (1,473 human / 1,263 mouse pages): a residue inside a TM or
+        intramembrane span was being called "surface exposed" and, when
+        unpaired, carried "Unpaired cysteine appears surface exposed." 71% of
+        those calls are an artefact of computing SASA on an isolated helix
+        (a helix alone is always exposed); the other 29% come from an
+        AlphaFold monomer with no membrane, where lipid-facing and bundle-facing
+        cannot be told apart. Solvent accessibility is undefined there, so the
+        honest answer is no call.
+
+        The owner's decision (plan §5.2) scopes this to membrane spans only:
+        intracellular cysteines (1,310 human / 980 mouse pages) keep their call.
+
+        The value must be an explicit ``None``, not a missing key:
+        ``analyze_cysteines`` falls back to a second heuristic
+        (``structure_utils._is_surface_exposed``) for a residue that is absent.
+        """
+        locations = self._topology_location_by_residue(sequence_length, topology)
+        withheld = {
+            residue: (None if locations.get(residue) == "membrane" else value)
+            for residue, value in surface_exposure.items()
+        }
+        # Every membrane residue gets an explicit key, not just the ones the
+        # SASA pass happened to cover. The SASA target set is bounded by the
+        # design region, so a membrane cysteine outside it had NO key and fell
+        # through to the second heuristic — 1,476 construct-level findings on
+        # 165 human / 149 mouse reports still called such a cysteine exposed.
+        for residue, location in locations.items():
+            if location == "membrane":
+                withheld[residue] = None
+        return withheld
 
     def _topology_location_by_residue(
         self,
@@ -1166,6 +1389,15 @@ class AntigenAnalyzer:
         query_region_start: int,
         extracellular_surface_positions: set[int],
     ) -> list:
+        """Annotate BLAST hits with identity over the accessible residue subset.
+
+        ``query_region_start`` is where the *queried sequence* starts in the
+        protein. BLAST's ``query_alignment`` does not start there: it starts at
+        ``hit.query_start`` **within** that sequence. Passing the region origin
+        alone shifted the position set by ``query_start - 1`` on 117,043 of the
+        148,231 stored accessible-identity values — the producer half of
+        OA-002, which the renderer fix in PR-3 did not reach.
+        """
         if not extracellular_surface_positions:
             return hits
         annotated = []
@@ -1173,17 +1405,18 @@ class AntigenAnalyzer:
             if not hit.query_alignment or not hit.subject_alignment:
                 annotated.append(hit)
                 continue
+            alignment_origin = query_region_start + max(int(hit.query_start or 1), 1) - 1
             alignment = type("BlastAlignment", (), {})()
             alignment.aligned_query = hit.query_alignment
             alignment.aligned_subject = hit.subject_alignment
             surface_result = identity_for_query_positions(
                 alignment,
-                query_region_start=query_region_start,
+                query_region_start=alignment_origin,
                 query_positions=extracellular_surface_positions,
             )
             annotation = self._blast_query_alignment_annotation(
                 hit.query_alignment,
-                query_region_start=query_region_start,
+                query_region_start=alignment_origin,
                 extracellular_surface_positions=extracellular_surface_positions,
             )
             annotated.append(
@@ -1616,6 +1849,33 @@ class AntigenAnalyzer:
                         coverage=round(alignment.coverage, 2),
                     )
                 )
+            elif ectodomain is None:
+                # SF4b (1,563 mouse pages): with no design region the live path
+                # left identity and coverage None, so mouse GPCR pages showed a
+                # blank Homology row where the human page — through
+                # precomputed.py:330 — shows a full-length number. Mirror it.
+                alignment = global_align(sequence, target.sequence)
+                full_length = Region(
+                    start=1,
+                    end=len(target.sequence),
+                    label="Transferred full-length protein",
+                    source="alignment",
+                )
+                context[species] = {
+                    "available": True,
+                    "target": target,
+                    "ectodomain": full_length,
+                    "ectodomain_sequence": target.sequence,
+                    "alignment": alignment,
+                    "notes": match.notes,
+                }
+                homology.append(
+                    replace(
+                        match,
+                        identity=round(alignment.identity, 2),
+                        coverage=round(alignment.coverage, 2),
+                    )
+                )
             else:
                 context[species] = {
                     "available": True,
@@ -1809,7 +2069,8 @@ class AntigenAnalyzer:
             )
             return None
         if annotation is None:
-            if topology is not None and len(topology.transmembrane_regions) >= self.config.multipass_gpcr_like_tm_count:
+            # Only worth saying on a target we actually classify as a GPCR.
+            if is_gpcr_by_name(target, interpro_annotations):
                 notes.append(
                     AnalysisNote(
                         severity="warning",
@@ -2005,7 +2266,10 @@ class AntigenAnalyzer:
     def _annotation_construct_name(self, annotation: DomainAnnotation) -> str:
         base = re.sub(r"[^a-z0-9]+", "_", annotation.name.lower()).strip("_")
         prefix = "repeat" if annotation.type == "repeat" else "domain"
-        return f"{prefix}_{base or annotation.accession.lower()}"
+        # Row 29: two InterPro domains with one name ("Ig-like domain" twice)
+        # gave two spans one construct name — 8,569 domain_* and 907 repeat_*
+        # duplicate instances. The boundary makes it unique.
+        return f"{prefix}_{base or annotation.accession.lower()}_{annotation.start}_{annotation.end}"
 
     def _annotation_seed_score(self, annotation: DomainAnnotation) -> float:
         base_score = 82.0 if annotation.source_database == "INTERPRO" else 80.0
@@ -2187,15 +2451,30 @@ class AntigenAnalyzer:
                 if feature.type.upper() in {"DOMAIN", "REGION"}
                 and feature.start >= ectodomain.start
                 and feature.end <= ectodomain.end
+                # F14a: UniProt's REGION "Disordered" is a disorder prediction,
+                # not a curated domain, and 408 human / 365 mouse pages offered
+                # one as a construct under "Curated extracellular domain
+                # annotation from UniProt."
+                and not _is_disorder_region(feature)
             ]
             for feature in domain_features:
                 suggestions.append(
                     ConstructSuggestion(
-                        name=(feature.description or feature.type).lower().replace(" ", "_"),
+                        # Row 29: the name was the description alone, so two
+                        # spans sharing a description got one name on 1,068
+                        # human / 779 mouse pages — and the exports, the viewer
+                        # and the construct images all key on it.
+                        name=_construct_name_from_feature(feature),
                         start=feature.start,
                         end=feature.end,
                         score=80.0,
-                        rationale="Curated extracellular domain annotation from UniProt.",
+                        # OA-020: say which feature type it came from.
+                        rationale=(
+                            "Curated extracellular domain annotation from UniProt."
+                            if feature.type.upper() == "DOMAIN"
+                            else "UniProt REGION annotation inside the design region; "
+                            "not a curated domain."
+                        ),
                         evidence=["UniProt domain annotation"],
                     )
                 )
@@ -2340,7 +2619,11 @@ class AntigenAnalyzer:
     def _pdb_construct_name(self, construct: ExperimentalConstruct, chain: Region) -> str:
         chain_label = str(chain.metadata.get("chain") or chain.label or "x").lower()
         chain_label = re.sub(r"[^a-z0-9]+", "_", chain_label).strip("_") or "x"
-        return f"pdb_{construct.pdb_id.lower()}_{chain_label}"
+        # The boundary is part of the id: one PDB chain can back several
+        # non-overlapping constructs (acm5_human has 6OL9 chain A at both
+        # 21-224 and 431-532), and without it 113 human / 7 mouse pages gave two
+        # different sequences the same name, which the exports key on.
+        return f"pdb_{construct.pdb_id.lower()}_{chain_label}_{chain.start}_{chain.end}"
 
     def _suggest_membrane_expression_constructs(
         self,
@@ -2801,19 +3084,36 @@ class AntigenAnalyzer:
         topology: TopologyAnnotation | None,
         interpro_annotations: list[DomainAnnotation],
         gpcr_annotation: GPCRdbAnnotation | None = None,
+        ligand_interactions: list[Feature] | None = None,
+        ptms: list[Feature] | None = None,
     ) -> list[MembraneEngineeringSuggestion]:
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
         tm_count = len(topology.transmembrane_regions)
         suggestions: list[MembraneEngineeringSuggestion] = []
-        is_gpcr = gpcr_annotation is not None or tm_count >= self.config.multipass_gpcr_like_tm_count
+        is_gpcr = gpcr_annotation is not None or is_gpcr_by_name(target, interpro_annotations)
         if is_gpcr:
-            internal_cytoplasmic_loops = self._find_internal_cytoplasmic_loops(topology)
-            longest_loop = max(
-                internal_cytoplasmic_loops,
-                key=lambda region: (region.end - region.start + 1, region.start),
-                default=None,
-            )
+            # One loop source, and the same blockers as the fusion variants.
+            # Both cards describe the cassette feature, so they go off with it.
+            longest_loop: Region | None = None
+            advisory_blockers: list[str] = []
+            if self.config.gpcr_loop_fusion_enabled:
+                longest_loop, _loop_source = self._select_gpcr_engineering_loop(topology, gpcr_annotation)
+                advisory_blockers = (
+                    self._gpcr_loop_engineering_blockers(
+                        loop=longest_loop,
+                        topology=topology,
+                        features=features,
+                        ligand_interactions=ligand_interactions or [],
+                        ptms=ptms or [],
+                        gpcr_annotation=gpcr_annotation,
+                        domains=features,
+                    )
+                    if longest_loop is not None
+                    else ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
+                )
+                if advisory_blockers:
+                    longest_loop = None
             tail = topology.cytoplasmic_tail_region
             gpcr_evidence = []
             if gpcr_annotation is not None:
@@ -2844,6 +3144,27 @@ class AntigenAnalyzer:
                     end=topology.membrane_core_region.end,
                 )
             )
+            if longest_loop is None and advisory_blockers:
+                suggestions.append(
+                    MembraneEngineeringSuggestion(
+                        category="gpcr_loop_engineering_blocked",
+                        title="No intracellular-loop engineering site",
+                        summary=(
+                            "No intracellular loop on this receptor can carry a fusion cassette "
+                            "without cutting into structure the page also annotates."
+                        ),
+                        rationale=list(advisory_blockers),
+                        suggested_actions=[
+                            "Screen the native full-length and trimmed membrane constructs instead.",
+                        ],
+                        evidence=gpcr_evidence,
+                        warnings=[
+                            "Advisory only; this is the absence of a recommendation, not a prediction of failure.",
+                        ],
+                        start=topology.membrane_core_region.start,
+                        end=topology.membrane_core_region.end,
+                    )
+                )
             if longest_loop is not None and (longest_loop.end - longest_loop.start + 1) >= 15:
                 loop_length = longest_loop.end - longest_loop.start + 1
                 suggestions.append(
@@ -2868,7 +3189,7 @@ class AntigenAnalyzer:
                         end=longest_loop.end,
                     )
                 )
-            if gpcr_annotation is not None:
+            if gpcr_annotation is not None and self.config.gpcr_loop_fusion_enabled:
                 icl3 = self._gpcr_segment(gpcr_annotation, "ICL3")
                 if icl3 is not None and (icl3.end - icl3.start + 1) >= 12:
                     suggestions.append(
@@ -2968,11 +3289,17 @@ class AntigenAnalyzer:
         ligand_interactions: list[Feature],
         ptms: list[Feature],
         gpcr_annotation: GPCRdbAnnotation | None = None,
+        interpro_annotations: list[DomainAnnotation] | None = None,
     ) -> list[GPCREngineeringVariant]:
+        if not self.config.gpcr_loop_fusion_enabled:
+            return []
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
         tm_count = len(topology.transmembrane_regions)
-        if gpcr_annotation is None and tm_count < self.config.multipass_gpcr_like_tm_count:
+        # The same inputs the advice gate uses. With an empty InterPro list a
+        # target classified only by an InterPro family name got the 7TM advice
+        # block but silently no fusion variants.
+        if gpcr_annotation is None and not is_gpcr_by_name(target, interpro_annotations or []):
             return []
         registry = load_gpcr_engineering_registry(self.config.gpcr_engineering_cassette_registry_path)
         variants: list[GPCREngineeringVariant] = []
@@ -2986,6 +3313,8 @@ class AntigenAnalyzer:
             features=features,
             ligand_interactions=ligand_interactions,
             ptms=ptms,
+            gpcr_annotation=gpcr_annotation,
+            domains=features,
         )
         loop_length = (loop.end - loop.start + 1) if loop is not None else 0
         if loop is not None and not blockers:
@@ -3132,6 +3461,90 @@ class AntigenAnalyzer:
         loop = max(internal_loops, key=lambda region: (region.end - region.start + 1, -region.start))
         return loop, "topology-derived internal cytoplasmic loop"
 
+    def _gpcr_band_blockers(
+        self,
+        *,
+        loop: Region,
+        gpcr_annotation: GPCRdbAnnotation | None,
+    ) -> list[str]:
+        """Block a fusion window that cuts deeper into a helix than the published one.
+
+        Measured from the end of the helix the loop meets, not as an absolute
+        generic number. The absolute window [5.69, 6.24] is A2A's own numbering
+        and does not travel: GPCRdb ends the median receptor's TM5 at 5.68 and
+        starts its TM6 at 6.26, so only 166 of 693 receptors have a TM5 that
+        reaches 5.69 at all, and for the rest the window fell outside the
+        annotated helix and blocked every cut touching it (1,374 of 1,570 human
+        variants). Those same A2A cut points are 5 residues before the end of
+        its TM5 and 3 after the start of its TM6, and that is portable.
+
+        A cut inside any other transmembrane helix, or H8, stays blocked: no
+        construct is published for those. So is any cut inside a helix on a
+        receptor outside class A, because the 5 and 3 come from one class-A
+        receptor and no published ICL3-fusion precedent carries them to the
+        other classes (owner's decision 2026-10-15, confirmed 2026-10-16).
+
+        That test is the **numbering scheme**, not the presence of numbering.
+        The 2026-10-15 rule assumed class B, C and F receptors carry no generic
+        numbering; GPCRdb in fact numbers them in their own schemes, so the old
+        fallback never fired once in the corpus (every TM segment of all 717
+        human and 396 mouse receptors is numbered) and the absolute window was
+        silently being read against GPCRdb(B)/(C)/(F) coordinates on 80 human
+        receptors.
+        """
+        if gpcr_annotation is None:
+            return []
+        # The cassette keeps `retain` residues at each end of the loop, so the
+        # cut points are inside it. Testing loop.start/loop.end over-blocked by
+        # that margin and named a residue the construct does not cut.
+        retain = max(int(self.config.gpcr_loop_fusion_retain_residues), 0)
+        cut_start, cut_end = loop.start + retain, loop.end - retain
+        if cut_start > cut_end:
+            return []
+        scheme = str(gpcr_annotation.residue_numbering_scheme or "").strip()
+        class_a = scheme.upper() == "GPCRDB(A)"
+        blockers: list[str] = []
+        for segment in gpcr_annotation.segments:
+            name = str(segment.name or "").strip().upper()
+            if not (name.startswith("TM") or name == "H8"):
+                continue
+            if segment.start is None or segment.end is None:
+                continue
+            if cut_start > segment.end or cut_end < segment.start:
+                continue
+            helix = name[2:] if name.startswith("TM") else ""
+            allowance = GPCR_ICL3_FUSION_DEPTH.get(helix)
+            for residue in (cut_start, cut_end):
+                if not (segment.start <= residue <= segment.end):
+                    continue
+                if not class_a:
+                    blockers.append(
+                        f"Selected loop overlaps GPCRdb {name} ({segment.start}-{segment.end}); "
+                        f"this receptor is numbered {scheme or 'outside GPCRdb(A)'}, and the "
+                        "published fusion depths come from a class-A receptor, so no cut "
+                        "inside an annotated transmembrane segment is allowed."
+                    )
+                    break
+                if allowance is None:
+                    blockers.append(
+                        f"Selected loop cuts into GPCRdb {name} ({segment.start}-{segment.end}); "
+                        "a published fusion depth exists only for TM5 and TM6."
+                    )
+                    break
+                # TM5 is entered from its C-terminal end, TM6 from its start.
+                depth = (
+                    segment.end - residue if helix == "5" else residue - segment.start
+                )
+                if depth > allowance:
+                    edge = "end" if helix == "5" else "start"
+                    blockers.append(
+                        f"Selected loop cuts {depth} residues into GPCRdb {name} "
+                        f"({segment.start}-{segment.end}) from its {edge}; the published "
+                        f"ICL3-fusion construct cuts no more than {allowance}."
+                    )
+                    break
+        return blockers
+
     def _gpcr_loop_engineering_blockers(
         self,
         *,
@@ -3140,6 +3553,8 @@ class AntigenAnalyzer:
         features: list[Feature],
         ligand_interactions: list[Feature],
         ptms: list[Feature],
+        gpcr_annotation: GPCRdbAnnotation | None = None,
+        domains: list[Feature] | None = None,
     ) -> list[str]:
         if loop is None:
             return ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
@@ -3153,6 +3568,18 @@ class AntigenAnalyzer:
             blockers.append("Selected loop overlaps a membrane-spanning region.")
         if self._regions_overlap_any(loop.start, loop.end, topology.extracellular_regions):
             blockers.append("Selected loop overlaps extracellular topology annotation.")
+        blockers.extend(self._gpcr_band_blockers(loop=loop, gpcr_annotation=gpcr_annotation))
+        # OA-009: a cassette replacing part of an annotated DOMAIN removes
+        # structure the fusion cannot restore.
+        for feature in domains or []:
+            if str(feature.type or "").upper() != "DOMAIN":
+                continue
+            if feature.start <= loop.end and feature.end >= loop.start:
+                blockers.append(
+                    f"Selected loop overlaps DOMAIN annotation {feature.start}-{feature.end}"
+                    + (f" ({feature.description})." if feature.description else ".")
+                )
+                break
         for feature in ligand_interactions:
             feature_kind = str(feature.metadata.get("raw_type") or feature.type or "").upper()
             feature_text = f"{feature.type} {feature.description or ''}".lower()
@@ -3224,6 +3651,46 @@ class AntigenAnalyzer:
                 continue
             loops.append(region)
         return loops
+
+    def _clip_ectodomain_to_gpcrdb_tm1(
+        self,
+        topology,
+        gpcr_annotation: GPCRdbAnnotation | None,
+        notes: list[AnalysisNote],
+    ) -> None:
+        """F17-3: trim a design region that runs into GPCRdb TM1.
+
+        The region is derived from UniProt TRANSMEM, whose helix boundaries sit
+        later than GPCRdb's structure-based ones: against UniProt only 1 human
+        and 1 mouse region overlaps a helix, but 80 human / 71 mouse overlap a
+        GPCRdb TM segment, median 8-9 residues. The owner's decision of
+        2026-10-15 is that GPCRdb is primary and UniProt the fallback, so where
+        a GPCRdb annotation exists its boundary wins.
+        """
+        if gpcr_annotation is None or topology.ectodomain is None:
+            return
+        tm1 = self._gpcr_segment(gpcr_annotation, "TM1")
+        if tm1 is None:
+            return
+        region = topology.ectodomain
+        if region.end < tm1.start or region.start >= tm1.start:
+            return
+        clipped_end = tm1.start - 1
+        if clipped_end <= region.start:
+            return
+        removed = region.end - clipped_end
+        topology.ectodomain = replace_region(region, end=clipped_end)
+        notes.append(
+            AnalysisNote(
+                severity="info",
+                message=(
+                    f"Design region trimmed by {removed} residue(s) to end at {clipped_end}: "
+                    f"GPCRdb places TM1 at {tm1.start}-{tm1.end}, earlier than the UniProt "
+                    "transmembrane boundary. GPCRdb is the primary source for annotated receptors."
+                ),
+                source="GPCRdb",
+            )
+        )
 
     def _gpcr_segment(self, annotation: GPCRdbAnnotation, name: str) -> GPCRdbSegment | None:
         normalized = name.strip().lower()
@@ -3862,7 +4329,12 @@ class AntigenAnalyzer:
             ),
         )
 
-    def _find_furin_sites(self, sequence: str, ectodomain: Region | None) -> list[FurinSite]:
+    def _find_furin_sites(
+        self,
+        sequence: str,
+        ectodomain: Region | None,
+        features: list[Feature] | None = None,
+    ) -> list[FurinSite]:
         if not ectodomain:
             return []
         ectodomain_sequence = slice_sequence(sequence, ectodomain.start, ectodomain.end)
@@ -3874,8 +4346,44 @@ class AntigenAnalyzer:
                 f"{motif[0]}{absolute_start}A",
                 f"{motif[-1]}{absolute_end}A",
             ]
-            sites.append(FurinSite(start=absolute_start, end=absolute_end, motif=motif, suggestions=suggestions))
+            sites.append(
+                FurinSite(
+                    start=absolute_start,
+                    end=absolute_end,
+                    motif=motif,
+                    suggestions=suggestions,
+                    curated_annotation=self._curated_cleavage_annotation(
+                        absolute_start, absolute_end, features or []
+                    ),
+                )
+            )
         return sites
+
+    def _curated_cleavage_annotation(
+        self, start: int, end: int, features: list[Feature]
+    ) -> str | None:
+        """Name the annotation that says this site is a real processing site.
+
+        Two signals: a UniProt SITE whose description mentions cleavage, and the
+        junction between a PROPEPTIDE and the mature CHAIN. Measured over both
+        snapshots: 45 human / 27 mouse pages have a motif on a cleavage SITE,
+        189 / 158 on either signal.
+        """
+        for feature in features:
+            if str(feature.type or "").upper() != "SITE":
+                continue
+            description = str(feature.description or "")
+            if "cleav" not in description.lower():
+                continue
+            if feature.start <= end and feature.end >= start:
+                return f"UniProt SITE {feature.start}-{feature.end}: {description}"
+        for feature in features:
+            kind = str(feature.type or "").upper()
+            if kind in {"PROPEP", "PROPEPTIDE"} and start - 1 <= feature.end <= end + 1:
+                return f"End of UniProt PROPEPTIDE {feature.start}-{feature.end}"
+            if kind in {"CHAIN", "PEPTIDE"} and feature.start > 1 and start - 1 <= feature.start - 1 <= end + 1:
+                return f"Start of UniProt {kind} {feature.start}-{feature.end}"
+        return None
 
     def _collect_ptm_annotations(self, features: list[Feature]) -> list[Feature]:
         ptms: list[Feature] = []
@@ -3900,6 +4408,9 @@ class AntigenAnalyzer:
         description = (feature.description or "").lower()
         if feature_type in _PTM_FEATURE_TYPES:
             return True
+        if feature_type == "SITE" and description.startswith(("not ", "no ")):
+            # F28: a negative annotation ("Not glycosylated") is not a PTM.
+            return False
         if feature_type == "SITE" and any(
             keyword in description
             for keyword in ("cleavage", "glycosyl", "phospho", "acetyl", "methyl", "ubiquitin", "sumoyl", "lipid")
@@ -4039,13 +4550,31 @@ class AntigenAnalyzer:
                     construct.start,
                     construct.end,
                     surface_exposure=surface_exposure,
+                    # DISULFID is one of _PTM_FEATURE_TYPES, so the curated
+                    # pairs are already in `ptms`.
+                    curated_disulfides=ptms,
                 )
-                unpaired = [finding.position for finding in construct_cysteines if finding.paired_with is None]
-                if unpaired:
+                # F12-D: a cysteine inside a SIGNAL span is cleaved off the
+                # mature protein, so listing it as an expression liability is
+                # noise (124 human / 118 mouse pages).
+                signal_spans = [
+                    (feature.start, feature.end)
+                    for feature in ptms
+                    if str(feature.type or "").upper() == "SIGNAL"
+                ]
+                reportable = [
+                    finding
+                    for finding in construct_cysteines
+                    if finding.paired_with is None
+                    # Same guard as the Cys->Ser offer: an interchain or
+                    # ambiguously annotated cysteine is not a free thiol, so
+                    # the card must not list it as unpaired.
+                    and not str(finding.warning or "").startswith(NOT_A_FREE_THIOL_WARNING_PREFIXES)
+                    and not any(start <= finding.position <= end for start, end in signal_spans)
+                ]
+                if reportable:
                     positions = ", ".join(
-                        self._unpaired_cysteine_warning_label(finding)
-                        for finding in construct_cysteines
-                        if finding.paired_with is None
+                        self._unpaired_cysteine_warning_label(finding) for finding in reportable
                     )
                     construct_warnings.append(f"Contains unpaired cysteine(s): {positions}.")
             details.append(
@@ -4079,6 +4608,10 @@ class AntigenAnalyzer:
 
     def _unpaired_cysteine_warning_label(self, finding: CysteineFinding) -> str:
         label = f"C{finding.position}"
+        if finding.partner_outside_range is not None:
+            # F12-B: the page table pairs these; only this construct cuts
+            # between the two. "nearest unpaired" named the curated partner.
+            return f"{label} (curated partner C{finding.partner_outside_range} is outside this construct)"
         if finding.closest_unpaired_cysteine is None or finding.closest_unpaired_cysteine_distance is None:
             return label
         atom = finding.closest_unpaired_cysteine_distance_atom or "distance"
@@ -4287,7 +4820,13 @@ class AntigenAnalyzer:
     ) -> list[ConstructHomolog]:
         homologs: list[ConstructHomolog] = []
         human_construct_sequence = slice_sequence(target_sequence, construct.start, construct.end)
+        # F06a: _collect_species_matches already skips the target's own species
+        # (pipeline.py:1485), so for a mouse target this loop found nothing under
+        # "mouse" and emitted a "Mapping unavailable" row for the protein's own
+        # species on 4,359 of 4,702 mouse pages.
         for species in ("mouse", "macaca_fascicularis"):
+            if species == self.config.target_species:
+                continue
             info = homolog_context.get(species)
             if not info or not info.get("available"):
                 notes = info.get("notes", ["No same-name UniProt entry found for species."]) if info else [
@@ -4329,6 +4868,11 @@ class AntigenAnalyzer:
                 query_start=relative_start,
                 query_end=relative_end,
                 subject_sequence=homolog_ecto_sequence,
+                # OA-012: the alignment covers the ectodomain only, so a
+                # construct that reaches outside it must be measured against
+                # what was asked for, not against the part that happens to be
+                # inside the alignment.
+                requested_length=construct.end - construct.start + 1,
             )
             if mapped_start is None or mapped_end is None or mapped_sequence is None:
                 homologs.append(

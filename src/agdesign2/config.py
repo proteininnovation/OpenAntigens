@@ -52,6 +52,9 @@ class AnalysisConfig:
     gpcr_terminal_trim_min_length: int = 30
     gpcr_helix8_retention_buffer: int = 8
     gpcr_c_tail_series_buffers: tuple[int, ...] = (20, 40)
+    # Owner decision 2026-10-16: the loop-fusion cassette feature is off.
+    # Set to True to restore the variants and the loop/ICL3 advice.
+    gpcr_loop_fusion_enabled: bool = False
     gpcr_loop_fusion_retain_residues: int = 5
     gpcr_loop_fusion_min_loop_length: int = 12
     max_family_context_members: int = 20

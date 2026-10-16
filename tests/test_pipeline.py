@@ -1267,7 +1267,7 @@ class PipelineTests(unittest.TestCase):
             cysteine_analysis=[],
             interpro_annotations=[],
         )
-        pdb_construct = next(construct for construct in constructs if construct.name == "pdb_6abc_a_b")
+        pdb_construct = next(construct for construct in constructs if construct.name == "pdb_6abc_a_b_45_360")
         self.assertEqual((pdb_construct.start, pdb_construct.end), (45, 360))
         self.assertEqual(pdb_construct.classification, "membrane_expression")
         self.assertTrue(any("PDB 6ABC" in item for item in pdb_construct.evidence))
@@ -1304,9 +1304,9 @@ class PipelineTests(unittest.TestCase):
         )
         names = {construct.name: construct for construct in constructs}
         self.assertIn("membrane_expression_full_length", names)
-        self.assertIn("pdb_7ful_a", names)
+        self.assertIn("pdb_7ful_a_1_190", names)
         self.assertEqual((names["membrane_expression_full_length"].start, names["membrane_expression_full_length"].end), (1, 190))
-        self.assertEqual((names["pdb_7ful_a"].start, names["pdb_7ful_a"].end), (1, 190))
+        self.assertEqual((names["pdb_7ful_a_1_190"].start, names["pdb_7ful_a_1_190"].end), (1, 190))
 
     def test_mixed_multipass_target_keeps_soluble_and_membrane_pdb_constructs(self) -> None:
         config = AnalysisConfig(min_construct_length=50, generate_assets=False, prefer_precomputed_references=False)
@@ -1345,8 +1345,8 @@ class PipelineTests(unittest.TestCase):
         )
         names = {construct.name: construct for construct in constructs}
         self.assertEqual(topology.topology.topology_class, "multipass_mixed")
-        self.assertNotEqual(names["pdb_1ecd_e"].classification, "membrane_expression")
-        self.assertEqual(names["pdb_7mem_m"].classification, "membrane_expression")
+        self.assertNotEqual(names["pdb_1ecd_e_30_175"].classification, "membrane_expression")
+        self.assertEqual(names["pdb_7mem_m_25_260"].classification, "membrane_expression")
 
     def test_non_multipass_pdb_constructs_still_require_design_region_overlap(self) -> None:
         config = AnalysisConfig(min_construct_length=2, generate_assets=False, prefer_precomputed_references=False)
@@ -1549,7 +1549,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(details[0].gpcr_generic_range, "1.32x32 to 1.42x42")
 
     def test_gpcr_engineering_variants_generate_bril_and_t4l_loop_fusions(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         target = TargetRecord(
             accession="P00001",
             entry_name="OPRM_HUMAN",
@@ -1637,7 +1637,7 @@ class PipelineTests(unittest.TestCase):
         )
 
     def test_gpcr_engineering_variants_skip_loop_fusion_when_icl3_overlaps_tm(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         target = TargetRecord(
             accession="P00001",
             entry_name="BADGPCR_HUMAN",
@@ -1775,7 +1775,7 @@ class PipelineTests(unittest.TestCase):
         self.assertAlmostEqual(annotated[0].extracellular_surface_identity or 0.0, 66.67, places=2)
 
     def test_generates_advanced_membrane_engineering_suggestions_for_gpcr_like_topology(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         topology = derive_ectodomain(
             [
                 Feature(type="SIGNAL", start=1, end=24, description="Signal peptide"),

@@ -34,9 +34,9 @@ class FakeOrthologResolver:
 
     def resolve(self, species, *, gene_symbol=None, gene_id=None, fallback_symbol=None):
         if species == "mouse":
-            return ResolvedOrthologProtein(accession="Q01279", sequence="MAAACCG", source="uniprot", organism="Mus musculus")
+            return ResolvedOrthologProtein(accession="Q01279", sequence="MAAACCGDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC", source="uniprot", organism="Mus musculus")
         if species == "macaca_fascicularis":
-            return ResolvedOrthologProtein(accession="XP_005549616", sequence="MAAACCC", source="refseq", organism="Macaca fascicularis")
+            return ResolvedOrthologProtein(accession="XP_005549616", sequence="MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC", source="refseq", organism="Macaca fascicularis")
         return None
 
 
@@ -57,7 +57,7 @@ class FakeUniProtClient:
                 protein_name=f"{gene_symbol} protein",
                 organism="Homo sapiens",
                 taxon_id=9606,
-                sequence="MAAACCC",
+                sequence="MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC",
             ),
             entry={},
             notes=[AnalysisNote(severity="info", message=f"Resolved from query {query}.", source="UniProt")],
@@ -108,9 +108,9 @@ class FakeRefSeqClient:
         if gene_symbol == "NOREFSEQ":
             raise RuntimeError("simulated RefSeq failure")
         records = {
-            "Homo sapiens": ("NP_005219", "MAAACCC"),
-            "Mus musculus": ("NP_031989", "MAAACCG"),
-            "Macaca fascicularis": ("XP_005549616", "MAAACCC"),
+            "Homo sapiens": ("NP_005219", "MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC"),
+            "Mus musculus": ("NP_031989", "MAAACCGDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC"),
+            "Macaca fascicularis": ("XP_005549616", "MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC"),
         }
         accession, sequence = records[organism]
         return RefSeqProtein(
@@ -200,6 +200,31 @@ class OrthologTableTests(unittest.TestCase):
                 build_ortholog_table_from_tsv(analyzer=FakeAnalyzer(), tsv_path=source, output_path=output, jobs=2)
             self.assertEqual(writer.call_count, 1)
 
+    def test_a_withheld_row_ships_no_protein(self) -> None:
+        """PR-8: precomputed.py and mouse_portal.py read these columns by name."""
+        unrelated = ResolvedOrthologProtein(
+            accession="Q99999", sequence="W" * 67, source="uniprot", organism="Mus musculus"
+        )
+        original = FakeOrthologResolver.resolve
+
+        def resolve(self, species, **kwargs):
+            return unrelated if species == "mouse" else original(self, species, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                mock.patch.object(FakeOrthologResolver, "resolve", resolve):
+            root = Path(tmpdir)
+            source = root / "genes.tsv"
+            source.write_text("uniprot_name\tgene\nEGFR_HUMAN\tEGFR\n", encoding="utf-8")
+            _, _, rows = build_ortholog_table_from_tsv(
+                analyzer=FakeAnalyzer(), tsv_path=source, output_path=root / "t.tsv"
+            )
+        row = rows[0]
+        self.assertTrue(row.mouse_selection_status.startswith("withheld: "))
+        self.assertIsNone(row.mouse_refseq_sequence)
+        self.assertIsNone(row.mouse_refseq_accession)
+        self.assertIsNone(row.mouse_gene_symbol)
+        self.assertEqual(row.macaca_fascicularis_selection_status, "selected")
+
     def test_load_ortholog_rows_accepts_canonical_csv_columns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "targets.csv"
@@ -252,7 +277,11 @@ class OrthologTableTests(unittest.TestCase):
             self.assertEqual(rows[0].macaca_fascicularis_refseq_accession, "XP_005549616")  # macaque = RefSeq
             self.assertEqual(rows[0].canonical_family_accession, "IPR050122")
             self.assertEqual(rows[0].canonical_family_name, "Receptor Tyrosine Kinase")
-            self.assertAlmostEqual(rows[0].mouse_identity_to_human or 0.0, 85.71, places=2)
+            # 66 of 67 residues identical. The fixture sequences are 67 aa so
+            # they clear PR-8's ortholog gate, which needs 50 aligned residues.
+            self.assertAlmostEqual(rows[0].mouse_identity_to_human or 0.0, 98.51, places=2)
+            self.assertEqual(rows[0].mouse_selection_status, "selected")
+            self.assertEqual(rows[0].mouse_accession_source, "uniprot")
             self.assertAlmostEqual(rows[0].macaca_fascicularis_identity_to_human or 0.0, 100.0, places=2)
 
             written = json.loads(json_file.read_text(encoding="utf-8"))
@@ -312,9 +341,9 @@ class OrthologTableTests(unittest.TestCase):
                             "mouse_refseq_accession": "NP_031989",
                             "macaca_fascicularis_refseq_accession": "XP_005549616",
                             "human_uniprot_accession": "P00533",
-                            "human_refseq_sequence": "MAAACCC",
-                            "mouse_refseq_sequence": "MAAACCG",
-                            "macaca_fascicularis_refseq_sequence": "MAAACCC",
+                            "human_refseq_sequence": "MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC",
+                            "mouse_refseq_sequence": "MAAACCGDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC",
+                            "macaca_fascicularis_refseq_sequence": "MAAACCCDEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYADEFGHIKLMNPQRSTVWYACCC",
                             "mouse_identity_to_human": 85.71,
                             "macaca_fascicularis_identity_to_human": 100.0,
                             "human_notes": "old row",
