@@ -9,6 +9,8 @@ from unittest.mock import patch
 from agdesign2.portal import render_index_page
 from agdesign2.mouse_portal import (
     build_mouse_portal_from_human_orthologs,
+    _mouse_target_from_sources,
+    _select_mouse_claim_winners,
     _require_blast_tools_for_mouse_cross_reactivity,
     _mouse_resume_decision,
     _mouse_pipeline_stamp,
@@ -68,6 +70,69 @@ class MouseResumeVersionTests(unittest.TestCase):
             )
             self.assertTrue(matching)
             self.assertFalse(mismatched)
+
+
+
+class MouseClaimOwnerTests(unittest.TestCase):
+    """The Siglec regression: three human genes claim one mouse page.
+
+    The ortholog table gives SIGLEC7, SIGLEC9 and SIGLEC12 the mouse symbol
+    "Siglece", but UniProt answers that symbol with SIG12_MOUSE (Siglec12).
+    Keeping the lookup symbol on the resolved target labelled it with a gene it
+    is not, and the winner's same-symbol test could never fire, so the page for
+    Siglec12 named SIGLEC7 as its origin on an identity tiebreak.
+    """
+
+    RESOLVED = {
+        "accession": "Q91Y57",
+        "entry_name": "SIG12_MOUSE",
+        "sequence": "MOUSESEQ",
+        "protein_name": "Sialic acid-binding Ig-like lectin 12",
+        "gene_symbol": "Siglec12",
+    }
+
+    def _target(self, human_symbol: str) -> dict:
+        with patch("agdesign2.mouse_portal._resolve_mouse_uniprot_target", return_value=self.RESOLVED):
+            return _mouse_target_from_sources(
+                human_report={},
+                human_target={"entry_name": f"{human_symbol}_HUMAN", "gene_symbol": human_symbol},
+                ortholog={"mouse_gene_symbol": "Siglece", "mouse_refseq_accession": "A0A0U1RPP9"},
+                mouse_homology=None,
+                uniprot_client=None,
+            )
+
+    def test_the_resolved_records_own_symbol_wins(self) -> None:
+        target = self._target("SIGLEC12")
+        self.assertEqual(target["accession"], "Q91Y57")
+        self.assertEqual(target["gene_symbol"], "Siglec12")
+
+    def test_the_gene_whose_symbol_matches_owns_the_page(self) -> None:
+        claims = []
+        # SIGLEC7 is first and has the highest identity, so it wins on both
+        # tiebreaks; only the symbol test can hand the page to SIGLEC12.
+        for index, symbol in enumerate(("SIGLEC7", "SIGLEC9", "SIGLEC12"), start=1):
+            target = self._target(symbol)
+            claims.append((index, {}, {"target": {"entry_name": f"{symbol}_HUMAN", "gene_symbol": symbol}}, target))
+        rows = {
+            "SIGLEC7_HUMAN": {"mouse_identity_to_human": "53.11"},
+            "SIGLEC9_HUMAN": {"mouse_identity_to_human": "52.63"},
+            "SIGLEC12_HUMAN": {"mouse_identity_to_human": "51.78"},
+        }
+        keyed = [(c[0], c[1], c[2], c[3], "SIG12_MOUSE", "Q91Y57", "Q91Y57") for c in claims]
+        winner = _select_mouse_claim_winners(keyed, rows)["Q91Y57"]
+        self.assertEqual(winner[2]["target"]["gene_symbol"], "SIGLEC12")
+
+    def test_a_record_with_no_symbol_keeps_the_lookup_symbol(self) -> None:
+        resolved = dict(self.RESOLVED, gene_symbol="")
+        with patch("agdesign2.mouse_portal._resolve_mouse_uniprot_target", return_value=resolved):
+            target = _mouse_target_from_sources(
+                human_report={},
+                human_target={"entry_name": "SIGLEC7_HUMAN", "gene_symbol": "SIGLEC7"},
+                ortholog={"mouse_gene_symbol": "Siglece", "mouse_refseq_accession": "A0A0U1RPP9"},
+                mouse_homology=None,
+                uniprot_client=None,
+            )
+        self.assertEqual(target["gene_symbol"], "Siglece")
 
 
 class MousePortalTests(unittest.TestCase):
