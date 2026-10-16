@@ -191,6 +191,25 @@ class PairingConsistencyTests(unittest.TestCase):
             if finding.paired_with is not None:
                 self.assertEqual(findings[finding.paired_with].paired_with, finding.position)
 
+    def test_alternative_curated_connectivity_is_not_offered_for_cys_to_ser(self) -> None:
+        # I18RA_MOUSE: 154-179, 174-220, 179-220. Last-in-file used to win, so
+        # 179-220 stole C179 and C154 came out unpaired with no warning.
+        names = {154: "CYS", 174: "CYS", 179: "CYS", 220: "CYS"}
+        atoms = _atoms({r: (float(r) * 10, 0.0, 0.0) for r in names})  # no geometric pairs
+        bonds = [Feature(type="DISULFID", start=a, end=b, description="")
+                 for a, b in ((154, 179), (174, 220), (179, 220))]
+        results = []
+        for order in (bonds, list(reversed(bonds))):
+            findings = {f.position: f for f in analyze_cysteines(
+                atoms, names, 1, 300, curated_disulfides=order)}
+            for position in names:
+                self.assertTrue(
+                    str(findings[position].warning or "").startswith(_NO_CYS_TO_SER_WARNING_PREFIXES),
+                    f"C{position} would be offered for Cys->Ser",
+                )
+            results.append({p: (f.paired_with, f.warning) for p, f in findings.items()})
+        self.assertEqual(results[0], results[1], "file order decided the pairing")
+
     def test_a_curated_partner_that_is_not_a_cysteine_does_not_destroy_a_pairing(self) -> None:
         # Position 30 is in range but is not CYS in the model. The old code
         # called it "outside this range" (false) and threw away C10's correct

@@ -294,6 +294,10 @@ def build_open_targets_associations_from_bulk_downloads(
         for record in disease_lookup.values()
         for area in (record.get("therapeuticAreas") or [])
     }
+    if not therapeutic_area_ids:
+        # An empty set silently restores F18: a therapeutic area such as
+        # "cancer" becomes the top disease again.
+        raise ExternalServiceError(f"Open Targets {release} disease data lists no therapeuticAreas.")
     ensembl_ids = {
         target_lookup[str(row.get("gene_symbol") or "").upper()]["ensembl_id"]
         for row in target_rows_from_summary
@@ -607,7 +611,7 @@ def _read_open_targets_disease_dataset(path: Path) -> list[dict[str, Any]]:
     dataset = ds.dataset(path, format="parquet")
     available = set(dataset.schema.names)
     columns = [column for column in ("id", "name", "ancestors", "therapeuticAreas") if column in available]
-    missing = [column for column in ("id", "name") if column not in available]
+    missing = [column for column in ("id", "name", "therapeuticAreas") if column not in available]
     if missing:
         raise ExternalServiceError(f"Open Targets disease dataset {path} is missing expected columns: {', '.join(missing)}")
     return dataset.to_table(columns=columns).to_pylist()

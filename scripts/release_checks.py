@@ -9,7 +9,9 @@ Run over BOTH portals of a built ``public_site`` before publishing:
 Each check counts the pages that violate it. Exit status is non-zero if any
 check fails. The HTML checks need only the site; the JSON checks need the report
 JSON the site was rendered from, and are skipped (and reported as skipped, not
-passed) when those directories are not given.
+passed) when neither directory is given; give both or neither. A portal with no
+report pages, no index or (when given) no report JSON fails "portal-present":
+a site missing its mouse portal must not pass.
 
 These checks land BEFORE the rebuild so they can be run against the frozen
 2026-09-30 build, where they are expected to FAIL — that is what shows they
@@ -130,10 +132,9 @@ def _check_page(html: str, portal: str, name: str, checks: dict[str, Check]) -> 
 
 def _index_check(site: Path, portal: str, check: Check) -> None:
     path = (site / "downloads" if portal == "human" else site / "mouse" / "downloads") / "agdesign2_portal_index.tsv"
-    if not path.exists():
-        return
-    rows = list(csv.DictReader(path.open(encoding="utf-8"), delimiter="\t"))
+    rows = list(csv.DictReader(path.open(encoding="utf-8"), delimiter="\t")) if path.exists() else []
     if not rows:
+        check.fail(portal, f"no index rows in {path}")
         return
     allowed = DOCUMENTED_BLANK_HUMAN if portal == "human" else {"error"}
     for column in rows[0]:
@@ -191,6 +192,9 @@ def _cysteine_check(report: dict, portal: str, name: str, check: Check) -> None:
         start, end = feature.get("start"), feature.get("end")
         if start == end:  # interchain, correctly unpaired in a monomer
             continue
+        if any(str((cysteines.get(r) or {}).get("warning") or "").startswith("Ambiguous curated")
+               for r in (start, end)):
+            continue  # alternative connectivity: no single partner to pair
         if start in cysteines and end in cysteines and (
                 cysteines[start].get("paired_with") is None or cysteines[end].get("paired_with") is None):
             check.fail(portal, name)
@@ -199,6 +203,9 @@ def _cysteine_check(report: dict, portal: str, name: str, check: Check) -> None:
 
 def run(site: Path, human_json: Path | None, mouse_json: Path | None) -> list[Check]:
     html = {c.key: c for c in _html_checks()}
+    if (human_json is None) != (mouse_json is None):
+        raise ValueError("give both --human-json and --mouse-json, or neither")
+    present = Check("portal-present", "both portals have report pages, an index and (if given) report JSON")
     index = Check("index-column-blank", "no undocumented index column blank in every row")
     json_checks = {c.key: c for c in (
         Check("gpcr-advice-without-classification", "no GPCR advice on a target not classified as a GPCR"),
@@ -208,20 +215,23 @@ def run(site: Path, human_json: Path | None, mouse_json: Path | None) -> list[Ch
     )}
 
     for portal, pages in (("human", site / "reports"), ("mouse", site / "mouse" / "reports")):
-        if not pages.is_dir():
-            continue
-        for page in sorted(pages.glob("*.html")):
+        page_paths = sorted(pages.glob("*.html")) if pages.is_dir() else []
+        if not page_paths:
+            present.fail(portal, f"no report pages in {pages}")
+        for page in page_paths:
             _check_page(page.read_text(encoding="utf-8", errors="ignore"), portal, page.name, html)
         _index_check(site, portal, index)
 
     for portal, directory in (("human", human_json), ("mouse", mouse_json)):
         if directory is None:
             continue
+        if not any(directory.glob("*_report.json")):
+            present.fail(portal, f"no report JSON in {directory}")
         _json_checks(directory, portal, json_checks)
     if human_json is None and mouse_json is None:
         for check in json_checks.values():
             check.skipped = True
-    return [*html.values(), index, *json_checks.values()]
+    return [present, *html.values(), index, *json_checks.values()]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -230,7 +240,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--human-json", type=Path)
     parser.add_argument("--mouse-json", type=Path)
     args = parser.parse_args(argv)
-    checks = run(args.site, args.human_json, args.mouse_json)
+    try:
+        checks = run(args.site, args.human_json, args.mouse_json)
+    except ValueError as exc:
+        parser.error(str(exc))
     for check in checks:
         state = "SKIP" if check.skipped else ("PASS" if check.passed else "FAIL")
         counts = ", ".join(f"{portal} {n}" for portal, n in sorted(check.failures.items()))

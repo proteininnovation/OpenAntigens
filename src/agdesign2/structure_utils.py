@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 import json
 import gzip
@@ -240,17 +241,28 @@ def split_domains_from_pae(
 INTERCHAIN_DISULFIDE_WARNING = (
     "Interchain disulfide (UniProt); the partner is on another chain."
 )
+# Starts with "Ambiguous" so portal._NO_CYS_TO_SER_WARNING_PREFIXES keeps it out
+# of the Cys->Ser offer.
+AMBIGUOUS_CURATED_DISULFIDE_WARNING = (
+    "Ambiguous curated disulfide: UniProt lists alternative bonds for this cysteine."
+)
 
 
 def _curated_disulfide_partners(
     features: list[Feature] | None,
-) -> tuple[dict[int, int], set[int]]:
+) -> tuple[dict[int, int], set[int], set[int]]:
     """Map each curated disulfide endpoint to its partner.
 
     UniProt writes an interchain bond as ``DISULFID n-n``; those are returned
     separately because they have no in-monomer partner.
+
+    A cysteine in two intrachain bonds (alternative connectivity, e.g.
+    ICAM4_MOUSE 61-105 and 61-109) has no single partner. Keeping whichever
+    bond came last in the file freed the other end and offered it for Cys->Ser
+    (35 reports), so every bond touching such a cysteine is returned as
+    ambiguous instead of paired.
     """
-    partners: dict[int, int] = {}
+    bonds: list[tuple[int, int]] = []
     interchain: set[int] = set()
     for feature in features or []:
         if str(feature.type or "").upper() != "DISULFID":
@@ -261,9 +273,17 @@ def _curated_disulfide_partners(
         if start == end:
             interchain.add(int(start))
             continue
-        partners[int(start)] = int(end)
-        partners[int(end)] = int(start)
-    return partners, interchain
+        bonds.append((int(start), int(end)))
+    uses = Counter(residue for bond in bonds for residue in bond)
+    partners: dict[int, int] = {}
+    ambiguous: set[int] = set()
+    for start, end in bonds:
+        if uses[start] > 1 or uses[end] > 1:
+            ambiguous.update((start, end))
+        else:
+            partners[start] = end
+            partners[end] = start
+    return partners, interchain, ambiguous
 
 
 def analyze_cysteines(
@@ -286,7 +306,7 @@ def analyze_cysteines(
     An interchain bond (UniProt writes it ``n-n``) stays unpaired, because it is
     unpaired in a monomer, but it is labelled so it does not reach Cys->Ser.
     """
-    curated_partner, interchain = _curated_disulfide_partners(curated_disulfides)
+    curated_partner, interchain, curated_ambiguous = _curated_disulfide_partners(curated_disulfides)
     cysteines = [
         residue
         for residue, name in residue_names.items()
@@ -369,6 +389,8 @@ def analyze_cysteines(
                 "A curated disulfide names a partner that is not a cysteine in this "
                 "model; the annotation and the structure disagree."
             )
+        elif pair is None and residue in curated_ambiguous:
+            warning = AMBIGUOUS_CURATED_DISULFIDE_WARNING
         elif pair is None and candidates[residue]:
             warning = "Ambiguous cysteine pairing: competing sulfur contacts."
         elif pair is None and exposed:

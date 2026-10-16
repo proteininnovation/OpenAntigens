@@ -205,10 +205,12 @@ class OpenTargetsBuildTests(unittest.TestCase):
                     )
                     return [
                         {
+                            # A therapeutic area outscoring the specific disease:
+                            # only the therapeuticAreas filter keeps it off the top.
                             "targetId": "ENSG00000146648",
                             "diseaseId": "EFO_0000616",
                             "datasourceId": "europepmc",
-                            "score": 0.88,
+                            "score": 0.97,
                         },
                         {
                             "targetId": "ENSG00000146648",
@@ -233,8 +235,10 @@ class OpenTargetsBuildTests(unittest.TestCase):
 
             def fake_disease_read(path):
                 return [
-                    {"id": "EFO_0000616", "name": "neoplasm", "ancestors": ["EFO_0000408"]},
-                    {"id": "MONDO_0007254", "name": "breast cancer", "ancestors": []},
+                    {"id": "EFO_0000616", "name": "neoplasm", "ancestors": ["EFO_0000408"],
+                     "therapeuticAreas": ["EFO_0000616"]},
+                    {"id": "MONDO_0007254", "name": "breast cancer", "ancestors": [],
+                     "therapeuticAreas": ["EFO_0000616"]},
                     {"id": "EFO_0001444", "name": "measurement", "ancestors": []},
                     {"id": "OBA_2050465", "name": "level of alpha-1B-glycoprotein in blood", "ancestors": []},
                 ]
@@ -257,9 +261,10 @@ class OpenTargetsBuildTests(unittest.TestCase):
         self.assertEqual(payload["targets"][0]["ensembl_id"], "ENSG00000146648")
         self.assertEqual(payload["targets"][0]["top_disease_name"], "breast cancer")
         self.assertEqual(payload["targets"][0]["top_disease_score"], 0.93)
-        self.assertEqual(payload["associations"][0]["direct_score"], 0.72)
-        self.assertEqual(payload["associations"][0]["indirect_score"], 0.93)
-        self.assertIn("indirect_datasource_scores", payload["associations"][0])
+        breast = next(a for a in payload["associations"] if a["disease_id"] == "MONDO_0007254")
+        self.assertEqual(breast["direct_score"], 0.72)
+        self.assertEqual(breast["indirect_score"], 0.93)
+        self.assertIn("indirect_datasource_scores", breast)
         self.assertIn("breast cancer", tsv)
         self.assertNotIn("measurement", tsv)
         self.assertNotIn("level of alpha-1B-glycoprotein", tsv)
