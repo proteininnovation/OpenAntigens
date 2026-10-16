@@ -145,34 +145,27 @@ class _TerminalTrimDecision:
 # constructs *do* cut inside the annotated helices. The rule is therefore a
 # band in generic numbers relative to the conserved x.50 positions.
 #
-# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window.
-# The literature reports that construct two ways — the crystallisation
-# construct replaces Lys209-Gly218, and the original insertion work cut between
-# L208 and R222. Through GPCRdb's own segment table (one residue = 0.01 generic
-# units in both helices) those are 5.70 and 5.69 on the TM5 side, and 6.24 on
-# the TM6 side.
+# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window. The
+# literature reports that construct two ways — the crystallisation construct
+# replaces Lys209-Gly218, and the original insertion work cut between L208 and
+# R222 — and the follow-up decision took the wider reading so both are allowed.
 #
-# The owner's follow-up decision takes the wider reading, 5.69, so that BOTH
-# published descriptions of the canonical construct are allowed. A rule meant
-# to say "do not cut deeper than a construct known to fold and crystallise"
-# should not block that construct by one residue.
-GPCR_ICL3_FUSION_WINDOW: dict[str, tuple[float, float]] = {
-    # helix -> (earliest allowed generic number, latest allowed generic number)
-    "5": (5.69, 9.99),
-    "6": (-9.99, 6.24),
+# OWNER DECISION 2026-10-16: keep that construct as the reference, but express
+# it as a DEPTH into the helix rather than an absolute generic number. The
+# window [5.69, 6.24] is A2A's own numbering and does not travel: GPCRdb ends
+# the median receptor's TM5 at 5.68 and starts its TM6 at 6.26, so only 166 of
+# 693 receptors have a TM5 reaching 5.69. For the rest the window sat outside
+# the annotated helix and blocked every cut touching it — 1,374 of 1,570 human
+# variants on 692 of 800 pages. A2A's own cut points are 5 residues before the
+# end of its TM5 and 3 after the start of its TM6; measured that way the same
+# rule blocks 558 of 1,570 on 282 pages and still allows the published
+# construct while blocking the portal's deeper 204-229 variant.
+GPCR_ICL3_FUSION_DEPTH: dict[str, int] = {
+    # helix -> how many residues of it the cut may keep, measured from the end
+    # the loop meets: TM5's C-terminal end, TM6's N-terminal start.
+    "5": 5,
+    "6": 3,
 }
-
-
-def _generic_number(value: str | None) -> float | None:
-    """Parse a GPCRdb display generic number such as ``5.63x63`` -> 5.63."""
-    text = str(value or "").strip()
-    if not text:
-        return None
-    text = text.split("x", 1)[0]
-    try:
-        return float(text)
-    except ValueError:
-        return None
 
 
 _DISORDER_REGION_TOKENS = ("disorder", "low complexity", "low-complexity")
@@ -3468,11 +3461,19 @@ class AntigenAnalyzer:
         loop: Region,
         gpcr_annotation: GPCRdbAnnotation | None,
     ) -> list[str]:
-        """Block a fusion window that cuts deeper than the published one.
+        """Block a fusion window that cuts deeper into a helix than the published one.
 
-        With no GPCRdb generic numbering (class B, C and F receptors), fall back
-        to the strictly conservative rule: do not cut inside an annotated TM
-        segment at all. That is the owner's decision of 2026-10-15.
+        Measured from the end of the helix the loop meets, not as an absolute
+        generic number. The absolute window [5.69, 6.24] is A2A's own numbering
+        and does not travel: GPCRdb ends the median receptor's TM5 at 5.68 and
+        starts its TM6 at 6.26, so only 166 of 693 receptors have a TM5 that
+        reaches 5.69 at all, and for the rest the window fell outside the
+        annotated helix and blocked every cut touching it (1,374 of 1,570 human
+        variants). Those same A2A cut points are 5 residues before the end of
+        its TM5 and 3 after the start of its TM6, and that is portable.
+
+        A cut inside any other transmembrane helix, or H8, stays blocked:
+        no construct is published for those.
         """
         if gpcr_annotation is None:
             return []
@@ -3488,39 +3489,31 @@ class AntigenAnalyzer:
             name = str(segment.name or "").strip().upper()
             if not (name.startswith("TM") or name == "H8"):
                 continue
+            if segment.start is None or segment.end is None:
+                continue
             if cut_start > segment.end or cut_end < segment.start:
                 continue
             helix = name[2:] if name.startswith("TM") else ""
-            window = GPCR_ICL3_FUSION_WINDOW.get(helix)
-            start_generic = _generic_number(segment.generic_start)
-            end_generic = _generic_number(segment.generic_end)
-            if start_generic is None or end_generic is None or segment.end == segment.start:
-                blockers.append(
-                    f"Selected loop overlaps GPCRdb {name} ({segment.start}-{segment.end}); "
-                    "no generic numbering is available, so no cut inside an annotated "
-                    "transmembrane segment is allowed."
-                )
-                continue
-            if window is None:
-                # Numbering exists, but only TM5/TM6 have a published fusion
-                # window. Say that, rather than that the numbering is missing.
-                blockers.append(
-                    f"Selected loop cuts into GPCRdb {name} ({segment.start}-{segment.end}); "
-                    "a published fusion window exists only for TM5 and TM6."
-                )
-                continue
-            # One residue is (end_generic - start_generic) / (end - start) units.
-            step = (end_generic - start_generic) / (segment.end - segment.start)
-            low, high = window
+            allowance = GPCR_ICL3_FUSION_DEPTH.get(helix)
             for residue in (cut_start, cut_end):
                 if not (segment.start <= residue <= segment.end):
                     continue
-                generic = start_generic + (residue - segment.start) * step
-                if generic < low or generic > high:
+                if allowance is None:
                     blockers.append(
-                        f"Selected loop cuts GPCRdb {name} at generic {generic:.2f}, outside the "
-                        f"published ICL3-fusion window {GPCR_ICL3_FUSION_WINDOW['5'][0]:.2f}-"
-                        f"{GPCR_ICL3_FUSION_WINDOW['6'][1]:.2f}."
+                        f"Selected loop cuts into GPCRdb {name} ({segment.start}-{segment.end}); "
+                        "a published fusion depth exists only for TM5 and TM6."
+                    )
+                    break
+                # TM5 is entered from its C-terminal end, TM6 from its start.
+                depth = (
+                    segment.end - residue if helix == "5" else residue - segment.start
+                )
+                if depth > allowance:
+                    edge = "end" if helix == "5" else "start"
+                    blockers.append(
+                        f"Selected loop cuts {depth} residues into GPCRdb {name} "
+                        f"({segment.start}-{segment.end}) from its {edge}; the published "
+                        f"ICL3-fusion construct cuts no more than {allowance}."
                     )
                     break
         return blockers

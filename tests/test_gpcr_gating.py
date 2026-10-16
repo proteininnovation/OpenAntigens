@@ -40,7 +40,7 @@ from agdesign2.models import (  # noqa: E402
     TargetRecord,
 )
 from agdesign2.pipeline import (  # noqa: E402
-    GPCR_ICL3_FUSION_WINDOW,
+    GPCR_ICL3_FUSION_DEPTH,
     AntigenAnalyzer,
     is_gpcr_by_name,
 )
@@ -220,34 +220,49 @@ class FusionBandTests(unittest.TestCase):
         self.assertEqual(self._blockers(208, 222), [])
 
     def test_the_portals_own_a2a_variant_is_blocked(self) -> None:
-        # It replaces 204-229, generic 5.60x60 to 6.36x36 — ~14 residues of TM5
-        # and ~16 of TM6 — taken from the F02-A fallback path itself.
+        # It replaces 204-229, ~14 residues of TM5 and ~16 of TM6 — taken from
+        # the F02-A fallback path itself.
         blockers = self._blockers(204, 229)
         self.assertTrue(blockers)
-        self.assertIn("published ICL3-fusion window", blockers[0])
+        self.assertIn("residues into GPCRdb", blockers[0])
 
     def test_a_cut_one_residue_too_deep_in_tm5_is_blocked(self) -> None:
-        # 208 is generic 5.69 and allowed; 207 is 5.68 and is not.
+        # A2A's TM5 ends at 213, so 208 keeps 5 residues and is allowed;
+        # 207 keeps 6 and is not.
         self.assertEqual(self._blockers(208, 218), [])
         self.assertTrue(self._blockers(207, 218))
 
     def test_a_cut_one_residue_too_deep_in_tm6_is_blocked(self) -> None:
-        # 222 is generic 6.24 and allowed; 223 is 6.25 and is not.
+        # A2A's TM6 starts at 219, so 222 keeps 3 residues and is allowed;
+        # 223 keeps 4 and is not.
         self.assertEqual(self._blockers(209, 222), [])
         self.assertTrue(self._blockers(209, 223))
 
     def test_a_loop_clear_of_both_helices_is_allowed(self) -> None:
         self.assertEqual(self._blockers(214, 218), [])
 
-    def test_no_generic_numbering_falls_back_to_blocking_any_helix_cut(self) -> None:
-        """Class B, C and F receptors carry no class-A generic numbering."""
+    def test_a_receptor_without_generic_numbering_uses_the_same_depths(self) -> None:
+        """Class B, C and F receptors carry no class-A generic numbering.
+
+        The depth is measured from the annotated segment boundary, which every
+        class has, so they no longer need the "block any helix cut" fallback
+        the absolute window required (owner decision 2026-10-16).
+        """
         class_b = GPCRdbAnnotation(
             entry_name="x", accession="Q1", name="A class-B receptor",
             segments=[GPCRdbSegment(name="TM5", start=173, end=213)],
         )
-        blockers = self._blockers(209, 218, annotation=class_b)
+        self.assertEqual(self._blockers(209, 218, annotation=class_b), [])
+        self.assertTrue(self._blockers(200, 218, annotation=class_b))
+
+    def test_a_helix_with_no_published_construct_is_blocked(self) -> None:
+        other = GPCRdbAnnotation(
+            entry_name="x", accession="Q1", name="x",
+            segments=[GPCRdbSegment(name="TM3", start=173, end=213)],
+        )
+        blockers = self._blockers(209, 218, annotation=other)
         self.assertTrue(blockers)
-        self.assertIn("no generic numbering is available", blockers[0])
+        self.assertIn("only for TM5 and TM6", blockers[0])
 
     def test_no_annotation_means_no_band_blocker(self) -> None:
         analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False))
@@ -258,11 +273,12 @@ class FusionBandTests(unittest.TestCase):
             [],
         )
 
-    def test_the_window_constants_are_the_owners_decision(self) -> None:
-        # 5.69, not 5.70: the wider of the two published readings of the A2A
-        # construct (owner's follow-up decision, 2026-10-15).
-        self.assertEqual(GPCR_ICL3_FUSION_WINDOW["5"][0], 5.69)
-        self.assertEqual(GPCR_ICL3_FUSION_WINDOW["6"][1], 6.24)
+    def test_the_depth_constants_are_the_owners_decision(self) -> None:
+        # A2A's L208 is 5 residues before the end of its TM5 (173-213) and
+        # R222 is 3 after the start of its TM6 (219-259). Owner decision
+        # 2026-10-16: the same construct, expressed as a depth so it travels.
+        self.assertEqual(GPCR_ICL3_FUSION_DEPTH["5"], 5)
+        self.assertEqual(GPCR_ICL3_FUSION_DEPTH["6"], 3)
 
 
 class DomainBlockerTests(unittest.TestCase):
@@ -339,7 +355,7 @@ class GpcrWiringTests(unittest.TestCase):
             topology=topology, features=[], ligand_interactions=[], ptms=[],
             gpcr_annotation=self.A2A,
         )
-        self.assertTrue([b for b in blockers if "ICL3-fusion window" in b], blockers)
+        self.assertTrue([b for b in blockers if "ICL3-fusion construct" in b], blockers)
 
     def test_a_helix_without_a_window_is_not_said_to_lack_numbering(self) -> None:
         # Red team: 106 messages claimed "no generic numbering" for TM3/TM4
