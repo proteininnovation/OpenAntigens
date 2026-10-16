@@ -3094,22 +3094,26 @@ class AntigenAnalyzer:
         is_gpcr = gpcr_annotation is not None or is_gpcr_by_name(target, interpro_annotations)
         if is_gpcr:
             # One loop source, and the same blockers as the fusion variants.
-            longest_loop, _loop_source = self._select_gpcr_engineering_loop(topology, gpcr_annotation)
-            advisory_blockers = (
-                self._gpcr_loop_engineering_blockers(
-                    loop=longest_loop,
-                    topology=topology,
-                    features=features,
-                    ligand_interactions=ligand_interactions or [],
-                    ptms=ptms or [],
-                    gpcr_annotation=gpcr_annotation,
-                    domains=features,
+            # Both cards describe the cassette feature, so they go off with it.
+            longest_loop: Region | None = None
+            advisory_blockers: list[str] = []
+            if self.config.gpcr_loop_fusion_enabled:
+                longest_loop, _loop_source = self._select_gpcr_engineering_loop(topology, gpcr_annotation)
+                advisory_blockers = (
+                    self._gpcr_loop_engineering_blockers(
+                        loop=longest_loop,
+                        topology=topology,
+                        features=features,
+                        ligand_interactions=ligand_interactions or [],
+                        ptms=ptms or [],
+                        gpcr_annotation=gpcr_annotation,
+                        domains=features,
+                    )
+                    if longest_loop is not None
+                    else ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
                 )
-                if longest_loop is not None
-                else ["No GPCRdb ICL3 or topology-derived internal cytoplasmic loop was available."]
-            )
-            if advisory_blockers:
-                longest_loop = None
+                if advisory_blockers:
+                    longest_loop = None
             tail = topology.cytoplasmic_tail_region
             gpcr_evidence = []
             if gpcr_annotation is not None:
@@ -3185,7 +3189,7 @@ class AntigenAnalyzer:
                         end=longest_loop.end,
                     )
                 )
-            if gpcr_annotation is not None:
+            if gpcr_annotation is not None and self.config.gpcr_loop_fusion_enabled:
                 icl3 = self._gpcr_segment(gpcr_annotation, "ICL3")
                 if icl3 is not None and (icl3.end - icl3.start + 1) >= 12:
                     suggestions.append(
@@ -3287,6 +3291,8 @@ class AntigenAnalyzer:
         gpcr_annotation: GPCRdbAnnotation | None = None,
         interpro_annotations: list[DomainAnnotation] | None = None,
     ) -> list[GPCREngineeringVariant]:
+        if not self.config.gpcr_loop_fusion_enabled:
+            return []
         if topology is None or not topology.topology_class.startswith("multipass"):
             return []
         tm_count = len(topology.transmembrane_regions)

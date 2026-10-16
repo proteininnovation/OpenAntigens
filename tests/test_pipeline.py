@@ -1549,7 +1549,7 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(details[0].gpcr_generic_range, "1.32x32 to 1.42x42")
 
     def test_gpcr_engineering_variants_generate_bril_and_t4l_loop_fusions(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         target = TargetRecord(
             accession="P00001",
             entry_name="OPRM_HUMAN",
@@ -1637,7 +1637,7 @@ class PipelineTests(unittest.TestCase):
         )
 
     def test_gpcr_engineering_variants_skip_loop_fusion_when_icl3_overlaps_tm(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         target = TargetRecord(
             accession="P00001",
             entry_name="BADGPCR_HUMAN",
@@ -1775,7 +1775,7 @@ class PipelineTests(unittest.TestCase):
         self.assertAlmostEqual(annotated[0].extracellular_surface_identity or 0.0, 66.67, places=2)
 
     def test_generates_advanced_membrane_engineering_suggestions_for_gpcr_like_topology(self) -> None:
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         topology = derive_ectodomain(
             [
                 Feature(type="SIGNAL", start=1, end=24, description="Signal peptide"),

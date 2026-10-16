@@ -138,7 +138,7 @@ class GpcrClassificationTests(unittest.TestCase):
 
     def test_a_target_classified_only_by_interpro_still_gets_fusion_variants(self) -> None:
         """The variant gate once passed an empty InterPro list to the classifier."""
-        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
         topology = _seven_tm_topology(analyzer.config)
         target = _target("Uncharacterized protein", "UNCH_HUMAN")
         interpro = [DomainAnnotation(
@@ -160,6 +160,36 @@ class GpcrClassificationTests(unittest.TestCase):
                 interpro_annotations=interpro,
             )
         )
+
+
+    def test_the_fusion_feature_is_off_by_default(self) -> None:
+        """Owner decision 2026-10-16: no cassette variants, and no advice about them."""
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        topology = _seven_tm_topology(analyzer.config)
+        target = _target("Uncharacterized protein", "UNCH_HUMAN")
+        interpro = [DomainAnnotation(
+            accession="IPR000276", name="G protein-coupled receptor, rhodopsin-like",
+            type="family", source_database="interpro", start=25, end=500,
+        )]
+        self.assertEqual(
+            analyzer._suggest_gpcr_engineering_variants(
+                target=target, topology=topology.topology, features=[],
+                ligand_interactions=[], ptms=[], gpcr_annotation=None,
+                interpro_annotations=interpro,
+            ),
+            [],
+        )
+        categories = {
+            suggestion.category
+            for suggestion in analyzer._suggest_advanced_membrane_engineering(
+                target=target, features=[], topology=topology.topology,
+                interpro_annotations=interpro, gpcr_annotation=None,
+            )
+        }
+        self.assertNotIn("gpcr_loop_engineering", categories)
+        self.assertNotIn("gpcr_loop_engineering_blocked", categories)
+        self.assertNotIn("gpcr_icl3_engineering", categories)
+        self.assertIn("gpcr_conservative_engineering", categories)
 
 def _seven_tm_topology(config: AnalysisConfig):
     features = [Feature(type="SIGNAL", start=1, end=24, description="Signal peptide")]
@@ -355,7 +385,7 @@ class GpcrWiringTests(unittest.TestCase):
     A2A = FusionBandTests.A2A
 
     def _analyzer(self) -> AntigenAnalyzer:
-        return AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        return AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False, gpcr_loop_fusion_enabled=True))
 
     def test_the_band_blocker_is_wired_into_the_loop_blockers(self) -> None:
         topology = _seven_tm_topology(AnalysisConfig()).topology
