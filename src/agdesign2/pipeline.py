@@ -144,14 +144,20 @@ class _TerminalTrimDecision:
 # constructs *do* cut inside the annotated helices. The rule is therefore a
 # band in generic numbers relative to the conserved x.50 positions.
 #
-# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window. The
-# crystallisation construct replaces Lys209-Gly218 and the original insertion
-# work cut between L208 and R222; through GPCRdb's own segment table (one
-# residue = 0.01 generic units in both helices) that is 5.70 on the TM5 side
-# and 6.24 on the TM6 side. Cuts outside this window are blocked.
+# OWNER DECISION 2026-10-15: use the retrieved published A2A-BRIL window.
+# The literature reports that construct two ways — the crystallisation
+# construct replaces Lys209-Gly218, and the original insertion work cut between
+# L208 and R222. Through GPCRdb's own segment table (one residue = 0.01 generic
+# units in both helices) those are 5.70 and 5.69 on the TM5 side, and 6.24 on
+# the TM6 side.
+#
+# The owner's follow-up decision takes the wider reading, 5.69, so that BOTH
+# published descriptions of the canonical construct are allowed. A rule meant
+# to say "do not cut deeper than a construct known to fold and crystallise"
+# should not block that construct by one residue.
 GPCR_ICL3_FUSION_WINDOW: dict[str, tuple[float, float]] = {
     # helix -> (earliest allowed generic number, latest allowed generic number)
-    "5": (5.70, 9.99),
+    "5": (5.69, 9.99),
     "6": (-9.99, 6.24),
 }
 

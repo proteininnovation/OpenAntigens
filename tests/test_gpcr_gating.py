@@ -182,6 +182,17 @@ class FusionBandTests(unittest.TestCase):
         # Lys209-Gly218: 209 is generic 5.70 in TM5, 218 is inside ICL3.
         self.assertEqual(self._blockers(209, 218), [])
 
+    def test_both_published_readings_of_the_a2a_construct_are_allowed(self) -> None:
+        """The literature reports the canonical construct two ways.
+
+        Lys209-Gly218 (5.70) and L208/R222 (5.69 and 6.24). The owner's
+        follow-up decision set the TM5 floor to 5.69 so a rule meant to say
+        "do not cut deeper than a construct known to fold and crystallise"
+        does not block that construct by one residue.
+        """
+        self.assertEqual(self._blockers(209, 218), [])
+        self.assertEqual(self._blockers(208, 222), [])
+
     def test_the_portals_own_a2a_variant_is_blocked(self) -> None:
         # It replaces 204-229, generic 5.60x60 to 6.36x36 — ~14 residues of TM5
         # and ~16 of TM6 — taken from the F02-A fallback path itself.
@@ -190,7 +201,9 @@ class FusionBandTests(unittest.TestCase):
         self.assertIn("published ICL3-fusion window", blockers[0])
 
     def test_a_cut_one_residue_too_deep_in_tm5_is_blocked(self) -> None:
-        self.assertTrue(self._blockers(208, 218))
+        # 208 is generic 5.69 and allowed; 207 is 5.68 and is not.
+        self.assertEqual(self._blockers(208, 218), [])
+        self.assertTrue(self._blockers(207, 218))
 
     def test_a_cut_one_residue_too_deep_in_tm6_is_blocked(self) -> None:
         # 222 is generic 6.24 and allowed; 223 is 6.25 and is not.
@@ -220,7 +233,9 @@ class FusionBandTests(unittest.TestCase):
         )
 
     def test_the_window_constants_are_the_owners_decision(self) -> None:
-        self.assertEqual(GPCR_ICL3_FUSION_WINDOW["5"][0], 5.70)
+        # 5.69, not 5.70: the wider of the two published readings of the A2A
+        # construct (owner's follow-up decision, 2026-10-15).
+        self.assertEqual(GPCR_ICL3_FUSION_WINDOW["5"][0], 5.69)
         self.assertEqual(GPCR_ICL3_FUSION_WINDOW["6"][1], 6.24)
 
 
