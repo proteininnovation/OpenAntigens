@@ -32,6 +32,7 @@ if str(SRC) not in sys.path:
 
 from agdesign2.config import AnalysisConfig  # noqa: E402
 from agdesign2.models import (  # noqa: E402
+    DomainAnnotation,
     Feature,
     GPCRdbAnnotation,
     GPCRdbSegment,
@@ -134,6 +135,31 @@ class GpcrClassificationTests(unittest.TestCase):
             [],
         )
 
+
+    def test_a_target_classified_only_by_interpro_still_gets_fusion_variants(self) -> None:
+        """The variant gate once passed an empty InterPro list to the classifier."""
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        topology = _seven_tm_topology(analyzer.config)
+        target = _target("Uncharacterized protein", "UNCH_HUMAN")
+        interpro = [DomainAnnotation(
+            accession="IPR000276", name="G protein-coupled receptor, rhodopsin-like",
+            type="family", source_database="interpro", start=25, end=500,
+        )]
+        self.assertEqual(
+            analyzer._suggest_gpcr_engineering_variants(
+                target=target, topology=topology.topology, features=[],
+                ligand_interactions=[], ptms=[], gpcr_annotation=None,
+                interpro_annotations=[],
+            ),
+            [],
+        )
+        self.assertTrue(
+            analyzer._suggest_gpcr_engineering_variants(
+                target=target, topology=topology.topology, features=[],
+                ligand_interactions=[], ptms=[], gpcr_annotation=None,
+                interpro_annotations=interpro,
+            )
+        )
 
 def _seven_tm_topology(config: AnalysisConfig):
     features = [Feature(type="SIGNAL", start=1, end=24, description="Signal peptide")]
@@ -362,7 +388,10 @@ class GpcrWiringTests(unittest.TestCase):
 
         InterPro annotations surviving the design-region filter become domain_*
         and repeat_* constructs, so filtering against the un-clipped region put
-        a domain reaching into GPCRdb TM1 back on offer.
+        a domain reaching into GPCRdb TM1 back on offer. Deliberately a
+        source-order assertion: the invariant is the order of two statements
+        inside ``analyze_target``, and both sit past target resolution, so
+        there is no cheaper behavioural probe.
         """
         source = (SRC / "agdesign2" / "pipeline.py").read_text(encoding="utf-8")
         clip = source.index("self._clip_ectodomain_to_gpcrdb_tm1(topology, gpcr_annotation, notes)")

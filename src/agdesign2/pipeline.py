@@ -47,6 +47,7 @@ from .precomputed import PrecomputedReferenceStore
 from .refseq import RefSeqClient
 from .sequence_utils import find_furin_sites, global_align, identity_for_query_positions, map_query_region_to_subject, slice_sequence
 from .structure_utils import (
+    NOT_A_FREE_THIOL_WARNING_PREFIXES,
     analyze_cysteines,
     build_pae_stats,
     classify_surface_accessibility,
@@ -4545,6 +4546,10 @@ class AntigenAnalyzer:
                     finding
                     for finding in construct_cysteines
                     if finding.paired_with is None
+                    # Same guard as the Cys->Ser offer: an interchain or
+                    # ambiguously annotated cysteine is not a free thiol, so
+                    # the card must not list it as unpaired.
+                    and not str(finding.warning or "").startswith(NOT_A_FREE_THIOL_WARNING_PREFIXES)
                     and not any(start <= finding.position <= end for start, end in signal_spans)
                 ]
                 if reportable:

@@ -243,6 +243,16 @@ INTERCHAIN_DISULFIDE_WARNING = (
 )
 # Starts with "Ambiguous" so portal._NO_CYS_TO_SER_WARNING_PREFIXES keeps it out
 # of the Cys->Ser offer.
+# Warnings whose cysteine is not a free thiol: it must not be offered for
+# Cys->Ser (portal) and must not be listed as an unpaired cysteine on a
+# construct card (pipeline). "Ambiguous" means the connectivity is unresolved;
+# the interchain prefix means UniProt puts the partner on another chain, so the
+# residue is only "unpaired" because the model is a monomer.
+NOT_A_FREE_THIOL_WARNING_PREFIXES: tuple[str, ...] = (
+    "Ambiguous",
+    "Interchain disulfide",
+)
+
 AMBIGUOUS_CURATED_DISULFIDE_WARNING = (
     "Ambiguous curated disulfide: UniProt lists alternative bonds for this cysteine."
 )
@@ -250,7 +260,7 @@ AMBIGUOUS_CURATED_DISULFIDE_WARNING = (
 
 def _curated_disulfide_partners(
     features: list[Feature] | None,
-) -> tuple[dict[int, int], set[int], set[int]]:
+) -> tuple[dict[int, int], set[int], dict[int, set[int]]]:
     """Map each curated disulfide endpoint to its partner.
 
     UniProt writes an interchain bond as ``DISULFID n-n``; those are returned
@@ -274,12 +284,16 @@ def _curated_disulfide_partners(
             interchain.add(int(start))
             continue
         bonds.append((int(start), int(end)))
+    # Dedupe first: IGHG1_HUMAN lists 144-204 twice (blank and "Intrachain"),
+    # which is one bond, not two alternatives.
+    bonds = sorted({(min(bond), max(bond)) for bond in bonds})
     uses = Counter(residue for bond in bonds for residue in bond)
     partners: dict[int, int] = {}
-    ambiguous: set[int] = set()
+    ambiguous: dict[int, set[int]] = {}
     for start, end in bonds:
         if uses[start] > 1 or uses[end] > 1:
-            ambiguous.update((start, end))
+            ambiguous.setdefault(start, set()).add(end)
+            ambiguous.setdefault(end, set()).add(start)
         else:
             partners[start] = end
             partners[end] = start
@@ -327,6 +341,14 @@ def analyze_cysteines(
     for residue, partners in candidates.items():
         if len(partners) == 1 and len(candidates[partners[0]]) == 1:
             paired[residue] = partners[0]
+    # Where UniProt lists alternative bonds for a cysteine, the model may only
+    # choose between those alternatives. Letting geometry assert a partner no
+    # DISULFID names is the F12-A failure this function exists to prevent.
+    for residue, alternatives in curated_ambiguous.items():
+        partner = paired.get(residue)
+        if partner is not None and partner not in alternatives:
+            paired.pop(residue, None)
+            paired.pop(partner, None)
     in_range = set(cysteines)
     outside_partner: dict[int, int] = {}
     for residue in cysteines:
@@ -389,7 +411,7 @@ def analyze_cysteines(
                 "A curated disulfide names a partner that is not a cysteine in this "
                 "model; the annotation and the structure disagree."
             )
-        elif pair is None and residue in curated_ambiguous:
+        elif residue in curated_ambiguous:
             warning = AMBIGUOUS_CURATED_DISULFIDE_WARNING
         elif pair is None and candidates[residue]:
             warning = "Ambiguous cysteine pairing: competing sulfur contacts."

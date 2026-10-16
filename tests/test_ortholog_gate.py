@@ -143,11 +143,11 @@ class GateTests(unittest.TestCase):
         self.assertIn("below the 70% floor", verdict)
 
     def test_coverage_of_the_shorter_sequence_is_enforced(self) -> None:
-        # 60 identical residues then an unrelated tail: identity on the aligned
-        # part is high, but only ~half of the 120-aa ortholog aligns.
-        import random
-
-        human = "".join(random.Random(11).choices("ACDEFGHIKLMNPQRSTVWY", k=200))
+        # Deterministic, not seeded: 60 residues drawn from one half of the
+        # alphabet align end to end, then a 60-residue tail drawn from the
+        # other half cannot align to anything, so ~half the 120-aa ortholog
+        # aligns and the 0.70 floor must reject it.
+        human = ("ACDEFGHIKL" * 20)[:200]
         verdict = self._verdict(human, human[:60] + "W" * 60, asserted=True)
         self.assertIsNotNone(verdict)
         self.assertIn("of the shorter sequence aligned", verdict)

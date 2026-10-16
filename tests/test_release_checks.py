@@ -60,6 +60,13 @@ class ReleaseCheckTests(unittest.TestCase):
         site = {k: v for k, v in CLEAN_SITE.items() if not k.startswith("mouse/")}
         self.assertEqual(dict(_results(site)["portal-present"].failures), {"mouse": 1})
 
+    def test_an_empty_report_directory_fails(self) -> None:
+        # Both given, but one holds no *_report.json: the JSON checks would
+        # otherwise pass over nothing at all.
+        with _site(CLEAN_SITE) as tmp, TemporaryDirectory() as empty:
+            checks = {c.key: c for c in release_checks.run(Path(tmp), Path(empty), Path(empty))}
+        self.assertEqual(dict(checks["portal-present"].failures), {"human": 1, "mouse": 1})
+
     def test_one_json_directory_alone_is_refused(self) -> None:
         # Running one portal's JSON checks reported the other's as PASS.
         with _site(CLEAN_SITE) as tmp:

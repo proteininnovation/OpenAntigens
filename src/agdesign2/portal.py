@@ -26,7 +26,12 @@ from .gpcrdb import MOTIF_DEFINITIONS, motif_status
 from .http import HttpClient, _atomic_write
 from .pipeline import AntigenAnalyzer
 from .sequence_utils import global_align, slice_sequence
-from .structure_utils import load_pae_matrix, pae_matches_sequence_length, parse_alphafold_pdb
+from .structure_utils import (
+    NOT_A_FREE_THIOL_WARNING_PREFIXES,
+    load_pae_matrix,
+    pae_matches_sequence_length,
+    parse_alphafold_pdb,
+)
 from .site_docs import PAPER, agent_guide_html, citation_html, citation_short_html, citation_metadata, site_document_files
 
 
@@ -8850,14 +8855,9 @@ def _rcsb_structure_url(pdb_id: str) -> str:
     return f"https://www.rcsb.org/structure/{quote(pdb_id.strip().upper())}"
 
 
-# Warnings whose cysteine must not be offered for Cys->Ser. "Ambiguous" means
-# the model could not tell which partner; the interchain prefix means UniProt
-# says the partner is on another chain, so the residue is only "unpaired"
-# because the model is a monomer (F12-C, 207 human / 159 mouse pages).
-_NO_CYS_TO_SER_WARNING_PREFIXES: tuple[str, ...] = (
-    "Ambiguous",
-    "Interchain disulfide",
-)
+# F12-C, 207 human / 159 mouse pages. Defined beside the warnings themselves so
+# the construct card and the Cys->Ser offer cannot drift apart.
+_NO_CYS_TO_SER_WARNING_PREFIXES = NOT_A_FREE_THIOL_WARNING_PREFIXES
 
 
 def _construct_name_html(construct: dict[str, Any]) -> str:
