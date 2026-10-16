@@ -3472,8 +3472,19 @@ class AntigenAnalyzer:
         variants). Those same A2A cut points are 5 residues before the end of
         its TM5 and 3 after the start of its TM6, and that is portable.
 
-        A cut inside any other transmembrane helix, or H8, stays blocked:
-        no construct is published for those.
+        A cut inside any other transmembrane helix, or H8, stays blocked: no
+        construct is published for those. So is any cut inside a helix on a
+        receptor outside class A, because the 5 and 3 come from one class-A
+        receptor and no published ICL3-fusion precedent carries them to the
+        other classes (owner's decision 2026-10-15, confirmed 2026-10-16).
+
+        That test is the **numbering scheme**, not the presence of numbering.
+        The 2026-10-15 rule assumed class B, C and F receptors carry no generic
+        numbering; GPCRdb in fact numbers them in their own schemes, so the old
+        fallback never fired once in the corpus (every TM segment of all 717
+        human and 396 mouse receptors is numbered) and the absolute window was
+        silently being read against GPCRdb(B)/(C)/(F) coordinates on 80 human
+        receptors.
         """
         if gpcr_annotation is None:
             return []
@@ -3484,6 +3495,8 @@ class AntigenAnalyzer:
         cut_start, cut_end = loop.start + retain, loop.end - retain
         if cut_start > cut_end:
             return []
+        scheme = str(gpcr_annotation.residue_numbering_scheme or "").strip()
+        class_a = scheme.upper() == "GPCRDB(A)"
         blockers: list[str] = []
         for segment in gpcr_annotation.segments:
             name = str(segment.name or "").strip().upper()
@@ -3498,6 +3511,14 @@ class AntigenAnalyzer:
             for residue in (cut_start, cut_end):
                 if not (segment.start <= residue <= segment.end):
                     continue
+                if not class_a:
+                    blockers.append(
+                        f"Selected loop overlaps GPCRdb {name} ({segment.start}-{segment.end}); "
+                        f"this receptor is numbered {scheme or 'outside GPCRdb(A)'}, and the "
+                        "published fusion depths come from a class-A receptor, so no cut "
+                        "inside an annotated transmembrane segment is allowed."
+                    )
+                    break
                 if allowance is None:
                     blockers.append(
                         f"Selected loop cuts into GPCRdb {name} ({segment.start}-{segment.end}); "

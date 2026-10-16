@@ -187,6 +187,7 @@ class FusionBandTests(unittest.TestCase):
             GPCRdbSegment(name="ICL3", start=214, end=218),
             GPCRdbSegment(name="TM6", start=219, end=259, generic_start="6.21x21", generic_end="6.61x61"),
         ],
+        residue_numbering_scheme="GPCRdb(A)",
     )
 
     def _blockers(self, cut_start: int, cut_end: int, annotation=None):
@@ -241,24 +242,32 @@ class FusionBandTests(unittest.TestCase):
     def test_a_loop_clear_of_both_helices_is_allowed(self) -> None:
         self.assertEqual(self._blockers(214, 218), [])
 
-    def test_a_receptor_without_generic_numbering_uses_the_same_depths(self) -> None:
-        """Class B, C and F receptors carry no class-A generic numbering.
+    def test_a_receptor_outside_class_a_blocks_any_helix_cut(self) -> None:
+        """The depths come from one class-A receptor (owner, 2026-10-15/16).
 
-        The depth is measured from the annotated segment boundary, which every
-        class has, so they no longer need the "block any helix cut" fallback
-        the absolute window required (owner decision 2026-10-16).
+        The test is the numbering SCHEME, not whether numbering exists: GPCRdb
+        numbers class B, C and F in their own schemes, so a "no numbering"
+        fallback never fired once in the corpus and the absolute window was
+        being read against GPCRdb(B)/(C)/(F) coordinates on 80 human receptors.
         """
-        class_b = GPCRdbAnnotation(
-            entry_name="x", accession="Q1", name="A class-B receptor",
-            segments=[GPCRdbSegment(name="TM5", start=173, end=213)],
-        )
-        self.assertEqual(self._blockers(209, 218, annotation=class_b), [])
-        self.assertTrue(self._blockers(200, 218, annotation=class_b))
+        for scheme in ("GPCRdb(B)", "GPCRdb(C)", "GPCRdb(F)", None):
+            with self.subTest(scheme=scheme):
+                other = GPCRdbAnnotation(
+                    entry_name="x", accession="Q1", name="Not a class-A receptor",
+                    segments=list(self.A2A.segments),
+                    residue_numbering_scheme=scheme,
+                )
+                # The cut the class-A depths allow on A2A itself.
+                blockers = self._blockers(208, 222, annotation=other)
+                self.assertTrue(blockers)
+                self.assertIn("come from a class-A receptor", blockers[0])
 
     def test_a_helix_with_no_published_construct_is_blocked(self) -> None:
         other = GPCRdbAnnotation(
             entry_name="x", accession="Q1", name="x",
-            segments=[GPCRdbSegment(name="TM3", start=173, end=213)],
+            segments=[GPCRdbSegment(name="TM3", start=173, end=213,
+                                    generic_start="3.40x40", generic_end="3.60x60")],
+            residue_numbering_scheme="GPCRdb(A)",
         )
         blockers = self._blockers(209, 218, annotation=other)
         self.assertTrue(blockers)
@@ -364,12 +373,13 @@ class GpcrWiringTests(unittest.TestCase):
             entry_name="x", accession="Q1", name="x",
             segments=[GPCRdbSegment(name="TM3", start=100, end=130,
                                     generic_start="3.22x22", generic_end="3.52x52")],
+            residue_numbering_scheme="GPCRdb(A)",
         )
         blockers = self._analyzer()._gpcr_band_blockers(
             loop=Region(start=110, end=125, label="ICL", source="t"), gpcr_annotation=annotation,
         )
         self.assertTrue(blockers)
-        self.assertNotIn("no generic numbering", blockers[0])
+        self.assertNotIn("class-A receptor", blockers[0])
         self.assertIn("only for TM5 and TM6", blockers[0])
 
     def test_the_advisory_screen_says_when_nothing_is_eligible(self) -> None:
