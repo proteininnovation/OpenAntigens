@@ -5,10 +5,11 @@
   CCL2) — ``_select_best_hcop_prediction`` keyed on
   ``(source rank, -evidence, symbol)``, so the **alphabet** was a primary key
   once source and evidence tied. It decided 195 mouse picks.
-* **The gate** — there was none. Measured with the new ranking over the cached
-  HCOP candidates: mouse 236 withheld of 4,997 pairs, macaque 430 of 4,587.
-* **SF9** — HCOP answers under the alias "macaque" for both 9541 (cynomolgus)
-  and 9544 (rhesus); the taxon on each candidate row was never read.
+* **The gate** — there was none. Replayed through the production path over the
+  cached HCOP responses: mouse 237 withheld of 5,003 pairs, macaque 79 of 4,456.
+* **SF9** — withdrawn. HCOP answers the 9541 request with rhesus (9544) rows
+  only; a taxon filter would empty every macaque list. The rows supply a
+  symbol, and the protein comes from the cynomolgus proteome by symbol.
 * **§5.5** — MGI holds *two* mouse genes for human AKR1B10 and lists the same
   two human orthologs for each. The exact-symbol rule orders them but must not
   hide the co-ortholog.
@@ -41,12 +42,13 @@ def _client() -> HGNCClient:
     return HGNCClient.__new__(HGNCClient)
 
 
-def _candidate(symbol: str, source: str, evidence: int, taxon: str = "") -> dict:
+def _candidate(symbol: str, source: str, evidence: int, tax_id: int = 10090) -> dict:
+    # The keys HCOP actually emits (snapshot cache): tax_id is an int.
     return {
         "gene_symbol": symbol,
         "gene_symbol_source": source,
         "evidence": ["x"] * evidence,
-        "ortholog_species": taxon,
+        "tax_id": tax_id,
     }
 
 
@@ -79,15 +81,19 @@ class RankingTests(unittest.TestCase):
         )
         self.assertEqual(ranked[0]["gene_symbol"], "Ccl12")
 
-    def test_rhesus_rows_are_not_labelled_cynomolgus(self) -> None:
-        """SF9: HCOP's "macaque" alias covers 9541 and 9544."""
+    def test_rhesus_rows_are_kept(self) -> None:
+        """HCOP returns only 9544 rows for the macaque request (all 7,821 cached).
+
+        Filtering them to 9541 would empty every macaque list; they supply the
+        symbol that resolves the cynomolgus protein.
+        """
         ranked = _client()._rank_hcop_candidates(
             "macaca_fascicularis",
-            [_candidate("RHESUS1", "NCBI", 12, taxon="9544"),
-             _candidate("CYNO1", "VGNC", 3, taxon="9541")],
-            human_gene_symbol="X",
+            [_candidate("CD27", "VGNC", 3, tax_id=9544),
+             _candidate("LOC1", "NCBI", 1, tax_id=9544)],
+            human_gene_symbol="CD27",
         )
-        self.assertEqual([c["gene_symbol"] for c in ranked], ["CYNO1"])
+        self.assertEqual([c["gene_symbol"] for c in ranked], ["CD27", "LOC1"])
 
     def test_co_orthologs_are_reported_not_hidden(self) -> None:
         """§5.5 — AKR1B10's genuine 2x2 co-orthology in MGI."""
@@ -126,12 +132,25 @@ class GateTests(unittest.TestCase):
 
         rng = random.Random(11)
         human = "".join(rng.choices("ACDEFGHIKLMNPQRSTVWY", k=200))
-        # ~55% identity: mutate every other residue to a BLOSUM-similar one.
+        # 50% identity end to end: every other residue replaced.
         other = "".join(
-            residue if index % 2 else {"A": "S", "D": "E", "K": "R"}.get(residue, residue)
+            residue if index % 2 else rng.choice("ACDEFGHIKLMNPQRSTVWY".replace(residue, ""))
             for index, residue in enumerate(human)
         )
         self.assertIsNone(self._verdict(human, other, asserted=True))
+        verdict = self._verdict(human, other, asserted=False)
+        self.assertIsNotNone(verdict)
+        self.assertIn("below the 70% floor", verdict)
+
+    def test_coverage_of_the_shorter_sequence_is_enforced(self) -> None:
+        # 60 identical residues then an unrelated tail: identity on the aligned
+        # part is high, but only ~half of the 120-aa ortholog aligns.
+        import random
+
+        human = "".join(random.Random(11).choices("ACDEFGHIKLMNPQRSTVWY", k=200))
+        verdict = self._verdict(human, human[:60] + "W" * 60, asserted=True)
+        self.assertIsNotNone(verdict)
+        self.assertIn("of the shorter sequence aligned", verdict)
 
     def test_no_aligned_residues_is_withheld_not_called_zero_identity(self) -> None:
         self.assertIsNotNone(self._verdict("M" * 100, "W" * 10, asserted=True))
@@ -166,25 +185,6 @@ class PrimarySourceTests(unittest.TestCase):
             "macaca_fascicularis", human_symbol="A2M", ortholog_symbol="PRPF40B",
             gene_symbol_source="NCBI", evidence_count=12,
         ))
-
-
-class WithheldRowTests(unittest.TestCase):
-    """A withheld row must ship nothing a consumer can mistake for data."""
-
-    def test_the_sequence_and_symbol_are_blanked(self) -> None:
-        import agdesign2.ortholog_table as table
-
-        source = Path(table.__file__).read_text(encoding="utf-8")
-        # The guard that stops precomputed.py and mouse_portal.py reading the
-        # withheld protein out of the columns by name.
-        self.assertIn("mouse_sequence = None", source)
-        self.assertIn("mouse_protein = None", source)
-        self.assertIn('"mouse_selection_status"', source)
-
-    def test_the_renderer_has_a_branch_for_the_status(self) -> None:
-        from agdesign2.portal import _HOMOLOG_BLANK_REASONS
-
-        self.assertIn("withheld", _HOMOLOG_BLANK_REASONS)
 
 
 if __name__ == "__main__":

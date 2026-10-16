@@ -9819,7 +9819,6 @@ def _fmt_pct(value: Any) -> str:
 
 
 _HOMOLOG_BLANK_REASONS = {
-    "withheld": "withheld: no confident ortholog",
     "no_region": "no extracellular region",
     "unresolved": "no ortholog resolved",
     "unmapped": "boundaries could not be mapped confidently",
@@ -9853,9 +9852,11 @@ def _homolog_cell_reason(item: dict[str, Any], report: dict[str, Any]) -> str:
     with no reason. Three causes, and PR-8 adds a fourth by withholding rows
     that fail the ortholog gate (207 human pages lose every species row).
     """
-    status = str(item.get("selection_status") or "").strip().lower()
-    if status and status != "selected":
-        return _HOMOLOG_BLANK_REASONS.get(status, f"withheld: {status}")
+    status = str(item.get("selection_status") or "").strip()
+    if status and status.lower() != "selected":
+        # The table already writes "withheld: <reason>"; prefixing it again
+        # rendered "withheld: withheld: ..." on every withheld cell.
+        return status
     if not (item.get("entry_name") or item.get("accession")):
         return _HOMOLOG_BLANK_REASONS["unresolved"]
     if not report.get("ectodomain"):

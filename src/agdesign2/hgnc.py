@@ -153,9 +153,9 @@ class HGNCClient:
             "q_tax_id=9606",
             "t_tax_id=10090",
             "t_tax_id=9541",
-            # SF9: HCOP answers under the alias "macaque" for both 9541
-            # (cynomolgus) and 9544 (rhesus); the taxon on each candidate row
-            # is what says which, and it was never read.
+            # HCOP answers this with rhesus (9544) rows under "macaque": they
+            # supply the gene symbol only. The protein is resolved by symbol
+            # from the cynomolgus (9541) RefSeq proteome (ortholog_proteomes).
         ]
         url = f"https://www.genenames.org/cgi-bin/orthologs/hcop?{'&'.join(params)}"
         payload = self.http.fetch_json(
@@ -315,8 +315,6 @@ class HGNCClient:
         )
         return payload.get("response", {}).get("docs", [])
 
-    _SPECIES_TAXON = {"mouse": {"10090"}, "macaca_fascicularis": {"9541"}}
-
     def _rank_hcop_candidates(
         self,
         species: str,
@@ -332,17 +330,6 @@ class HGNCClient:
         reached 583 human pages. An exact human-symbol match, where it carries
         at least half the best candidate's evidence, now leads.
         """
-        wanted_taxa = self._SPECIES_TAXON.get(species)
-        if wanted_taxa:
-            # SF9: HCOP's "macaque" alias covers 9541 and 9544; a rhesus row was
-            # being labelled cynomolgus on every macaque row of every page.
-            filtered = [
-                candidate
-                for candidate in candidates
-                if not str(candidate.get("ortholog_species") or "").strip()
-                or str(candidate.get("ortholog_species") or "").strip() in wanted_taxa
-            ]
-            candidates = filtered or candidates
         if not candidates:
             return []
         preferred_sources = {

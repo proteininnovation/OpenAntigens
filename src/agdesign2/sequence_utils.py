@@ -253,8 +253,10 @@ def ortholog_gate_verdict(
     the data supports is "the species' curated model-organism database asserted
     it" — which an exact symbol match also satisfies.
 
-    Measured with the PR-8 ranking: mouse 236 withheld of 4,997 pairs, macaque
-    430 of 4,587. All eight named short orthologs survive (VEGFA, FGF2, CDH23,
+    Replayed through the production path (cached HCOP, the proteome resolver,
+    this gate): mouse 237 withheld of 5,003 pairs, macaque 79 of 4,456. The
+    clause admits 148 mouse rows a literal symbol test would withhold, 54 of
+    them onto a mouse protein another human gene also claims. All eight named short orthologs survive (VEGFA, FGF2, CDH23,
     IL6R, DEFB124, TFF3, GNRH1, PYY) and so does CD274/PD-L1 at 69.9%, while
     the macaque ABCB6→ATG9A, A2M→PRPF40B and KLK2→TRPM7 rows are withheld.
     """

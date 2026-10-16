@@ -249,17 +249,18 @@ class HomologyCellTests(unittest.TestCase):
                 self.assertEqual(_identity_cell(html), "no ortholog resolved")
 
     def test_withheld_row_says_so(self) -> None:
-        # PR-8 writes selection_status; PR-3 renders it. Until the rebuild the
-        # field is absent and this branch is inert.
+        # The status exactly as ortholog_table.py writes it. It once rendered
+        # "withheld: withheld: ..." because the renderer prefixed it again.
         for title in PORTAL_TITLES:
             with self.subTest(portal_title=title):
                 report = self._with_rows(
-                    [{"species": "macaca_fascicularis", "accession": "XP_1",
-                      "selection_status": "withheld", "identity": None, "coverage": None}],
+                    [{"species": "macaca_fascicularis",
+                      "selection_status": "withheld: only 13 aligned residues",
+                      "identity": None, "coverage": None}],
                     ectodomain={"start": 1},
                 )
                 html = _render(report, title)
-                self.assertEqual(_identity_cell(html), "withheld: no confident ortholog")
+                self.assertEqual(_identity_cell(html), "withheld: only 13 aligned residues")
 
     def test_identity_header_names_the_reference(self) -> None:
         for title in PORTAL_TITLES:

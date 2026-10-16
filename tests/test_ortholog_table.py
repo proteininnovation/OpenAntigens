@@ -200,6 +200,31 @@ class OrthologTableTests(unittest.TestCase):
                 build_ortholog_table_from_tsv(analyzer=FakeAnalyzer(), tsv_path=source, output_path=output, jobs=2)
             self.assertEqual(writer.call_count, 1)
 
+    def test_a_withheld_row_ships_no_protein(self) -> None:
+        """PR-8: precomputed.py and mouse_portal.py read these columns by name."""
+        unrelated = ResolvedOrthologProtein(
+            accession="Q99999", sequence="W" * 67, source="uniprot", organism="Mus musculus"
+        )
+        original = FakeOrthologResolver.resolve
+
+        def resolve(self, species, **kwargs):
+            return unrelated if species == "mouse" else original(self, species, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir, \
+                mock.patch.object(FakeOrthologResolver, "resolve", resolve):
+            root = Path(tmpdir)
+            source = root / "genes.tsv"
+            source.write_text("uniprot_name\tgene\nEGFR_HUMAN\tEGFR\n", encoding="utf-8")
+            _, _, rows = build_ortholog_table_from_tsv(
+                analyzer=FakeAnalyzer(), tsv_path=source, output_path=root / "t.tsv"
+            )
+        row = rows[0]
+        self.assertTrue(row.mouse_selection_status.startswith("withheld: "))
+        self.assertIsNone(row.mouse_refseq_sequence)
+        self.assertIsNone(row.mouse_refseq_accession)
+        self.assertIsNone(row.mouse_gene_symbol)
+        self.assertEqual(row.macaca_fascicularis_selection_status, "selected")
+
     def test_load_ortholog_rows_accepts_canonical_csv_columns(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "targets.csv"
