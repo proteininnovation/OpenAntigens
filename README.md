@@ -359,7 +359,7 @@ Repository organization is summarized in [docs/REPOSITORY_STRUCTURE.md](docs/REP
 
 - `src/agdesign2/`: package source for data retrieval, analysis, module refreshes, and portal rendering/serving
 - `data/inputs/`: canonical and legacy target input tables
-- `assets/branding/`: source branding assets copied into portal builds
+- `assets/branding/`: source branding assets copied into portal builds: the receptor mark (`openantigens-mark*.svg`), favicons and app icons, the self-hosted Manrope wordmark font (`manrope-latin.woff2`, SIL OFL, see `MANROPE-OFL.txt`) and the IPI logos. Regenerate the mark, favicons and icons with `python scripts/build_brand_assets.py`
 - `scripts/`: release packaging, figure generation, and measurement utilities
 - `tests/`: unit and regression tests
 - `docs/`: detailed guides and small support pages
