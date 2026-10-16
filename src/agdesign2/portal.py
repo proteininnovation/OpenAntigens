@@ -723,6 +723,11 @@ def _copy_brand_assets(portal_dir: Path) -> None:
     for asset_name in (
         "ipi-logo-dark-800.png",
         "ipi-logo-light-800.png",
+        "openantigens-mark.svg",
+        "openantigens-mark-reversed.svg",
+        "openantigens-mark-mouse.svg",
+        "manrope-latin.woff2",
+        "favicon.svg",
         "favicon.ico",
         "favicon-32.png",
         "apple-touch-icon.png",
@@ -744,6 +749,7 @@ def _copy_brand_assets(portal_dir: Path) -> None:
 
 def _portal_favicon_links(*, prefix: str = "") -> str:
     return f"""  <link rel="icon" href="{escape(prefix)}favicon.ico" sizes="any">
+  <link rel="icon" type="image/svg+xml" href="{escape(prefix)}favicon.svg?v={_PORTAL_CSS_VERSION}">
   <link rel="icon" type="image/png" sizes="32x32" href="{escape(prefix)}favicon-32.png?v={_PORTAL_CSS_VERSION}">
   <link rel="apple-touch-icon" sizes="180x180" href="{escape(prefix)}apple-touch-icon.png?v={_PORTAL_CSS_VERSION}">
   <link rel="manifest" href="{escape(prefix)}site.webmanifest?v={_PORTAL_CSS_VERSION}">"""
@@ -858,16 +864,19 @@ def _portal_brand_header(
 ) -> str:
     chip = chip_html or '<div class="hero-chip">Antigen constructs and supporting evidence</div>'
     species_switch = _portal_species_switch(portal_title, sibling_link)
+    species_suffix = portal_title.removeprefix("OpenAntigens").strip()
+    species_tag = f'<span class="brand-species">{escape(species_suffix)}</span>' if species_suffix else ""
     return f"""
       <div class="brand-bar">
         <div class="brand-lockup">
-          <a class="brand-home-link" href="{escape(prefix)}index.html" aria-label="OpenAntigens home" style="color:#fff;text-decoration:none;display:inline-flex;align-items:center;">
+          <a class="brand-home-link" href="{escape(prefix)}index.html" aria-label="OpenAntigens home">
+            <img class="brand-mark" src="{escape(prefix)}openantigens-mark-reversed.svg" alt="" width="54" height="54">
+            <span class="brand-wordmark">Open<b>Antigens</b></span>{species_tag}
+          </a>
+          <span class="brand-divider" aria-hidden="true"></span>
+          <a class="brand-ipi-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer">
             <img class="brand-logo" src="{escape(prefix)}ipi-logo-light-800.png" alt="Institute for Protein Innovation">
           </a>
-          <div class="brand-copy">
-            <a class="brand-kicker" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" style="color:#fff;text-decoration:none;">Institute for Protein Innovation</a>
-            <a class="brand-product" href="{escape(prefix)}index.html" style="color:#fff;text-decoration:none;">{escape(portal_title)}</a>
-          </div>
         </div>
         <div class="brand-actions">
           {_portal_nav(prefix=prefix, active=active)}
@@ -880,20 +889,25 @@ def _portal_brand_header(
 """
 
 
-def _portal_footer(*, prefix: str = "") -> str:
+def _portal_footer(*, prefix: str = "", portal_title: str = "OpenAntigens") -> str:
     version = _openantigen_version()
     build_date = _portal_build_date()
+    mark = "openantigens-mark-mouse.svg" if "mouse" in portal_title.lower() else "openantigens-mark.svg"
     return f"""
     <footer class="site-footer">
       <div class="footer-grid">
         <div class="footer-brand">
-          <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
-            <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
-          </a>
-          <div>
-            <strong>OpenAntigens</strong>
-            <p>Antigen construct design for cell-surface and secreted proteins.</p>
+          <div class="footer-cobrand">
+            <a class="footer-lockup" href="{escape(prefix)}index.html" aria-label="OpenAntigens home">
+              <img class="footer-mark" src="{escape(prefix)}{mark}" alt="" width="48" height="48">
+              <strong class="footer-wordmark">Open<b>Antigens</b></strong>
+            </a>
+            <span class="footer-divider" aria-hidden="true"></span>
+            <a class="footer-logo-link" href="https://proteininnovation.org/" target="_blank" rel="noreferrer" aria-label="Institute for Protein Innovation website">
+              <img class="footer-logo" src="{escape(prefix)}ipi-logo-dark-800.png" alt="Institute for Protein Innovation">
+            </a>
           </div>
+          <p>Antigen construct design for cell-surface and secreted proteins.</p>
         </div>
         <nav class="footer-links" aria-label="Footer navigation">
           <a href="{escape(prefix)}builder.html">Builder guide</a>
@@ -1220,7 +1234,7 @@ def render_index_page(
         <tbody></tbody>
       </table>
     </section>
-    {_portal_footer()}
+    {_portal_footer(portal_title=portal_title)}
   </main>
   <script src="portal-index-data.js?v={_PORTAL_JS_VERSION}"></script>{disease_index_script}
   <script>
@@ -1508,7 +1522,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         else "entry, gene, protein name, family, disease score, topology track, PubTator hits, design region, AlphaFold availability, PDB availability, construct count, or BLAST-hit count"
     )
     export_scope = (
-        "mouse construct name, boundaries, sequence, and available cynomolgus monkey equivalent regions; the originating human target is retained as provenance"
+        "mouse construct name, boundaries, sequence, and equivalent regions in the originating human target and available cynomolgus monkey orthologs"
         if is_mouse
         else "human construct name, boundaries, sequence, and equivalent mouse and cynomolgus monkey regions"
     )
@@ -1822,7 +1836,7 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
 def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
     is_mouse = portal_title == "OpenAntigens Mouse"
     primary_species = "mouse" if is_mouse else "human"
-    homolog_species = "Cynomolgus monkey" if is_mouse else "Mouse and cynomolgus monkey"
+    homolog_species = "Human and cynomolgus monkey" if is_mouse else "Mouse and cynomolgus monkey"
     identity_label = "Identity to mouse source" if is_mouse else "Identity to human"
     identity_description = (
         "Construct-specific sequence identity between homolog-equivalent and mouse regions."
@@ -1830,7 +1844,7 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         else "Construct-specific sequence identity between species-equivalent and human regions."
     )
     transfer_description = (
-        "Mouse construct boundaries are transferred to available cynomolgus monkey homologs by aligning the full design scope and projecting the mouse boundary positions. The originating human target is retained as provenance rather than exported as a mapped construct."
+        "Mouse construct boundaries are transferred to the originating human target and available cynomolgus monkey orthologs by aligning the full design scope and projecting the mouse boundary positions. The Construct Builder and the construct cards use the same alignment."
         if is_mouse
         else "Human construct boundaries are transferred to mouse and cynomolgus monkey by aligning the full design scope to each ortholog sequence. The alignment projects human boundary positions onto ortholog sequences."
     )
@@ -2084,7 +2098,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         else "Precomputed RefSeq/HCOP-derived ortholog table"
     )
     ortholog_use = (
-        "Mouse and available cynomolgus monkey sequence mapping and construct-level identity; the originating human target is retained as provenance."
+        "Mouse, originating human and available cynomolgus monkey sequence mapping and construct-level identity."
         if is_mouse
         else "Human, mouse, and cynomolgus monkey sequence mapping and construct-level identity."
     )
@@ -2551,7 +2565,7 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
         </ul>
       </aside>
     </section>
-    """ + _portal_footer() + """
+    """ + _portal_footer(portal_title=portal_title) + """
   </main>
 
   <script>
@@ -3173,7 +3187,7 @@ def _render_info_page(
     <div class="doc-layout">
       {body_html}
     </div>
-    {_portal_footer()}
+    {_portal_footer(portal_title=portal_title)}
   </main>
 </body>
 </html>
@@ -3844,12 +3858,15 @@ def render_detail_page(
     has_matching_alphafold = bool(entry.get("has_alphafold_structure"))
     report_json_path = _resolve_existing_path(entry.get("json_report"), batch_dir)
     report_md_path = _resolve_existing_path(entry.get("markdown_report"), batch_dir)
+    # One ortholog alignment per report, shared by the Construct Builder and the construct cards.
+    homolog_mappings = _load_homolog_mappings(report=report, batch_dir=batch_dir)
     structure_widget = _render_structure_widget(
         entry,
         report,
         batch_dir=batch_dir,
         page_dir=page_dir,
         allow_af3_structures=allow_af3_structures,
+        homolog_mappings=homolog_mappings,
     )
     has_interactive_structure = 'id="structureViewer"' in structure_widget
 
@@ -4124,6 +4141,9 @@ def render_detail_page(
         ptms=ptms,
         allow_structure_assets=has_matching_alphafold,
         identity_label=_identity_label(report),
+        homolog_mappings=homolog_mappings,
+        homolog_records=report.get("ectodomain_homology") or [],
+        surface_positions=_extracellular_surface_positions(report),
     )
 
     interpro_rows = "".join(
@@ -4278,8 +4298,9 @@ def render_detail_page(
         </dl>
         <p class="section-note">Alternative isoforms are not analyzed separately; the coordinates and annotations shown refer to this sequence.</p>
       </article>
-      <article class="card">
+      <article class="card design-region-card">
         <h2>{escape(design_region_label)}</h2>
+        <p class="design-region-boundary">{escape(_format_region(ectodomain))}</p>
         <dl class="meta">
           <dt>Boundary</dt><dd>{escape(_format_region(ectodomain))}</dd>
           <dt>Label</dt><dd>{escape(str(ectodomain.get('label') or ''))}</dd>
@@ -4391,7 +4412,7 @@ def render_detail_page(
       <h2>Notes</h2>
       <ul>{note_items}</ul>
     </section>
-    {_portal_footer(prefix="../")}
+    {_portal_footer(prefix="../", portal_title=portal_title)}
   </main>
   {construct_mutation_script}
   {_report_section_navigation()}
@@ -4512,6 +4533,9 @@ def _render_construct_tabs(
     ptms: list[dict[str, Any]],
     allow_structure_assets: bool,
     identity_label: str,
+    homolog_mappings: list[dict[str, Any]] | None = None,
+    homolog_records: list[dict[str, Any]] | None = None,
+    surface_positions: set[int] | None = None,
 ) -> str:
     if not constructs:
         return "<p>No constructs available.</p>"
@@ -4555,7 +4579,8 @@ def _render_construct_tabs(
                 _render_construct_card(
                     construct, target=target, batch_dir=batch_dir, page_dir=page_dir,
                     furin_sites=furin_sites, ptms=ptms, allow_structure_assets=allow_structure_assets,
-                    identity_label=identity_label,
+                    identity_label=identity_label, homolog_mappings=homolog_mappings,
+                    homolog_records=homolog_records, surface_positions=surface_positions,
                 )
                 for construct in members
             )
@@ -4629,6 +4654,9 @@ def _render_construct_card(
     ptms: list[dict[str, Any]],
     allow_structure_assets: bool = True,
     identity_label: str = "Identity to human",
+    homolog_mappings: list[dict[str, Any]] | None = None,
+    homolog_records: list[dict[str, Any]] | None = None,
+    surface_positions: set[int] | None = None,
 ) -> str:
     human_entry = construct.get("human_entry_name") or target.get("entry_name") or ""
     evidence = construct.get("evidence") or []
@@ -4636,15 +4664,6 @@ def _render_construct_card(
     size_warning = _construct_size_warning(construct)
     if size_warning:
         warnings.insert(0, size_warning)
-    # F06a: reports built before the pipeline fix carry a self-species homolog
-    # row. Drop it here and the HTML table, the TSV/FASTA export rows and the
-    # viewer's unavailableRows all lose it, since they derive from this list.
-    target_species_key = _target_species_key(target)
-    homologs = [
-        item
-        for item in (construct.get("homologs") or [])
-        if str(item.get("species") or "") != target_species_key
-    ]
     structural_metrics = construct.get("structural_metrics") or {}
     safe_name = _safe_filename(str(construct.get("name") or "construct"))
     assets_dir = batch_dir / f"{str(target.get('entry_name') or '').lower()}_report_assets"
@@ -4727,61 +4746,71 @@ def _render_construct_card(
             ),
         }
     ]
-    for item in homologs:
-        if not (item.get("available") and item.get("start") is not None and item.get("end") is not None):
+    # Ortholog rows use the same report-level alignment as the Construct Builder (homologMappings),
+    # so a construct's table, exports and Cys/furin edit mapping always match a builder selection.
+    unavailable_rows: list[dict[str, Any]] = []
+    mapped_species = {primary_species.lower()}
+
+    def _unavailable(species: str, reason: str, accession: str, entry_name: str) -> dict[str, Any]:
+        return {
+            "name": f"{name_symbol}_{_species_code(species)}_mapping",
+            "species": _species_code(species),
+            "species_raw": species,
+            "reason": reason,
+            "accession": accession,
+            "entry_name": entry_name,
+            "gene_symbol": gene_symbol,
+            "links": _render_resource_links(accession=accession, entry_name=entry_name, gene_symbol=gene_symbol, species=species),
+        }
+
+    for mapping in homolog_mappings or []:
+        species = str(mapping.get("species") or "")
+        if species.lower() in mapped_species:
             continue
-        species = str(item.get("species") or "")
-        homolog_sequence = str(item.get("sequence") or "")
-        alignment = _portal_align_sequences(
-            str(construct.get("sequence") or ""),
-            homolog_sequence,
-        )
+        mapped_species.add(species.lower())
+        accession = str(mapping.get("accession") or "")
+        entry_name = str(mapping.get("entryName") or accession)
+        mapped, reason = _map_region_to_homolog(mapping, construct.get("start"), construct.get("end"), surface_positions or set())
+        if mapped is None:
+            unavailable_rows.append(_unavailable(species, reason, accession, entry_name))
+            continue
+        surface = mapped["surface_identity"]
         export_rows.append(
             {
-                "name": _format_export_name(name_symbol, species, item.get("start"), item.get("end")),
+                "name": _format_export_name(name_symbol, species, mapped["start"], mapped["end"]),
                 "species": _species_code(species),
                 "species_raw": species,
-                "boundary": f"{item.get('start')}-{item.get('end')}",
-                "start": item.get("start"),
-                "end": item.get("end"),
-                "sequence": homolog_sequence,
+                "boundary": f"{mapped['start']}-{mapped['end']}",
+                "start": mapped["start"],
+                "end": mapped["end"],
+                "sequence": mapped["sequence"],
                 "target_region_start": construct.get("start"),
-                "homolog_region_start": item.get("start"),
-                "aligned_target": alignment["aligned_query"],
-                "aligned_homolog": alignment["aligned_subject"],
-                "identity": _fmt_pct(item.get("identity_to_human")),
-                "surface_identity": _fmt_surface_identity(item),
-                "accession": str(item.get("accession") or ""),
-                "entry_name": str(item.get("entry_name") or item.get("accession") or ""),
+                "homolog_region_start": mapped["start"],
+                "aligned_target": mapped["aligned_target"],
+                "aligned_homolog": mapped["aligned_homolog"],
+                "identity": f"{mapped['identity']:.2f}%",
+                "surface_identity": "" if surface is None else f"{surface:.2f}% ({mapped['surface_aligned_positions']} aa)",
+                "accession": accession,
+                "entry_name": entry_name,
                 "gene_symbol": gene_symbol,
-                "links": _render_resource_links(
-                    accession=str(item.get("accession") or ""),
-                    entry_name=str(item.get("entry_name") or item.get("accession") or ""),
-                    gene_symbol=gene_symbol,
-                    species=species,
-                ),
+                "links": _render_resource_links(accession=accession, entry_name=entry_name, gene_symbol=gene_symbol, species=species),
             }
         )
-    unavailable_rows = [
-        {
-            "name": f"{name_symbol}_{_species_code(str(item.get('species') or ''))}_mapping",
-            "species": _species_code(str(item.get("species") or "")),
-            "species_raw": str(item.get("species") or ""),
-            "reason": "; ".join(str(note) for note in (item.get("notes") or []) if str(note).strip())
-            or "No usable homolog boundary was available.",
-            "accession": str(item.get("accession") or ""),
-            "entry_name": str(item.get("entry_name") or item.get("accession") or ""),
-            "gene_symbol": gene_symbol,
-            "links": _render_resource_links(
-                accession=str(item.get("accession") or ""),
-                entry_name=str(item.get("entry_name") or item.get("accession") or ""),
-                gene_symbol=gene_symbol,
-                species=str(item.get("species") or ""),
-            ),
-        }
-        for item in homologs
-        if not (item.get("available") and item.get("start") is not None and item.get("end") is not None)
-    ]
+    for record in homolog_records or []:
+        species = str(record.get("species") or "")
+        if not species or species.lower() in mapped_species:
+            continue
+        mapped_species.add(species.lower())
+        status = str(record.get("selection_status") or "").strip()
+        if status and status.lower() != "selected":
+            # PR-8: a withheld ortholog says why, not "no ortholog was found".
+            reason = status
+        elif record.get("available"):
+            reason = "The ortholog sequence could not be loaded for this build."
+        else:
+            reason = "; ".join(str(note) for note in (record.get("notes") or []) if str(note).strip()) or "No ortholog was found."
+        accession = str(record.get("accession") or "")
+        unavailable_rows.append(_unavailable(species, reason, accession, str(record.get("entry_name") or accession)))
     sequence_rows_html = "".join(
         "<tr><td><code>{name}</code></td><td>{species}</td><td>{boundary}</td><td><code class=\"sequence\">{sequence}</code></td><td>{identity}</td><td>{surface_identity}</td><td>{links}</td></tr>".format(
             name=escape(row["name"]),
@@ -6265,6 +6294,7 @@ def _render_structure_widget(
     batch_dir: Path,
     page_dir: Path | None = None,
     allow_af3_structures: bool = False,
+    homolog_mappings: list[dict[str, Any]] | None = None,
 ) -> str:
     local_vendor_asset = page_dir.parent / "3Dmol-min.js" if page_dir is not None else None
     if local_vendor_asset is not None and _is_valid_threedmol_asset(local_vendor_asset):
@@ -6313,6 +6343,7 @@ def _render_structure_widget(
         batch_dir=batch_dir,
         pdb_path=resolved_structure_path,
         allow_af3_structures=allow_af3_structures,
+        homolog_mappings=homolog_mappings,
     )
     structure_source_label = _structure_source_label(resolved_structure_path)
 
@@ -9361,6 +9392,7 @@ def _load_viewer_payload(
     batch_dir: Path,
     pdb_path: Path | None = None,
     allow_af3_structures: bool = False,
+    homolog_mappings: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     target = report.get("target", {})
     ectodomain = report.get("ectodomain") or {}
@@ -9428,7 +9460,9 @@ def _load_viewer_payload(
     payload["furinSites"] = report.get("furin_sites") or []
     payload["ptms"] = _report_ptms(report)
     payload["gpcrAnnotation"] = report.get("gpcr_annotation") or None
-    payload["homologMappings"] = _load_homolog_mappings(report=report, batch_dir=batch_dir)
+    payload["homologMappings"] = (
+        homolog_mappings if homolog_mappings is not None else _load_homolog_mappings(report=report, batch_dir=batch_dir)
+    )
     return payload
 
 
@@ -9533,6 +9567,82 @@ def _load_homolog_mappings(*, report: dict[str, Any], batch_dir: Path) -> list[d
         mappings.append(fallback_mapping)
         existing_species.add(species_key)
     return mappings
+
+
+def _extracellular_surface_positions(report: dict[str, Any]) -> set[int]:
+    """Residues the builder counts for surface identity: extracellular and surface-exposed."""
+    positions: set[int] = set()
+    for item in report.get("residue_annotations") or []:
+        if str(item.get("topology_location") or "").lower() == "extracellular" and item.get("surface_exposed") is True:
+            try:
+                positions.add(int(item["position"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return positions
+
+
+def _map_region_to_homolog(
+    mapping: dict[str, Any], start: Any, end: Any, surface_positions: set[int]
+) -> tuple[dict[str, Any] | None, str]:
+    """Python port of the Construct Builder's mapSelectionToHomolog (same alignment, 70% rule and identities).
+
+    Also returns the alignment columns for the region, so per-row edit mapping uses the builder's alignment.
+    """
+    try:
+        start, end = int(start), int(end)
+    except (TypeError, ValueError):
+        return None, "The construct has no numeric boundary."
+    region_start = int(mapping.get("humanRegionStart") or 0)
+    region_end = int(mapping.get("humanRegionEnd") or 0)
+    homolog_start = int(mapping.get("homologRegionStart") or mapping.get("ectodomainStart") or 1)
+    if not (region_start and region_end) or start < region_start or end > region_end:
+        return None, f"Boundary {start}-{end} lies outside the aligned region {region_start}-{region_end} used by the Construct Builder."
+    query_start, query_end = start - region_start + 1, end - region_start + 1
+    query_pos = subject_pos = 0
+    matches = aligned = surface_matches = surface_aligned = 0
+    mapped: list[int] = []
+    columns: list[tuple[str, str, int]] = []  # (target, homolog, homolog position) from first to last in-range target residue
+    for target_residue, homolog_residue in zip(
+        str(mapping.get("alignedHumanEctodomain") or ""), str(mapping.get("alignedHomologEctodomain") or ""), strict=False
+    ):
+        if target_residue != "-":
+            query_pos += 1
+        if homolog_residue != "-":
+            subject_pos += 1
+        in_range = query_start <= query_pos <= query_end
+        if target_residue == "-":
+            if columns and query_pos < query_end:
+                columns.append((target_residue, homolog_residue, subject_pos))
+            continue
+        if not in_range:
+            continue
+        columns.append((target_residue, homolog_residue, subject_pos))
+        if homolog_residue == "-":
+            continue
+        mapped.append(subject_pos)
+        aligned += 1
+        matches += target_residue == homolog_residue
+        if region_start + query_pos - 1 in surface_positions:
+            surface_aligned += 1
+            surface_matches += target_residue == homolog_residue
+    requested = query_end - query_start + 1
+    if not mapped:
+        return None, "No residue of this boundary aligns to the ortholog."
+    if aligned / requested < 0.70:
+        return None, f"Only {100 * aligned / requested:.0f}% of this boundary aligns to the ortholog; the Construct Builder requires 70%."
+    low, high = min(mapped), max(mapped)
+    # Keep only homolog residues between the mapped ends, so position counting starts at the mapped start.
+    columns = [(t, h, pos) for t, h, pos in columns if t != "-" or low <= pos <= high]
+    return {
+        "start": homolog_start + low - 1,
+        "end": homolog_start + high - 1,
+        "sequence": str(mapping.get("ectodomainSequence") or "")[low - 1 : high],
+        "identity": 100 * matches / aligned,
+        "surface_identity": (100 * surface_matches / surface_aligned) if surface_aligned else None,
+        "surface_aligned_positions": surface_aligned,
+        "aligned_target": "".join(t for t, _, _ in columns),
+        "aligned_homolog": "".join(h for _, h, _ in columns),
+    }, ""
 
 
 def _load_homolog_mappings_from_constructs(
@@ -12042,5 +12152,43 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 .homepage-citation a {color:#91d7cf;text-underline-offset:3px;}
 .paper-citation {overflow-wrap:anywhere;}
 #cite-openantigens {scroll-margin-top:24px;}
+
+/* Brand: receptor mark + Manrope wordmark beside the IPI logo (design system "OpenAntigens"). */
+@font-face { font-family: "Manrope"; font-style: normal; font-weight: 200 800; font-display: swap; src: url("manrope-latin.woff2") format("woff2"); }
+.brand-lockup { flex-wrap: wrap; gap: 18px; }
+.brand-home-link { gap: 10px; color: #fff; text-decoration: none; }
+.brand-home-link:hover, .brand-ipi-link:hover { opacity: 0.86; }
+.brand-mark { display: block; width: 54px; height: 54px; }
+.brand-wordmark { font-family: Manrope, "Avenir Next", "Segoe UI", sans-serif; font-size: 1.56rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1; color: #fff; }
+.brand-wordmark b, .footer-wordmark b { font-weight: 800; }
+.brand-species { padding: 3px 9px; border: 1px solid rgba(255,255,255,0.28); border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; }
+.brand-divider { width: 1px; height: 40px; background: rgba(255,255,255,0.28); }
+.brand-ipi-link { display: inline-flex; }
+.brand-logo { height: 46px; }
+.footer-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 24px 40px; }
+.footer-grid .footer-links { justify-content: flex-end; }
+.footer-brand { flex-direction: column; align-items: flex-start; gap: 12px; max-width: 400px; }
+.footer-cobrand { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; }
+.footer-lockup { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.footer-lockup:hover { opacity: 0.86; }
+.footer-mark { display: block; width: 48px; height: 48px; }
+.footer-brand .footer-wordmark { font-family: Manrope, "Avenir Next", "Segoe UI", sans-serif; font-size: 1.38rem; font-weight: 500; letter-spacing: -0.035em; line-height: 1; color: var(--ink); }
+.footer-divider { width: 1px; height: 40px; background: var(--line); }
+.footer-logo { height: 48px; }
+.footer-brand p { margin: 0; }
+.card.design-region-card { background: var(--accent-soft); }
+.design-region-boundary { margin: 0 0 14px; font: 700 clamp(2.2rem, 4vw, 3.2rem)/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: -0.02em; color: var(--ink); }
+.design-region-boundary:empty { display: none; }
+@media (max-width: 980px) {
+  .brand-mark { width: 44px; height: 44px; }
+  .brand-wordmark { font-size: 1.3rem; }
+  .brand-divider { display: none; }
+  .brand-logo { height: 38px; }
+  .footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .footer-grid .footer-links { justify-content: flex-start; }
+}
+@media (max-width: 560px) {
+  .footer-divider { display: none; }
+}
 
 """ + theme_overrides + _construct_workbench_css()

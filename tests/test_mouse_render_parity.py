@@ -72,24 +72,21 @@ class SelfSpeciesRenderTests(unittest.TestCase):
 
         from agdesign2.portal import _render_construct_card
 
-        construct = {
-            "name": "full_ectodomain",
-            "start": 25,
-            "end": 180,
-            "sequence": "A" * 156,
-            "homologs": [
-                {"species": species, "available": False,
-                 "notes": ["No same-name UniProt entry found for species."]},
-                {"species": "macaca_fascicularis", "available": False,
-                 "notes": ["No same-name UniProt entry found for species."]},
-            ],
-        }
+        construct = {"name": "full_ectodomain", "start": 25, "end": 180, "sequence": "A" * 156}
+        # Card rows come from the report's ortholog records (the builder's source),
+        # which on pre-fix mouse reports still carry the self-species row.
+        records = [
+            {"species": species, "available": False,
+             "notes": ["No same-name UniProt entry found for species."]},
+            {"species": "macaca_fascicularis", "available": False,
+             "notes": ["No same-name UniProt entry found for species."]},
+        ]
         target = {"entry_name": entry_name, "gene_symbol": "Il7", "accession": "P10168",
                   "taxon_id": "10090" if entry_name.endswith("_MOUSE") else "9606"}
         with TemporaryDirectory() as tmp:
             return _render_construct_card(
                 construct, target=target, batch_dir=Path(tmp), page_dir=Path(tmp),
-                furin_sites=[], ptms=[],
+                furin_sites=[], ptms=[], homolog_records=records,
             )
 
     def test_mouse_card_drops_the_self_species_row(self) -> None:
@@ -102,6 +99,24 @@ class SelfSpeciesRenderTests(unittest.TestCase):
         self.assertIn("_MOUSE_mapping", html)
         self.assertIn("_MACFA_mapping", html)
 
+
+    def test_a_withheld_ortholog_card_row_says_why(self) -> None:
+        """PR-8 meets the builder-aligned card rows: the reason is the withholding."""
+        from tempfile import TemporaryDirectory
+
+        from agdesign2.portal import _render_construct_card
+
+        status = "withheld: 46.0% identity, below the 70% floor for an ortholog with no curated assertion"
+        records = [{"species": "mouse", "available": False, "selection_status": status,
+                    "notes": ["No precomputed sequence available for this species."]}]
+        with TemporaryDirectory() as tmp:
+            html = _render_construct_card(
+                {"name": "full_ectodomain", "start": 25, "end": 180, "sequence": "A" * 156},
+                target={"entry_name": "CEAM5_HUMAN", "gene_symbol": "CEACAM5", "accession": "P06731", "taxon_id": "9606"},
+                batch_dir=Path(tmp), page_dir=Path(tmp), furin_sites=[], ptms=[], homolog_records=records,
+            )
+        self.assertIn("below the 70% floor", html)
+        self.assertNotIn("No precomputed sequence available", html)
 
 class MouseMethodsProvenanceTests(unittest.TestCase):
     """F19-4 / Codex OA-008."""

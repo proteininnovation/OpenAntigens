@@ -626,6 +626,14 @@ def _mouse_target_from_sources(
         entry_name = uniprot_target["entry_name"]
         sequence = uniprot_target["sequence"]
         sequence_source = "uniprot_reviewed_mouse_gene_symbol"
+        # The lookup symbol can resolve to a differently named record: the
+        # ortholog table gives SIGLEC7/9/12 the symbol "Siglece", which UniProt
+        # answers with SIG12_MOUSE (Siglec12). Keeping the lookup symbol left the
+        # target labelled with a gene it is not, and the claim winner's
+        # same-symbol test could never fire, so SIGLEC12 lost its own page to
+        # SIGLEC7 on the identity tiebreak.
+        if uniprot_target.get("gene_symbol"):
+            gene_symbol = str(uniprot_target["gene_symbol"])
     protein_name = _mouse_protein_name(
         human_report=human_report,
         human_target=human_target,
@@ -678,6 +686,7 @@ def _resolve_mouse_uniprot_target(gene_symbol: str, *, uniprot_client: UniProtCl
         "entry_name": target.entry_name,
         "sequence": target.sequence,
         "protein_name": target.protein_name,
+        "gene_symbol": target.gene_symbol or "",
     }
 
 

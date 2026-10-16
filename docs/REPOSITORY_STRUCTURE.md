@@ -15,7 +15,7 @@ This repository contains the source code, reference inputs, tests, and documenta
 
 ## Branding and static assets
 
-- `assets/branding/`: source branding files used when rendering the portal.
+- `assets/branding/`: source branding files used when rendering the portal. The header pairs the OpenAntigens receptor mark and Manrope wordmark with the IPI logo; the footer repeats both (the mouse portal uses `openantigens-mark-mouse.svg`). `scripts/build_brand_assets.py` regenerates the mark SVGs, favicons and app icons from one geometry; the Manrope font is self-hosted so pages make no third-party font requests.
 - Generated portal builds copy required assets into `outputs/<batch>/portal/`.
 
 ## Runtime outputs
