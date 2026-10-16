@@ -153,6 +153,51 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class ConstructCardTests(unittest.TestCase):
+    """A cysteine that is not a free thiol must not be called unpaired.
+
+    The Cys->Ser offer has filtered on the warning prefix since F12-C; the
+    construct card did not, so interchain and ambiguously annotated cysteines
+    were listed in "Contains unpaired cysteine(s)".
+    """
+
+    def _warnings(self, disulfides: list[Feature]) -> list[str]:
+        from agdesign2.models import ConstructSuggestion, Region
+
+        analyzer = AntigenAnalyzer(config=AnalysisConfig(generate_assets=False, prefer_precomputed_references=False))
+        # C30-C40 pair by geometry, so C10 is the only cysteine in question.
+        names = {10: "CYS", 30: "CYS", 40: "CYS"}
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 30: (50.0, 0.0, 0.0), 40: (52.0, 0.0, 0.0)})
+        details = analyzer._build_construct_details(
+            target_entry_name="TEST_HUMAN",
+            target_sequence="A" * 100,
+            constructs=[ConstructSuggestion(name="c", start=1, end=100, score=1.0, rationale="t")],
+            homolog_context={},
+            ectodomain=Region(start=1, end=100, label="t", source="t"),
+            ligand_interactions=[],
+            interpro_annotations=[],
+            ptms=disulfides,
+            structure_atoms=atoms,
+            residue_names=names,
+        )
+        return [w for w in details[0].warnings if "unpaired cysteine" in w]
+
+    def test_an_interchain_cysteine_is_not_listed_as_unpaired(self) -> None:
+        self.assertEqual(
+            self._warnings([Feature(type="DISULFID", start=10, end=10, description="Interchain")]),
+            [],
+        )
+
+    def test_an_ambiguous_cysteine_is_not_listed_as_unpaired(self) -> None:
+        self.assertEqual(
+            self._warnings([Feature(type="DISULFID", start=10, end=30, description=""),
+                            Feature(type="DISULFID", start=10, end=40, description="")]),
+            [],
+        )
+
+    def test_a_genuinely_free_cysteine_still_is(self) -> None:
+        self.assertTrue(self._warnings([]))
+
 class PairingConsistencyTests(unittest.TestCase):
     """PR-6b: the curated override left the table contradicting itself.
 
@@ -209,6 +254,52 @@ class PairingConsistencyTests(unittest.TestCase):
                 )
             results.append({p: (f.paired_with, f.warning) for p, f in findings.items()})
         self.assertEqual(results[0], results[1], "file order decided the pairing")
+
+    def test_geometry_may_not_pick_a_partner_no_annotation_names(self) -> None:
+        """18 cysteines asserted a pairing no DISULFID names, with no warning."""
+        names = {10: "CYS", 20: "CYS", 30: "CYS", 40: "CYS"}
+        # C10 is in two curated bonds (30 and 40); geometry puts it next to C20.
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 20: (2.0, 0.0, 0.0),
+                        30: (50.0, 0.0, 0.0), 40: (90.0, 0.0, 0.0)})
+        findings = {f.position: f for f in analyze_cysteines(
+            atoms, names, 1, 100,
+            curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description=""),
+                                Feature(type="DISULFID", start=10, end=40, description="")],
+        )}
+        self.assertIsNone(findings[10].paired_with)
+        self.assertIsNone(findings[20].paired_with)
+        self.assertTrue(
+            str(findings[10].warning or "").startswith(_NO_CYS_TO_SER_WARNING_PREFIXES),
+            findings[10].warning,
+        )
+
+    def test_a_paired_ambiguous_cysteine_still_says_the_bond_is_ambiguous(self) -> None:
+        # Geometry picks C30, which IS one of the curated alternatives: the
+        # pair is kept, but the page must not present it as settled.
+        names = {10: "CYS", 30: "CYS", 40: "CYS"}
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 30: (2.0, 0.0, 0.0), 40: (90.0, 0.0, 0.0)})
+        findings = {f.position: f for f in analyze_cysteines(
+            atoms, names, 1, 100,
+            curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description=""),
+                                Feature(type="DISULFID", start=10, end=40, description="")],
+        )}
+        self.assertEqual(findings[10].paired_with, 30)
+        self.assertTrue(
+            str(findings[10].warning or "").startswith(_NO_CYS_TO_SER_WARNING_PREFIXES),
+            findings[10].warning,
+        )
+
+    def test_the_same_bond_listed_twice_is_one_bond(self) -> None:
+        # IGHG1_HUMAN lists 144-204 twice (blank and "Intrachain").
+        names = {10: "CYS", 30: "CYS"}
+        atoms = _atoms({10: (0.0, 0.0, 0.0), 30: (90.0, 0.0, 0.0)})
+        findings = {f.position: f for f in analyze_cysteines(
+            atoms, names, 1, 100,
+            curated_disulfides=[Feature(type="DISULFID", start=10, end=30, description=""),
+                                Feature(type="DISULFID", start=10, end=30, description="Intrachain")],
+        )}
+        self.assertEqual(findings[10].paired_with, 30)
+        self.assertIsNone(findings[10].warning)
 
     def test_a_curated_partner_that_is_not_a_cysteine_does_not_destroy_a_pairing(self) -> None:
         # Position 30 is in range but is not CYS in the model. The old code
