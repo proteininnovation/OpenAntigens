@@ -59,6 +59,13 @@ class MouseLlmsTxtTests(unittest.TestCase):
         mouse = mouse_llms_txt(agent_guide_markdown())
         self.assertIn("https://openantigens.org/downloads/openantigens.bib", mouse)
 
+    def test_the_release_gate_accepts_the_per_portal_file(self) -> None:
+        # The gate used to require the two files to be byte-identical, which is the
+        # defect this class describes; a rebuild failed validate-release-data on it.
+        mouse = mouse_llms_txt(agent_guide_markdown())
+        self.assertNotEqual(mouse, agent_guide_markdown())
+        self.assertIn("https://openantigens.org/mouse/downloads/agdesign2_portal_index.json", mouse)
+
     def test_the_mouse_agent_prompt_names_the_mouse_llms_txt(self) -> None:
         mouse = _agent_guidance_panel(portal_title="OpenAntigens Mouse")
         human = _agent_guidance_panel()

@@ -62,6 +62,9 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
                     text = f'https://doi.org/{doi}<section id="after-export">' + '<a href="https://doi.org/example">guide</a>' * 7 + "</section>"
                 elif name == "index.html" and target.exists():
                     text = target.read_text(encoding="utf-8") + f"https://doi.org/{doi}"
+                elif name == "llms.txt" and site_dir.name == "mouse":
+                    # Per portal since PR-11, and the release gate checks it.
+                    text = f"https://doi.org/{doi} https://openantigens.org/mouse/downloads/agdesign2_portal_index.json"
                 else:
                     text = f"https://doi.org/{doi}"
                 target.write_text(text, encoding="utf-8")

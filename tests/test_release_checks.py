@@ -77,7 +77,7 @@ class ReleaseCheckTests(unittest.TestCase):
         cases = {
             "blast-negative-beside-hits": (
                 "reports/a_human.html",
-                "The completed BLAST search returned no sequence similarity hits. Showing 50 full-length hit(s)",
+                "The completed BLAST search returned no sequence similarity hits. Showing 50 hit(s)",
             ),
             "interpro-negative-beside-family": (
                 "reports/b_human.html", "No InterPro annotations. Canonical family: X (IPR005461)",
@@ -109,6 +109,15 @@ class ReleaseCheckTests(unittest.TestCase):
         for key, (path, html) in cases.items():
             with self.subTest(check=key):
                 self.assertFalse(_results({path: html})[key].passed)
+
+    def test_an_empty_region_search_beside_full_length_hits_passes(self) -> None:
+        # GPR142: the region search genuinely finds nothing while the full-length
+        # table below it carries hits. Two searches, two tables, not a defect.
+        page = {"reports/a_human.html": (
+            "The completed BLAST search returned no sequence similarity hits. "
+            "Showing 17 full-length hit(s), ranked by bit score."
+        )}
+        self.assertTrue(_results(page)["blast-negative-beside-hits"].passed)
 
     def test_json_checks_are_skipped_not_passed_without_json(self) -> None:
         results = _results(CLEAN_SITE)

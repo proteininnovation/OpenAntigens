@@ -90,9 +90,17 @@ def validate_release_data(portal_dir: str | Path, *, require_full_catalog: bool 
             mouse_citation = json.loads((portal_dir / "mouse/portal_metadata.json").read_text(encoding="utf-8"))["citation"]
             if human_citation != mouse_citation:
                 raise ValueError("human and mouse portal citations differ")
-            for name in ("llms.txt", "downloads/openantigens.bib", "downloads/openantigens.ris"):
+            for name in ("downloads/openantigens.bib", "downloads/openantigens.ris"):
                 if (portal_dir / name).read_bytes() != (portal_dir / "mouse" / name).read_bytes():
                     raise ValueError(f"human and mouse portal documents differ: {name}")
+            # PR-11: mouse/llms.txt is deliberately per-portal -- a byte-identical copy
+            # is the defect, because it sends an agent to the human index and metadata.
+            human_llms = (portal_dir / "llms.txt").read_text(encoding="utf-8")
+            mouse_llms = (portal_dir / "mouse/llms.txt").read_text(encoding="utf-8")
+            if mouse_llms == human_llms:
+                raise ValueError("mouse llms.txt is a copy of the human file")
+            if "https://openantigens.org/mouse/downloads/agdesign2_portal_index.json" not in mouse_llms:
+                raise ValueError("mouse llms.txt does not point at the mouse portal index")
 
 
 def _load_rows(path: Path) -> list[dict[str, Any]]:
