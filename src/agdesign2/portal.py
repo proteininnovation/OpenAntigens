@@ -6,6 +6,7 @@ from collections import Counter
 from datetime import datetime, timezone
 import hashlib
 import importlib.metadata
+from importlib import resources
 import json
 import io
 import os
@@ -133,7 +134,7 @@ def build_portal(
     report_scripts_dir = portal_dir / "report_scripts"
     report_scripts_dir.mkdir(parents=True, exist_ok=True)
     _copy_brand_assets(portal_dir)
-    _write_portal_htaccess(portal_dir)
+    _write_portal_htaccess(portal_dir, mouse_redirects=theme == "mouse")
     if bundle_vendor_assets:
         _ensure_vendor_assets(portal_dir=portal_dir, batch_dir=batch_dir)
 
@@ -658,6 +659,9 @@ def _pubtator_count_or_existing(pubtator_info: dict[str, Any] | None, item: dict
     return _coerce_pubtator_count(item.get("pubtator_count"))
 
 
+_MOUSE_REDIRECT_MAP = "mouse_portal_redirects.tsv"
+
+
 _PORTAL_HTACCESS_COMMON = """\
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript image/svg+xml
@@ -706,15 +710,56 @@ _PRECOMPRESSED_PORTAL_HTACCESS = """\
 """ + _PORTAL_HTACCESS_COMMON
 
 
-def _write_portal_htaccess(portal_dir: Path, *, precompressed: bool = False) -> None:
+def _mouse_redirect_rules() -> str:
+    """Build the redirect block for mouse pages earlier releases published.
+
+    The deploy mirrors with ``rsync --delete-before``, so a page a later build
+    stops producing becomes a 404 the moment it runs. The map is data rather
+    than something the build can derive: it takes both the old and the new page
+    set to know a page went away, and a build only sees its own.
+    """
+    rows: list[tuple[str, str, str]] = []
+    text = resources.files("agdesign2.data").joinpath(_MOUSE_REDIRECT_MAP).read_text(encoding="utf-8")
+    for row in csv.DictReader(io.StringIO(text), delimiter="\t"):
+        source = (row.get("removed_page") or "").strip()
+        destination = (row.get("redirect_to") or "").strip()
+        if not source or not destination:
+            continue
+        if not destination.startswith("/"):
+            raise ValueError(f"{_MOUSE_REDIRECT_MAP}: redirect_to must be a URL path: {destination}")
+        rows.append((source, destination, (row.get("note") or "").strip()))
+    if not rows:
+        return ""
+    successors = sum(1 for _, destination, _ in rows if destination.startswith("/mouse/"))
+    lines = [
+        "# Pages earlier releases published that this build no longer produces.",
+        f"# {successors} point at the mouse page that replaced them; "
+        f"{len(rows) - successors} at the human",
+        "# page, whose mouse ortholog is now withheld. Generated from "
+        f"agdesign2/data/{_MOUSE_REDIRECT_MAP}.",
+        "<IfModule mod_alias.c>",
+    ]
+    for source, destination, _ in sorted(rows):
+        lines.append(f"  RedirectMatch 301 ^{re.escape('/mouse/reports/' + source)}$ {destination}")
+    lines.append("</IfModule>")
+    return "\n".join(lines) + "\n"
+
+
+def _write_portal_htaccess(portal_dir: Path, *, precompressed: bool = False, mouse_redirects: bool = False) -> None:
     """Write a conservative Apache .htaccess enabling gzip for text assets.
 
     The published portal is large (the index data blob alone is ~19 MB; gzip
     takes it to ~2.5 MB). Directives are <IfModule>-guarded so an unsupported
     module is a no-op rather than a server error. Verify on the target server
     because AllowOverride may restrict .htaccess.
+
+    ``mouse_redirects`` appends the redirects for mouse pages earlier releases
+    published. Every caller rewrites this file, so the rules have to be emitted
+    here or each build drops them.
     """
     content = _PRECOMPRESSED_PORTAL_HTACCESS if precompressed else _PORTAL_HTACCESS
+    if mouse_redirects:
+        content = content + "\n" + _mouse_redirect_rules()
     (portal_dir / ".htaccess").write_text(content, encoding="utf-8")
 
 

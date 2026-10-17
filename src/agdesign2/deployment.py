@@ -1042,7 +1042,9 @@ def compress_public_site(
     htaccess_dirs = {public_site_dir}
     htaccess_dirs.update(path.parent for path in public_site_dir.rglob(".htaccess"))
     for directory in htaccess_dirs:
-        _write_portal_htaccess(directory, precompressed=True)
+        # The mouse portal is published at public_site/mouse; rewriting its
+        # .htaccess here would otherwise drop the redirects build_portal wrote.
+        _write_portal_htaccess(directory, precompressed=True, mouse_redirects=directory.name == "mouse")
 
     return summary
 

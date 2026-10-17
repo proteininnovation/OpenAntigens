@@ -82,8 +82,12 @@ def _html_checks() -> list[Check]:
 
 
 def _check_page(html: str, portal: str, name: str, checks: dict[str, Check]) -> None:
+    # The negative above belongs to the design-region table, so it must be read
+    # against that table's own hits ("Showing N hit(s)"). A populated full-length
+    # table beside an empty region search is a real state, not a defect: GPR142's
+    # region search finds nothing while the full-length search returns 17 hits.
     if ("The completed BLAST search returned no sequence similarity hits." in html
-            and re.search(r"Showing \d+ full-length hit", html)):
+            and re.search(r"Showing \d+ hit\(s\)", html)):
         checks["blast-negative-beside-hits"].fail(portal, name)
 
     if "No InterPro annotations." in html and re.search(r"\(IPR\d{6}\)", html):
