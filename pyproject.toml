@@ -30,7 +30,7 @@ agdesign2 = "agdesign2.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-agdesign2 = ["data/*.json", "data/*.md", "data/*.js"]
+agdesign2 = ["data/*.json", "data/*.md", "data/*.js", "data/*.tsv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
