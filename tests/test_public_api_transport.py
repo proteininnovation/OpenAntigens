@@ -180,6 +180,18 @@ class PublicTransportTests(unittest.TestCase):
         with self.assertRaises(PublicDataError):
             build_runtime_data(source, self.root / "orphan-output", validate=False)
 
+    def test_shadowed_duplicate_source_member_rejected(self):
+        source = self.changed_source("shadowed-member")
+        def change(manifest):
+            path = next(p for p, m in manifest["files"].items() if m["schema"] == "sequence_shard")
+            raw = (source / path).read_bytes().replace(b'"sequence":', b'"sequence":"PRIVATE_CANARY","sequence":', 1)
+            (source / path).write_bytes(raw)
+            manifest["files"][path].update(bytes=len(raw), sha256=hashlib.sha256(raw).hexdigest())
+        self.rehash_manifest(source, change)
+        with self.assertRaises(PublicDataError) as caught:
+            build_runtime_data(source, self.root / "shadowed-output", validate=False)
+        self.assertNotIn("PRIVATE_CANARY", str(caught.exception))
+
     def test_symlink_rejected(self):
         source = self.changed_source("symlink")
         (source / "link").symlink_to(self.bundle / "manifest.json")
@@ -212,6 +224,14 @@ class PartBoundaryTests(unittest.TestCase):
         for raw, descriptor in variants:
             with self.subTest(descriptor=descriptor), self.assertRaises(PublicDataError):
                 decode_part(raw, descriptor, self.expected)
+
+    def test_duplicate_keys_inside_logical_member_rejected(self):
+        raw = b'{"data":{"value":"PRIVATE_CANARY","value":1}}\n'
+        members = [[self.path, base64.b64encode(raw).decode("ascii")]]
+        expected = {self.path: {**self.expected[self.path], "bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}}
+        with self.assertRaises(PublicDataError) as caught:
+            decode_part(*encoded_part(members), expected)
+        self.assertNotIn("PRIVATE_CANARY", str(caught.exception))
 
     def test_gzip_bomb_and_concatenated_stream_rejected(self):
         for raw in (gzip.compress(b'x' * 1_000_000, mtime=0), encoded_part(self.members)[0] + gzip.compress(b'extra', mtime=0)):

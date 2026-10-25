@@ -4,13 +4,12 @@ from __future__ import annotations
 import base64
 import gzip
 import hashlib
-import json
 from pathlib import Path
 import re
 import zlib
 
 from .public_api_data import (MANIFEST_LIMIT, PublicDataError, _safe_path, _sha_file, canonical_bytes,
-                              public_file_role, validate_public_api_bundle)
+                              public_file_role, strict_json_loads, validate_public_api_bundle)
 
 FORMAT = "openantigens-target-gzip-v1"
 INDEX_LIMIT = PART_LIMIT = 16 * 1024 * 1024
@@ -29,18 +28,7 @@ def _fail(message: str) -> None:
 
 
 def _json(content: bytes):
-    def pairs(items):
-        value = {}
-        for key, item in items:
-            if key in value:
-                _fail("Duplicate transport JSON key")
-            value[key] = item
-        return value
-    try:
-        return json.loads(content.decode("utf-8"), object_pairs_hook=pairs)
-    except (UnicodeError, ValueError) as exc:
-        raise PublicDataError("Invalid transport JSON") from exc
-
+    return strict_json_loads(content)
 
 def _read(root: Path, path: str, maximum: int, descriptor: dict | None = None) -> bytes:
     source = _safe_path(root, path)
@@ -116,6 +104,7 @@ def decode_part(content: bytes, descriptor: dict, expected: dict[str, dict]) -> 
             raise PublicDataError("Invalid transport base64") from exc
         if base64.b64encode(value).decode("ascii") != encoded or len(value) != meta["bytes"] or hashlib.sha256(value).hexdigest() != meta["sha256"]:
             _fail("Transport logical checksum mismatch")
+        _json(value)
         result[path] = value
     if entries[0][0] != descriptor["min_path"] or entries[-1][0] != descriptor["max_path"]:
         _fail("Transport member range mismatch")
@@ -240,6 +229,7 @@ def build_runtime_data(bundle_dir: str | Path, output_dir: str | Path, *, valida
         for name in names:
             meta = files[name]
             content = _read(source, name, TARGET_LIMIT if meta["schema"] == "target_shard" else PAGE_LIMIT, meta)
+            _json(content)
             member = [name, base64.b64encode(content).decode("ascii")]
             added = len(canonical_bytes(member))
             if empty_size + added > part_limit:

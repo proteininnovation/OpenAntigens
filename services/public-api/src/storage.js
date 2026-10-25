@@ -4,6 +4,7 @@ import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
+import { parsePublicJson } from "./json.js";
 
 const FORMAT = "openantigens-target-gzip-v1";
 const DECODED_LIMIT = 16 * 1024 * 1024;
@@ -34,9 +35,7 @@ const canonical = (v) =>
       : item,
   );
 const parse = (bytes, strict = false) => {
-  const value = JSON.parse(
-    new TextDecoder("utf-8", { fatal: true }).decode(bytes),
-  );
+  const value = parsePublicJson(bytes);
   if (strict && !Buffer.from(`${canonical(value)}\n`).equals(bytes))
     fail("noncanonical container");
   return value;

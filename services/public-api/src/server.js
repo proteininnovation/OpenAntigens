@@ -11,6 +11,7 @@ import { ApiError, bad, LIMITS } from "./contracts.js";
 import { openapiFor } from "./openapi.js";
 import { makeAnalytics } from "./analytics.js";
 import { makeClientResolver } from "./client-identity.js";
+import { parsePublicJson } from "./json.js";
 const hash = (b) => `"${createHash("sha256").update(b).digest("hex")}"`;
 const defaults = {
   hosts: ["api.openantigens.org", "localhost", "127.0.0.1", "[::1]"],
@@ -647,7 +648,7 @@ export async function readBuildPins(
     const { bytesRead } = await handle.read(bytes);
     if (bytesRead !== bytes.length)
       throw new Error("Invalid service build seal");
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    value = parsePublicJson(bytes);
   } finally {
     await handle.close();
   }

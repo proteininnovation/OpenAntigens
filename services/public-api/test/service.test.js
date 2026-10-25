@@ -1827,3 +1827,90 @@ test("only the seven external bulk roles accept metadata above 128 MiB and unpac
   assert.equal(LIMITS.index, 32 * 1024 * 1024);
   assert.equal(LIMITS.indexes, 64 * 1024 * 1024);
 });
+
+test("public JSON rejects hidden duplicate values in sequence, evidence, citation and complete-record boundaries", async (t) => {
+  const checksum = (bytes) => createHash("sha256").update(bytes).digest("hex");
+  for (const kind of [
+    "sequence_shard",
+    "section_topology",
+    "citation",
+    "records",
+  ]) {
+    const f = await fixture(`duplicate-json-${kind}`);
+    t.after(() => rm(f.directory, { recursive: true, force: true }));
+    const rootPath = join(f.directory, "manifest.json");
+    const root = JSON.parse(await readFile(rootPath));
+    const manifestPath = join(f.directory, root.releases[0].manifest_path);
+    const manifest = JSON.parse(await readFile(manifestPath));
+    const path =
+      kind === "records"
+        ? manifest.species.human.records_download.path
+        : Object.keys(manifest.files).find(
+            (path) =>
+              path.includes("/human/") && manifest.files[path].schema === kind,
+          );
+    const original = await readFile(join(f.directory, path));
+    let bytes;
+    if (kind === "records") {
+      const lines = gunzipSync(original).toString("utf8").trimEnd().split("\n");
+      lines[0] =
+        '{"payload":{"PRIVATE_CANARY":"hidden source"},' + lines[0].slice(1);
+      bytes = gzipSync(Buffer.from(lines.join("\n") + "\n"), { mtime: 0 });
+    } else if (kind === "citation")
+      bytes = Buffer.from(
+        '{"title":"PRIVATE_CANARY hidden source",' +
+          original.toString("utf8").slice(1),
+      );
+    else {
+      const envelope = JSON.parse(original);
+      bytes = Buffer.from(
+        '{"data":{"PRIVATE_CANARY":"hidden source"},"release_id":' +
+          JSON.stringify(envelope.release_id) +
+          ',"schema_version":1,"species":' +
+          JSON.stringify(envelope.species) +
+          ',"\\u0064ata":' +
+          JSON.stringify(envelope.data) +
+          "}\n",
+      );
+    }
+    await writeFile(join(f.directory, path), bytes);
+    Object.assign(manifest.files[path], {
+      bytes: bytes.length,
+      sha256: checksum(bytes),
+    });
+    for (const species of ["human", "mouse"])
+      for (const download of manifest.species[species].downloads)
+        if (download.path === path)
+          Object.assign(download, {
+            bytes: bytes.length,
+            sha256: checksum(bytes),
+          });
+    if (kind === "records")
+      Object.assign(manifest.species.human.records_download, {
+        bytes: bytes.length,
+        sha256: checksum(bytes),
+      });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest) + "\n");
+    await writeFile(manifestPath, manifestBytes);
+    root.releases[0].sha256 = checksum(manifestBytes);
+    await writeFile(rootPath, JSON.stringify(root));
+    await assert.rejects(
+      new Provider(f.directory).initialize(),
+      (error) =>
+        error.message === "Invalid public JSON." &&
+        !String(error).includes("PRIVATE_CANARY"),
+      kind,
+    );
+    if (kind === "sequence_shard" || kind === "section_topology") {
+      const packed = await packedFixture(f.directory);
+      t.after(() => rm(packed.directory, { recursive: true, force: true }));
+      await assert.rejects(
+        new Provider(packed.directory, packed.pins).initialize(),
+        (error) =>
+          error.message === "Invalid public JSON." &&
+          !String(error).includes("PRIVATE_CANARY"),
+        `packed ${kind}`,
+      );
+    }
+  }
+});

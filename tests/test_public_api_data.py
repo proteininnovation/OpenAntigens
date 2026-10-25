@@ -15,6 +15,7 @@ from agdesign2.public_api_data import (
     PublicDataError, build_public_api_bundle, canonical_bytes,
     project_public_target, sequence_fasta, validate_public_api_bundle,
     semantic_hash,
+    strict_json_loads,
 )
 from agdesign2.public_api_schema import PUBLIC_SCHEMA, validate_schema
 
@@ -892,6 +893,76 @@ class PublicApiDataTests(unittest.TestCase):
             (bundle / "manifest.sha256").write_text(hashlib.sha256(body).hexdigest() + "  manifest.json\n")
             with self.assertRaisesRegex(PublicDataError, r"schema\.json has 1048577 bytes; storage limit is 1048576 bytes"):
                 validate_public_api_bundle(bundle)
+
+    def test_public_json_rejects_nested_and_escaped_duplicate_keys_without_leaking_values(self) -> None:
+        for content in (
+            b'{"data":"SHADOW_UNPUBLISHED_VALUE","data":{}}',
+            b'{"data":{"warnings":"SHADOW_UNPUBLISHED_VALUE","warnings":[]}}',
+            b'{"\\u0064ata":"SHADOW_UNPUBLISHED_VALUE","data":{}}',
+        ):
+            with self.subTest(content=content[:12]):
+                with self.assertRaisesRegex(PublicDataError, "Duplicate public JSON object key") as error:
+                    strict_json_loads(content)
+                self.assertNotIn("SHADOW_UNPUBLISHED_VALUE", str(error.exception))
+        self.assertEqual(strict_json_loads(b'{"integer":1,"decimal":1.00,"exponent":1e-7,"negative_zero":-0.0}'), {"integer": 1, "decimal": 1.0, "exponent": 1e-7, "negative_zero": -0.0})
+
+    def test_rehashed_public_json_shadows_are_rejected_at_every_bundle_boundary(self) -> None:
+        for boundary in ("root", "release", "sequence", "schema", "index_jsonl", "complete_records"):
+            with self.subTest(boundary=boundary), tempfile.TemporaryDirectory() as tmp:
+                bundle = self.build(Path(tmp))
+                root = json.loads((bundle / "manifest.json").read_bytes())
+                pointer = root["releases"][0]
+                release = json.loads((bundle / pointer["manifest_path"]).read_bytes())
+                info = release["species"]["human"]
+
+                def rewrite(relative, content):
+                    (bundle / relative).write_bytes(content)
+                    metadata = {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+                    release["files"][relative].update(metadata)
+                    for species_info in release["species"].values():
+                        for download in [*species_info["downloads"], species_info["records_download"]]:
+                            if download["path"] == relative:
+                                download.update(metadata)
+
+                if boundary == "sequence":
+                    target = json.loads((bundle / next(iter(info["target_paths"].values()))).read_bytes())["data"]
+                    relative = target["reference_sequence_path"]
+                    original = (bundle / relative).read_bytes()
+                    changed = b'{"data":"SHADOW_UNPUBLISHED_VALUE",' + original[1:]
+                    self.assertEqual(json.loads(changed), json.loads(original))
+                    rewrite(relative, changed)
+                elif boundary == "schema":
+                    for species_info in release["species"].values():
+                        relative = next(item["path"] for item in species_info["downloads"] if item["name"] == "schema.json")
+                        original = (bundle / relative).read_bytes()
+                        changed = b'{"$id":"SHADOW_UNPUBLISHED_VALUE",' + original[1:]
+                        self.assertEqual(json.loads(changed), json.loads(original))
+                        rewrite(relative, changed)
+                elif boundary in {"index_jsonl", "complete_records"}:
+                    name = "index.jsonl" if boundary == "index_jsonl" else "records.jsonl.gz"
+                    relative = next(item["path"] for item in info["downloads"] if item["name"] == name)
+                    original = (bundle / relative).read_bytes()
+                    decoded = gzip.decompress(original) if boundary == "complete_records" else original
+                    first, separator, remaining = decoded.partition(b"\n")
+                    key = b"payload" if boundary == "complete_records" else b"sequence_accession"
+                    changed_first = b'{"' + key + b'":"SHADOW_UNPUBLISHED_VALUE",' + first[1:]
+                    self.assertEqual(json.loads(changed_first), json.loads(first))
+                    changed = changed_first + separator + remaining
+                    rewrite(relative, gzip.compress(changed, mtime=0) if boundary == "complete_records" else changed)
+                release_bytes = canonical_bytes(release) + b"\n"
+                if boundary == "release":
+                    release_bytes = b'{"citation":"SHADOW_UNPUBLISHED_VALUE",' + release_bytes[1:]
+                (bundle / pointer["manifest_path"]).write_bytes(release_bytes)
+                pointer["sha256"] = hashlib.sha256(release_bytes).hexdigest()
+                root_bytes = canonical_bytes(root) + b"\n"
+                if boundary == "root":
+                    root_bytes = b'{"schema_version":"SHADOW_UNPUBLISHED_VALUE",' + root_bytes[1:]
+                (bundle / "manifest.json").write_bytes(root_bytes)
+                (bundle / "manifest.sha256").write_text(hashlib.sha256(root_bytes).hexdigest() + "  manifest.json\n")
+                with self.assertRaisesRegex(PublicDataError, "Duplicate public JSON object key") as error:
+                    validate_public_api_bundle(bundle)
+                self.assertNotIn("SHADOW_UNPUBLISHED_VALUE", str(error.exception))
+                self.assertNotIn(str(bundle), str(error.exception))
 
 
 if __name__ == "__main__":

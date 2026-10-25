@@ -5,6 +5,7 @@ import { resolve, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createStorage } from "./storage.js";
+import { parsePublicJson } from "./json.js";
 import {
   outputSchema,
   provenanceOutputSchema,
@@ -16,8 +17,7 @@ import {
   SECTIONS,
   parseInput,
 } from "./contracts.js";
-const parseJson = (bytes) =>
-  JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+const parseJson = parsePublicJson;
 export const semanticHash = (value) => digest(semantic(value));
 const digest = (b) => createHash("sha256").update(b).digest("hex");
 const hex = /^[a-f0-9]{64}$/;
@@ -430,13 +430,27 @@ export class Provider {
           throw new Error("Schema disagreement");
         if (this.storage.isExternal(path) || this.storage.isVirtual(path))
           continue;
+        const jsonBoundary = [
+          "application/json",
+          "application/schema+json",
+        ].includes(role.media_type);
         const content = await this.readSafe(
           path,
           role.bound,
           file,
-          role.kind === "storage",
+          role.kind === "storage" || jsonBoundary,
         );
         if (role.kind === "storage") processStorage(path, content);
+        else if (jsonBoundary) {
+          const document = parsePublicJson(content);
+          if (
+            file.schema &&
+            (!validators[file.schema]?.safeParse(document).success ||
+              (file.schema === "citation" &&
+                semanticHash(document) !== semanticHash(manifest.citation)))
+          )
+            throw new Error("Public JSON resource identity");
+        }
       }
       if (this.storage.packed)
         for await (const { path, bytes } of this.storage.scanRelease(manifest))
@@ -669,7 +683,7 @@ export class Provider {
           pending = pending.slice(newline + 1);
           if (Buffer.byteLength(line) > maximumLine)
             throw new Error("Fallback record budget");
-          const record = JSON.parse(line);
+          const record = parsePublicJson(line);
           const entry = expected.get(record.path);
           if (
             !entry ||
@@ -1124,7 +1138,7 @@ export class Provider {
     let position = 0;
     if (args.cursor) {
       try {
-        const c = JSON.parse(Buffer.from(args.cursor, "base64url"));
+        const c = parsePublicJson(Buffer.from(args.cursor, "base64url"));
         if (
           c.v !== 1 ||
           c.release_id !== info.manifest.release_id ||

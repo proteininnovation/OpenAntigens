@@ -119,11 +119,30 @@ def _sha_file(path: Path) -> str:
     return checksum.hexdigest()
 
 
+def strict_json_loads(content: bytes | str) -> Any:
+    """Decode public JSON without discarding shadowed values or exposing their contents."""
+    def unique_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise PublicDataError("Duplicate public JSON object key")
+            value[key] = item
+        return value
+
+    try:
+        text = content.decode("utf-8") if isinstance(content, bytes) else content
+        return json.loads(text, object_pairs_hook=unique_keys)
+    except PublicDataError:
+        raise
+    except (UnicodeError, ValueError, TypeError) as exc:
+        raise PublicDataError("Invalid public JSON") from exc
+
+
 def _read_json(path: Path) -> Any:
-    return _read_json_hashed(path)[0]
+    return _read_json_hashed(path, strict=True)[0]
 
 
-def _read_json_hashed(path: Path, *, maximum: int | None = None) -> tuple[Any, str]:
+def _read_json_hashed(path: Path, *, maximum: int | None = None, strict: bool = False) -> tuple[Any, str]:
     try:
         if maximum is not None:
             with path.open("rb") as handle:
@@ -141,7 +160,9 @@ def _read_json_hashed(path: Path, *, maximum: int | None = None) -> tuple[Any, s
                     content = handle.read(maximum + 1)
                 if len(content) > maximum:
                     raise PublicDataError("Declared frozen JSON exceeds its decoded input budget")
-        return json.loads(content), _sha(raw)
+        return (strict_json_loads(content) if strict else json.loads(content)), _sha(raw)
+    except PublicDataError:
+        raise
     except (OSError, ValueError) as exc:
         raise PublicDataError("Cannot read declared public-build input") from exc
 
@@ -335,7 +356,7 @@ def _frozen_pubtator_links(portal_root: Path, index: list[dict[str, Any]], *, se
     assignment = "window.OpenAntigenIndexRows = "
     if not text.startswith(assignment) or not text.endswith(";"):
         raise PublicDataError("Unrecognized frozen portal index script format")
-    payload = json.loads(text[len(assignment):-1])
+    payload = strict_json_loads(text[len(assignment):-1])
     expected = {str(row.get("entry_name") or "").lower(): row for row in index}
     result, seen = {}, set()
 
@@ -839,7 +860,7 @@ class _ProjectionRows:
 
     def __iter__(self) -> Iterable[dict[str, Any]]:
         for _, _, name, expected in self.entries:
-            value, checksum = _read_json_hashed(_safe_path(self.directory, name), maximum=64 * 1024 * 1024)
+            value, checksum = _read_json_hashed(_safe_path(self.directory, name), maximum=64 * 1024 * 1024, strict=True)
             if checksum != expected:
                 raise PublicDataError("Public projection staging bytes changed during compilation")
             yield value
@@ -920,7 +941,7 @@ def _load_sources(summary_path: Path, species: str, public_site: Path, static_or
     if not isinstance(summary_rows, list):
         raise PublicDataError("Frozen summary must contain target rows")
     portal_root = public_site / ("mouse" if species == "mouse" else "")
-    index, index_hash = _read_json_hashed(_safe_path(portal_root, "downloads/agdesign2_portal_index.json"))
+    index, index_hash = _read_json_hashed(_safe_path(portal_root, "downloads/agdesign2_portal_index.json"), strict=True)
     if not isinstance(index, list) or not index:
         raise PublicDataError("Final species index must be nonempty")
     index_by_entry = {str(row.get("entry_name") or "").upper(): row for row in index}
@@ -1277,6 +1298,22 @@ def _validate_release_value(schema: dict[str, Any], name: str, value: Any) -> No
         raise PublicDataError("Public data does not match its approved release-local schema")
 
 
+def _public_jsonl_checksum(path: Path, schema_name: str) -> str:
+    checksum = hashlib.sha256()
+    line_limit = TARGET_LIMIT if schema_name == "summary" else SHARD_LIMIT
+    with path.open("rb") as handle:
+        while True:
+            line = handle.readline(line_limit + 1)
+            if not line:
+                break
+            if len(line) > line_limit:
+                raise PublicDataError("Public JSONL record exceeds its logical record budget")
+            strict_json_loads(line)
+            checksum.update(line)
+    # Exact typed-export parity is checked below; this pass rejects shadowed values.
+    return checksum.hexdigest()
+
+
 def _legacy_fasta(record: dict[str, Any]) -> str:
     fields = {key: record[key] for key in ("target_id", "construct_id", "species", "sequence_accession", "start", "end")}
     header = " ".join(f"{key}={quote(str(value), safe=':._-')}" for key, value in fields.items() if value is not None)
@@ -1315,7 +1352,7 @@ class _ShardFiles:
             content = handle.read(bound + 1)
         if len(content) > bound or len(content) != info["bytes"] or _sha(content) != info["sha256"]:
             raise PublicDataError("Public shard changed after manifest verification")
-        data = json.loads(content)
+        data = strict_json_loads(content)
         # These exact bytes were schema/privacy checked in the manifest pass.
         if data["release_id"] != self.release_id or f"/{data['species']}/" not in relative:
             raise PublicDataError("Public shard release/species mismatch")
@@ -1361,7 +1398,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
             raise PublicDataError("Public release manifest must be plain bounded JSON")
         if _sha(release_bytes) != pointer["sha256"]:
             raise PublicDataError("Release public manifest checksum mismatch")
-        release = json.loads(release_bytes)
+        release = strict_json_loads(release_bytes)
         validate_schema("release_manifest", release)
         _scan_public(release)
         rid = pointer["release_id"]
@@ -1382,7 +1419,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
         schema_path = _safe_path(root, schema_paths[0])
         if schema_path.stat().st_size > SHARD_LIMIT:
             raise PublicDataError(f"Public download role schema.json has {schema_path.stat().st_size} bytes; storage limit is {SHARD_LIMIT} bytes")
-        release_schema = json.loads(schema_path.read_bytes())
+        release_schema = strict_json_loads(schema_path.read_bytes())
         fasta_version = _approved_release_schema(release_schema)
         index_version = release_schema.get("x-openantigens-index-version", 1)
         if release_schema.get("x-openantigens-disease-selection") == "portal_top_100" and release["provenance"].get("projection_methods") != {"disease": {"selection": "portal_top_100", "species": "human", "limit": 100, "order": "published_source_order"}}:
@@ -1421,12 +1458,12 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                     raise PublicDataError("Combined retained public indexes exceed service memory budget")
             parse_json = info["media_type"] in {"application/json", "application/schema+json"}
             content = file.read_bytes() if parse_json else None
-            checksum = _sha(content) if content is not None else _sha_file(file)
+            checksum = _sha(content) if content is not None else _public_jsonl_checksum(file, info["schema"]) if info["media_type"] == "application/x-ndjson" and info["encoding"] is None else _sha_file(file)
             if file.stat().st_size != info["bytes"] or checksum != info["sha256"]:
                 raise PublicDataError("Public file bytes or checksum mismatch")
             allowed.add(relative)
             if info["media_type"] == "application/schema+json":
-                schema_payloads.append(json.loads(content))
+                schema_payloads.append(strict_json_loads(content))
                 if content != schema_path.read_bytes():
                     raise PublicDataError("Public release schema copies disagree")
             if info["schema"]:
@@ -1434,7 +1471,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                     raise PublicDataError("Unsupported typed public file media type")
                 if info["media_type"] == "application/json" and (info["encoding"] is not None or content.startswith(b"\x1f\x8b")):
                     raise PublicDataError("Public JSON shards require plain bounded JSON bytes")
-                data = json.loads(content) if info["media_type"] == "application/json" else None
+                data = strict_json_loads(content) if info["media_type"] == "application/json" else None
                 if data is not None:
                     _validate_release_value(release_schema, info["schema"], data)
                     _scan_public(data)
@@ -1493,7 +1530,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                         break
                     if not line.endswith(b"\n") or len(seen) >= len(stored):
                         raise PublicDataError("Overflow download exceeds its declared record bounds")
-                    value = json.loads(line)
+                    value = strict_json_loads(line)
                     if not isinstance(value, dict) or set(value) != {"kind", "path", "payload"} or value["path"] in seen or value["path"] not in stored or value["payload"] != stored[value["path"]]:
                         raise PublicDataError("Overflow download differs from its public shards")
                     if value["payload"]["species"] != species:

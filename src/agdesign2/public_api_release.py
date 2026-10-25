@@ -26,6 +26,7 @@ SOURCE_FILES = (
     "src/analytics.js",
     "src/client-identity.js",
     "src/storage.js",
+    "src/json.js",
 )
 LICENSE_FILES = ("LICENSE", "DATA_LICENSE.md")
 HOST_GATES = (
@@ -110,7 +111,9 @@ def _all_files(root: Path) -> set[str]:
 
 
 def _read_json(path: Path) -> dict:
-    value = json.loads(path.read_text(encoding="utf-8"))
+    from agdesign2.public_api_data import strict_json_loads
+
+    value = strict_json_loads(path.read_bytes())
     if not isinstance(value, dict):
         raise ValueError("manifest must be a JSON object")
     return value
@@ -155,7 +158,7 @@ def _public_file_limit(name: str, media_type: str) -> int:
 
 def _check_public_file_roles(bundle: Path, manifest: dict) -> None:
     """Require approved file roles and actual reachability, independent of membership."""
-    from agdesign2.public_api_data import _approved_release_schema, _scan_public, _validate_release_value, public_citation_downloads
+    from agdesign2.public_api_data import _approved_release_schema, _scan_public, _validate_release_value, public_citation_downloads, strict_json_loads
 
     release_id = manifest["release_id"]
     _scan_public(manifest)
@@ -175,7 +178,7 @@ def _check_public_file_roles(bundle: Path, manifest: dict) -> None:
         return file
 
     schema_bytes = role(f"releases/{release_id}/human/downloads/schema.json", "application/schema+json", None).read_bytes()
-    schema = json.loads(schema_bytes)
+    schema = strict_json_loads(schema_bytes)
     _approved_release_schema(schema)
     citations = public_citation_downloads(manifest["citation"])
 

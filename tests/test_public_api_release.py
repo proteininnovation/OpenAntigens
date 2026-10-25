@@ -318,6 +318,49 @@ class PublicApiReleaseTests(unittest.TestCase):
                 package(self.release, self.tmp_path / "unreachable.zip")
         assert snapshot(self.release) == before and not (self.tmp_path / "unreachable.zip").exists()
 
+    def test_packager_independently_rejects_hidden_duplicate_json_values(self):
+        from agdesign2 import public_api_data
+        for defect in ("sequence", "schema"):
+            with self.subTest(defect=defect):
+                bundle = self.release / "bundle"
+                root = json.loads((bundle / "manifest.json").read_text())
+                manifest = json.loads((bundle / root["releases"][0]["manifest_path"]).read_text())
+                if defect == "sequence":
+                    names = [next(name for name, metadata in manifest["files"].items() if metadata["schema"] == "sequence_shard")]
+                    key = "schema_version"
+                else:
+                    names = [name for name, metadata in manifest["files"].items() if metadata["media_type"] == "application/schema+json"]
+                    key = "$id"
+                originals = {}
+                for name in names:
+                    original = (bundle / name).read_bytes()
+                    originals[name] = original
+                    content = ("{" + json.dumps(key) + ':"PRIVATE_CANARY",').encode() + original.lstrip()[1:]
+                    (bundle / name).write_bytes(content)
+                    manifest["files"][name].update(bytes=len(content), sha256=hashlib.sha256(content).hexdigest())
+                    for species in ("human", "mouse"):
+                        for item in manifest["species"][species]["downloads"]:
+                            if item["path"] == name:
+                                item.update(bytes=len(content), sha256=hashlib.sha256(content).hexdigest())
+                                (self.release / f"site/data/releases/{root['current_release_id']}/{species}/{item['name']}").write_bytes(content)
+                replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+                before = snapshot(self.release)
+                with patch.object(public_api_data, "validate_public_api_bundle", return_value=root):
+                    with self.assertRaises(ValueError) as raised:
+                        package(self.release, self.tmp_path / "duplicate-json.zip")
+                assert "PRIVATE_CANARY" not in str(raised.exception)
+                assert snapshot(self.release) == before and not (self.tmp_path / "duplicate-json.zip").exists()
+                for name, original in originals.items():
+                    (bundle / name).write_bytes(original)
+                    metadata = {"bytes": len(original), "sha256": hashlib.sha256(original).hexdigest()}
+                    manifest["files"][name].update(**metadata)
+                    for species in ("human", "mouse"):
+                        for item in manifest["species"][species]["downloads"]:
+                            if item["path"] == name:
+                                item.update(**metadata)
+                                (self.release / f"site/data/releases/{root['current_release_id']}/{species}/{item['name']}").write_bytes(original)
+                replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+
     def test_original_website_disease_tsv_stays_outside_app_bundle(self):
         original = self.release / "site/open_targets_disease_associations.tsv"
         original.write_text("ORIGINAL_WEBSITE_DISEASE_TSV_CANARY\n")
@@ -543,6 +586,23 @@ class PublicApiReleaseTests(unittest.TestCase):
         with patch.object(smoke, "check_api_service", fail):
             assert smoke.main(["--base-url", "https://api.example.org", "--release-id", "a" * 64, "--human-query", "SYNTHETIC", "--mouse-query", "SYNTHETIC", "--activate-discovery-local-site", str(site)]) == 2
         assert snapshot(site) == before
+
+    def test_duplicate_metadata_cannot_activate_or_expose_hidden_values(self):
+        smoke = load_script("check_api_service")
+        site = self.tmp_path / "site"
+        public = {"schema_version": 1, "release_id": "a" * 64, "state": "packaged"}
+        for name in ("portal_metadata.json", "mouse/portal_metadata.json"):
+            path = site / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"public_api": public}))
+        (site / "portal_metadata.json").write_text('{"public_api":{"hidden":"PRIVATE_CANARY"},"public_api":' + json.dumps(public) + '}')
+        before = snapshot(site)
+        checked = {"base_url": "https://api.example.org", "release_id": "a" * 64, "species": ["human", "mouse"], "http": "passed", "mcp_wire": "passed"}
+        with self.assertRaises(ValueError) as raised:
+            smoke.activate_local_discovery(site, checked)
+        assert "PRIVATE_CANARY" not in str(raised.exception) and snapshot(site) == before
+        with self.assertRaises(ValueError):
+            smoke._json_loads('{"outer":{"score":"PRIVATE_CANARY","score":1}}')
 
     def test_interrupted_discovery_write_restores_both_originals(self):
         smoke = load_script("check_api_service")
