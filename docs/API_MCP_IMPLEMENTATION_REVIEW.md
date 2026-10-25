@@ -1,6 +1,6 @@
 # API/MCP implementation review
 
-The implementation follows `API_MCP_PLAN.md` in the `feat/public-api-mcp` worktree branch. The publication target is a PR in `proteininnovation/OpenAntigens`; production deployment and account changes are separate authorized steps.
+The implementation follows `API_MCP_PLAN.md` in the `feat/public-api-mcp` worktree branch. The publication target is a PR in `proteininnovation/OpenAntigens`. Production deployment and account changes require separate authorization.
 
 ## Review seats and completion rule
 
@@ -59,11 +59,11 @@ R2 checks included 52 focused Python tests and 16 Node 22 tests. These passing t
 
 ### Full-catalogue author check
 
-Aggregate inspection of the archived October 17 public release found 9,949 targets and 78,125 reported constructs. Its declared frozen source reports total 3,745,998,719 bytes. The initial whole-report map and 8 MiB flat-manifest limit were unsuitable for this scale. Source compilation now releases each raw report before reading the next, validator checks stream per target, and portable fingerprint/export checks retain their safeguards. The release-manifest and combined retained-index budgets are separate 64 MiB engineering trial limits; individual index, target and small-shard limits remain 32, 8 and 1 MiB.
+Aggregate inspection of the archived October 17 public release found 9,949 targets and 78,125 reported constructs. Its declared frozen source reports total 3,745,998,719 bytes. The initial whole-report map and 8 MiB flat-manifest limit were unsuitable for this scale. Source compilation now releases each raw report before reading the next, validator checks stream per target, and portable fingerprint/export checks retain their safeguards. The release-manifest budget is 96 MiB and the combined retained-index budget is 64 MiB; individual index, target and small-shard limits remain 32, 8 and 1 MiB. These are local engineering bounds.
 
 The output provenance is also compact: the response identifies the complete input-hash map in the immutable manifest instead of repeating thousands of hashes in every result. A 10,001-input regression protects the ordinary response budget. Source/data hashes remain complete in the release artifact.
 
-A local full-catalogue build on an isolated copy of the archived site is in progress. Exact package size, Node startup, memory and retrieval results must be recorded before claiming full-catalogue fit. These local measurements will not establish the managed host's actual limits. The current GoDaddy account was inspected read-only; detailed account observations remain in ignored local evidence, while the tracked host record is public-safe.
+A local full-catalogue build completed on an isolated copy of the archived site. Its 226,326 members listed in the manifest total 2,087,991,808 bytes; the release manifest adds 79,027,981 bytes. Both indexes together occupy 6,238,429 bytes. Exact physical package size, Node startup, memory and retrieval checks follow below when measured. These local measurements do not establish the managed host's actual limits. The current GoDaddy account was inspected read-only; detailed account observations remain in ignored local evidence, while the tracked host record is public-safe.
 
 ### Round 3
 
@@ -97,4 +97,20 @@ Independent checks included 49 Node tests and 76 focused Python tests before the
 
 ### Round 5
 
-The accepted R4 corrections are in progress. The same four seats will reread the final source and outputs. The full-catalogue disease-feed scope and package fit remain separate unresolved gates; no full-catalogue deployment claim is made from small fixtures.
+All four original seats reread the R4 corrections, packed transport, disease coverage and traffic reporting. Science and interface passed. Software and security independently reproduced one shared publication defect:
+
+| Finding | Priority | Decision and correction |
+| --- | --- | --- |
+| SEC-IMP-R5-1 / SYS-R5-1: duplicate JSON keys hide a value from validation while its raw bytes enter the ZIP | P2 | Accept. Reject duplicate keys at every public JSON boundary, including manifests, schemas, logical shards, JSONL exports, packed members and runtime reads. Test rehashed hidden values, keys that decode to the same text, and nested duplicates. Preserve valid numeric spellings and exact original bytes. |
+
+The disease projection follows the website's first 100 associations in source order, with explicit projected/source counts and original-source checksums. The full website TSV is preserved. This is an implementation scope decision; no explicit user approval of the 100-row policy is inferred. Target search excludes disease-ID filtering to avoid misleading membership results from this selection.
+
+Physical packing preserves logical paths, checksums and canonical bytes. Related target shards share bounded gzip containers. The app keeps sealed metadata for the seven static bulk roles; staging checks their complete byte parity. Runtime does not claim to verify remote static copies.
+
+### Round 6
+
+All four original seats resumed and passed the corrected source and local behavior. Software and security independently rejected their original exploits at validation, packaging and Node startup, with generic errors and no emitted ZIP. Escaped and nested duplicate variants also failed. Valid numeric bytes, HTTP/MCP framing and scientific outputs stayed unchanged.
+
+The final root Python suite passed 688 tests; the Node 22 suite passed 83 tests. Independent scientific checks retained exact agreement for 112 selected native constructs, six references and six frozen literature links. Fresh human and mouse build paths contained the shared guidance and privacy changes. Offline report interaction and count checks passed; rendered report layout remains unverified because of the browser's explicit file-access block.
+
+Source review has converged. Full-catalogue physical packaging and runtime measurements remain separate gates. No service, DNS or analytics settings were changed.

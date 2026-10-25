@@ -2,7 +2,7 @@
 
 Use the existing [Plausible dashboard](https://plausible.io/openantigens.org) for eligible visitors, countries, cities and pages. Use the local report below for application request counts, including bots, errors and requests refused before admission. Both human and mouse traffic use the same records and report controls.
 
-Plausible filters some automated traffic. An accepted event can still be absent from its visitor or location reports. The local report keeps those two measures separate. It reports approximate anonymous daily clients when an identity is available; it does not infer people, country or city from those identities. The application ledger is on by default; Plausible delivery is off by default.
+Plausible filters some automated traffic. An accepted event can still be absent from its visitor or location reports. For API/MCP calls, locations describe the verified network client, which may be an agent or gateway. The local report keeps those two measures separate. It reports approximate anonymous daily clients when an identity is available; it does not infer people, country or city from those identities. The application ledger is on by default; Plausible delivery is off by default.
 
 ## Export production logs
 

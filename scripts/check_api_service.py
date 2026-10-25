@@ -26,6 +26,17 @@ REFERENCE_ROLES = {
 MAX_RESPONSE_BYTES = 1024 * 1024
 
 
+def _json_loads(content):
+    def unique(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("JSON object keys must be unique")
+            value[key] = item
+        return value
+    return json.loads(content, object_pairs_hook=unique)
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
@@ -82,7 +93,7 @@ def _request(opener, base: str, path: str, *, budget: dict, payload: dict | None
             if response.status != 429:
                 if response.headers.get_content_type() != "application/json":
                     raise ValueError("smoke response must be JSON")
-                return response.status, json.loads(data), response.headers
+                return response.status, _json_loads(data), response.headers
             retry = response.headers.get("Retry-After", "")
         if attempt == 2:
             raise ValueError("smoke rate limit persisted after three attempts")
@@ -240,7 +251,7 @@ def check_api_service(base_url: str, release_id: str, *, human_query: str, mouse
     if expect_maintenance:
         current_result = rpc("tools/call", {"name": "get_release", "arguments": {}})
         content = current_result.get("content", [])
-        error = json.loads(content[0].get("text", "null")) if isinstance(content, list) and content and isinstance(content[0], dict) else None
+        error = _json_loads(content[0].get("text", "null")) if isinstance(content, list) and content and isinstance(content[0], dict) else None
         if not current_result.get("isError") or not isinstance(error, dict) or error.get("code") != "publication_in_progress":
             raise ValueError("MCP current discovery is not in maintenance")
     elif tool("get_release", {}).get("data") != metadata.get("data"):
@@ -287,7 +298,7 @@ def activate_local_discovery(public_site_dir: Path, checked: dict) -> None:
         if path.is_symlink() or path.parent.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
             raise ValueError("both local portal metadata files must be regular files")
         original = path.read_bytes()
-        metadata = json.loads(original)
+        metadata = _json_loads(original)
         api = metadata.get("public_api") if isinstance(metadata, dict) else None
         if not isinstance(api, dict) or api.get("schema_version") != 1 or api.get("release_id") != checked["release_id"] or api.get("state") not in {"packaged", "active"}:
             raise ValueError("local portal API metadata release/state mismatch")

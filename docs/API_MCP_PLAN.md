@@ -39,9 +39,9 @@ The source baseline is canonical `proteininnovation/OpenAntigens` commit `800819
 | `scripts/build_public_release.py`, `src/agdesign2/release_validation.py` | Reuse packaging, public-file checks, species validation, coverage checks, and checksums. Add API projection checks. |
 | `scripts/deploy_snapshot_to_godaddy.sh` | Static deployment uses `rsync --delete-before` and protects only `.ftpquota` and `.well-known/`. Keep the managed application and its data outside that mirrored publish root. |
 
-The authenticated GoDaddy dashboard saved on October 17, 2026 shows **Node.js Apps included with the Web Hosting plan**, with **0 of 1 slots used**. Source: `outputs/deployment-2026-10-17/hosting-capacity.png` in the original checkout. A live check on October 24 reached a fresh login requirement. Today's slot availability, the exact tier, runtime limits, and MCP operation remain deployment prerequisites.
+The authenticated GoDaddy dashboard was checked read-only on October 25, 2026 and confirmed that Node.js Apps are included with the current hosting plan. No app was created. App-specific limits, proxy behavior and MCP operation remain launch gates. See [host verification](API_MCP_HOST_VERIFICATION.md); account-specific evidence stays outside the public repository.
 
-Current release counts, construct totals, projection sizes, and latency have not been measured for this service. Existing coverage thresholds are build safeguards, not measurements or scientific validation. The implementation must record actual values for its selected release.
+The local frozen-catalogue profile contains 9,949 targets and 78,125 constructs across both species. Its generated release manifest is 79,027,981 bytes. Package and runtime measurements are recorded in [implementation review](API_MCP_IMPLEMENTATION_REVIEW.md); local results do not establish the managed host's limits. Existing coverage thresholds are build safeguards and do not establish scientific validity.
 
 ## 3. User functions
 
@@ -292,7 +292,7 @@ Use small synthetic and approved public fixtures. Cover both species and each co
 | Identity and schema | Taxon/source/isoform identity; duplicate detection; unresolved rows; deterministic IDs; null/zero/unknown; schema migrations; missing/changed manifest and unsupported schema fail readiness. |
 | Scientific projection | Page/index/API values from the same finalized record; required assembly vs optional assembly; AlphaFold sequence match; homolog mapping/withheld state; reference/native/PDB sequence basis; coordinate/length/checksum agreement; no inference of specificity or experimental success. |
 | Species parity | Same endpoints/tools, filters, error contracts, documentation and pagination; mouse disease section correctly unsupported; mouse/human links and IDs correct; no projected human sequence/claim substituted into mouse data. |
-| API/MCP parity | Identical normalized inputs yield the same IDs, values, missingness, order, and bounds; HTTP errors map to defined tool/protocol errors; discovery includes citations/download metadata. |
+| API/MCP parity | Identical normalized inputs yield the same IDs, values, missingness, order, and bounds; HTTP errors map to defined tool/protocol errors; discovery includes citation and schema references; overflow errors identify the complete static export. |
 | Search and pagination | Portal substring behavior; aliases and ambiguous genes; exact accession; deterministic pages without skips/duplicates; invalid, altered, wrong-filter/species/release cursors; unknown filters rejected. |
 | Exports | Exact sequence/checksum and coordinate basis; warning/provenance retained; plain-text headers; line ending/wrap policy; TSV formula-safe display; JSON preserves exact values; largest record and oversize error/download path. |
 | Public boundary | Nested private-field canaries, local paths, raw reports/SQLite/caches/secrets, symlinks and external assets rejected; archive contents and final checksums inspected; poisoned ambient caches cannot affect a frozen build. |
