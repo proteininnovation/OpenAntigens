@@ -51,6 +51,16 @@ OpenAntigens supports research construct selection. A proposed construct is not 
 
 Prefer the release index for bulk lookup instead of scraping every report. The public site publishes static artifacts; do not assume development-server JSON APIs exist on the public host. If page text extraction omits a JavaScript-rendered table, use the downloadable index or a browser capable of rendering the page.
 
+### Use a published API or MCP service
+
+Check the inspected portal's `portal_metadata.json` for `public_api`. A packaged release can provide machine downloads before its service is published. Connect only when that metadata supplies an active `service_url` or `mcp_url`; otherwise use the static downloads listed by the release.
+
+For HTTP, resolve the literal release ID through `<service_url>/v1/releases/current`, then request `/v1/releases/<release_id>/human/targets` or `/v1/releases/<release_id>/mouse/targets`. For MCP, connect to the recorded `mcp_url`, call `get_release`, and pass its release ID and an explicit `human` or `mouse` species to `search_targets`. The other tools retrieve target evidence, constructs, exact released sequences, and download metadata. Use the returned IDs and cursor; keep the same release, species, and filters when requesting another page.
+
+Machine sequence exports preserve the sequence accession/source, coordinate basis, checksum, evidence, and warnings. The target identifier and sequence accession can differ for a mouse RefSeq fallback. A PDB-derived native interval is a mapped reference sequence; consult the deposited structure and study for engineering or partner chains. Sequence exports describe released records; browser edits remain in the browser.
+
+Use explicit section availability and error codes when data are unavailable. For a large result, follow the returned immutable `records.jsonl.gz` download and retain its release, record identifier, and checksum. That download contains the complete public projection. Retained-release discovery states which historical IDs the service still serves; an unavailable historical ID requires its archived artifact rather than substitution with the current release.
+
 Record the portal build date and software version from metadata, the artifact URL or filename, and your retrieval date. Preserve original downloads when performing an analysis. Do not combine files from different releases without recording the difference. If counts, identifiers, dates, or sequences disagree between a page and a download, disclose the mismatch and verify the affected record before using it.
 
 For a target-specific answer, include the gene or entry name, species, accession, report URL, and inspected release. When discussing a construct, also retain its name or class, boundaries, evidence source, and relevant warnings. Separate reported annotations from your interpretation and from recommendations for later experiments. Cite only records and underlying sources you actually inspected.

@@ -1,0 +1,4467 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openantigens.org/schemas/public-api-v1.json",
+  "x-openantigens-fasta-version": 2,
+  "$defs": {
+    "region": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "label",
+        "source",
+        "confidence"
+      ],
+      "additionalProperties": false
+    },
+    "design_region": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "label",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "feature": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "start",
+        "end",
+        "description",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "furin": {
+      "type": "object",
+      "properties": {
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "motif": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "suggestions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "curated_annotation": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "start",
+        "end",
+        "motif",
+        "suggestions",
+        "curated_annotation"
+      ],
+      "additionalProperties": false
+    },
+    "cysteine": {
+      "type": "object",
+      "properties": {
+        "position": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "paired_with": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "surface_exposed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warning": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partner_outside_range": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closest_unpaired_cysteine": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closest_unpaired_cysteine_distance": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "closest_unpaired_cysteine_distance_atom": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "analysis_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "analysis_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "position",
+        "paired_with",
+        "surface_exposed",
+        "warning",
+        "partner_outside_range",
+        "closest_unpaired_cysteine",
+        "closest_unpaired_cysteine_distance",
+        "closest_unpaired_cysteine_distance_atom",
+        "analysis_start",
+        "analysis_end"
+      ],
+      "additionalProperties": false
+    },
+    "processing_record": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "feature",
+            "furin",
+            "cysteine"
+          ]
+        },
+        "feature": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/feature"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "furin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/furin"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cysteine": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/cysteine"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "feature",
+        "furin",
+        "cysteine"
+      ],
+      "additionalProperties": false
+    },
+    "domain": {
+      "type": "object",
+      "properties": {
+        "accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_database": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representative": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrated_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "integrated_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "accession",
+        "name",
+        "type",
+        "source_database",
+        "start",
+        "end",
+        "representative",
+        "integrated_accession",
+        "integrated_name"
+      ],
+      "additionalProperties": false
+    },
+    "topology": {
+      "type": "object",
+      "properties": {
+        "topology_class": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        },
+        "transmembrane_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        },
+        "intramembrane_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        },
+        "cytoplasmic_regions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        },
+        "major_extracellular_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "membrane_core_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cytoplasmic_tail_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "topology_class",
+        "source",
+        "extracellular_regions",
+        "transmembrane_regions",
+        "intramembrane_regions",
+        "cytoplasmic_regions",
+        "major_extracellular_region",
+        "membrane_core_region",
+        "cytoplasmic_tail_region"
+      ],
+      "additionalProperties": false
+    },
+    "ortholog": {
+      "type": "object",
+      "properties": {
+        "species": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ectodomain_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ectodomain_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_surface_identity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_surface_aligned_positions": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "available": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "selection_status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidates": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accession_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "species",
+        "accession",
+        "entry_name",
+        "ectodomain_start",
+        "ectodomain_end",
+        "identity",
+        "coverage",
+        "extracellular_surface_identity",
+        "extracellular_surface_aligned_positions",
+        "available",
+        "notes",
+        "selection_status",
+        "candidates",
+        "evidence_count",
+        "accession_source"
+      ],
+      "additionalProperties": false
+    },
+    "family_member": {
+      "type": "object",
+      "properties": {
+        "gene_symbol": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gene_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ectodomain_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ectodomain_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ectodomain_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      },
+      "required": [
+        "gene_symbol",
+        "gene_name",
+        "accession",
+        "entry_name",
+        "sequence_length",
+        "ectodomain_start",
+        "ectodomain_end",
+        "ectodomain_length",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "family": {
+      "type": "object",
+      "properties": {
+        "gene_symbol": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/family_member"
+          }
+        }
+      },
+      "required": [
+        "gene_symbol",
+        "source",
+        "family_names",
+        "members"
+      ],
+      "additionalProperties": false
+    },
+    "assembly": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "obligatory": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "classification": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partners": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "rationale": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "complex_portal_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "obligatory",
+        "confidence",
+        "source",
+        "classification",
+        "partners",
+        "rationale",
+        "complex_portal_ids"
+      ],
+      "additionalProperties": false
+    },
+    "complex_participant": {
+      "type": "object",
+      "properties": {
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "stoichiometry": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bio_role": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "interactor_type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "binding_regions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      },
+      "required": [
+        "identifier",
+        "name",
+        "description",
+        "stoichiometry",
+        "bio_role",
+        "interactor_type",
+        "binding_regions"
+      ],
+      "additionalProperties": false
+    },
+    "complex": {
+      "type": "object",
+      "properties": {
+        "complex_ac": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "species": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "predicted_complex": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_code": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evidence_description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "confidence_score": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "complex_assemblies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "properties": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/complex_participant"
+          }
+        }
+      },
+      "required": [
+        "complex_ac",
+        "name",
+        "species",
+        "predicted_complex",
+        "evidence_code",
+        "evidence_description",
+        "confidence_score",
+        "complex_assemblies",
+        "properties",
+        "participants"
+      ],
+      "additionalProperties": false
+    },
+    "complex_lookup": {
+      "type": "object",
+      "properties": {
+        "species": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "species",
+        "status",
+        "source",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "assembly_record": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "requirement",
+            "complex",
+            "lookup"
+          ]
+        },
+        "requirement": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/assembly"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "complex": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/complex"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lookup": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/complex_lookup"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "requirement",
+        "complex",
+        "lookup"
+      ],
+      "additionalProperties": false
+    },
+    "structure": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "pdb",
+            "predicted_model"
+          ]
+        },
+        "pdb_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "method": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resolution": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "chains": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/region"
+          }
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "live_asset_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "pdb_id",
+        "method",
+        "resolution",
+        "chains",
+        "source",
+        "live_asset_url",
+        "sha256"
+      ],
+      "additionalProperties": false
+    },
+    "similarity": {
+      "type": "object",
+      "properties": {
+        "subject_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "species": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "coverage": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alignment_length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "evalue": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "bitscore": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject_start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subject_end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "alignment_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_surface_identity": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_surface_aligned_positions": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "extracellular_surface_matches": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "design_region",
+            "full_length"
+          ]
+        }
+      },
+      "required": [
+        "subject_id",
+        "description",
+        "species",
+        "identity",
+        "coverage",
+        "alignment_length",
+        "evalue",
+        "bitscore",
+        "query_start",
+        "query_end",
+        "subject_start",
+        "subject_end",
+        "alignment_source",
+        "extracellular_surface_identity",
+        "extracellular_surface_aligned_positions",
+        "extracellular_surface_matches",
+        "scope"
+      ],
+      "additionalProperties": false
+    },
+    "literature": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "count",
+        "query_url",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "disease": {
+      "type": "object",
+      "properties": {
+        "disease_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "disease_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "direct_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "indirect_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "open_targets_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "disease_id",
+        "disease_name",
+        "score",
+        "direct_score",
+        "indirect_score",
+        "open_targets_url",
+        "source"
+      ],
+      "additionalProperties": false
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "mean_plddt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "min_plddt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_plddt": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "structured_fraction": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mean_intra_pae": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "max_intra_pae": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "mean_plddt",
+        "min_plddt",
+        "max_plddt",
+        "structured_fraction",
+        "mean_intra_pae",
+        "max_intra_pae"
+      ],
+      "additionalProperties": false
+    },
+    "hazards": {
+      "type": "object",
+      "properties": {
+        "cysteines": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cysteine"
+          }
+        },
+        "furin_sites": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/furin"
+          }
+        },
+        "ptms": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/feature"
+          }
+        },
+        "ligand_interactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/feature"
+          }
+        },
+        "complete_domains": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/domain"
+          }
+        },
+        "clipped_domains": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/domain"
+          }
+        }
+      },
+      "required": [
+        "cysteines",
+        "furin_sites",
+        "ptms",
+        "ligand_interactions",
+        "complete_domains",
+        "clipped_domains"
+      ],
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "taxon_id": {
+          "type": "integer",
+          "enum": [
+            9606,
+            10090
+          ]
+        },
+        "identifier_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "uniprot",
+                "refseq"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identifier_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entry_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "gene_symbol": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "protein_name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "aliases": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "sequence_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_length": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "error",
+            "pending",
+            "running",
+            "started",
+            "skipped_existing",
+            "unknown"
+          ]
+        },
+        "status_raw": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "track": {
+          "type": "string",
+          "enum": [
+            "secreted",
+            "gpi",
+            "single_pass",
+            "multipass",
+            "other",
+            "unknown"
+          ]
+        },
+        "track_raw": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "analyzed_topology": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "analyzed_topology_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "design_region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/design_region"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "construct_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "structure_state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "unknown"
+          ]
+        },
+        "construct_state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "unknown"
+          ]
+        },
+        "section_availability": {
+          "type": "object",
+          "properties": {
+            "topology": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "domains": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "ptms": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "orthologs": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "paralogs": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "family": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "assembly": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "structures": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "similarity": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "literature": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "disease": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            }
+          },
+          "required": [
+            "topology",
+            "domains",
+            "ptms",
+            "orthologs",
+            "paralogs",
+            "family",
+            "assembly",
+            "structures",
+            "similarity",
+            "literature",
+            "disease"
+          ],
+          "additionalProperties": false
+        },
+        "disease_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "family_names": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "live_report_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "search_text": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "canonical_isoform_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "portal_construct_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "unsupported_variants": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "classification": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 16384
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "state": {
+                "const": "unavailable"
+              },
+              "reason": {
+                "type": "string",
+                "maxLength": 16384
+              }
+            },
+            "required": [
+              "name",
+              "classification",
+              "state",
+              "reason"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "target_id",
+        "record_id",
+        "species",
+        "taxon_id",
+        "identifier_source",
+        "identifier_accession",
+        "entry_name",
+        "gene_symbol",
+        "protein_name",
+        "aliases",
+        "sequence_accession",
+        "sequence_source",
+        "sequence_sha256",
+        "sequence_length",
+        "status",
+        "status_raw",
+        "track",
+        "track_raw",
+        "analyzed_topology",
+        "analyzed_topology_source",
+        "design_region",
+        "construct_count",
+        "structure_state",
+        "construct_state",
+        "section_availability",
+        "disease_ids",
+        "family_names",
+        "live_report_url",
+        "search_text",
+        "canonical_isoform_id",
+        "portal_construct_count",
+        "unsupported_variants"
+      ],
+      "additionalProperties": false
+    },
+    "construct": {
+      "type": "object",
+      "properties": {
+        "construct_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "target_id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "full_region",
+            "pdb",
+            "domain_repeat",
+            "strict",
+            "lenient",
+            "multipass_full_length",
+            "multipass_trimmed"
+          ]
+        },
+        "classification": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "start": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "length": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_basis": {
+          "type": "string",
+          "enum": [
+            "reference_slice",
+            "recorded_variant",
+            "unavailable"
+          ]
+        },
+        "sequence_sha256": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "export_state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "no_results",
+            "unavailable",
+            "not_applicable",
+            "error",
+            "unknown"
+          ]
+        },
+        "export_reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "pdb_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "structural_metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/metrics"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "hazards": {
+          "$ref": "#/$defs/hazards"
+        }
+      },
+      "required": [
+        "construct_id",
+        "target_id",
+        "name",
+        "category",
+        "classification",
+        "start",
+        "end",
+        "length",
+        "sequence_basis",
+        "sequence_sha256",
+        "sequence_accession",
+        "sequence_source",
+        "export_state",
+        "export_reason",
+        "score",
+        "rationale",
+        "warnings",
+        "evidence",
+        "pdb_id",
+        "structural_metrics",
+        "hazards"
+      ],
+      "additionalProperties": false
+    },
+    "sequence": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "construct_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "taxon_id": {
+          "type": "integer"
+        },
+        "identifier_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identifier_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "uniprot",
+                "refseq"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_accession": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_source": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sequence_basis": {
+          "type": "string",
+          "enum": [
+            "reference",
+            "reference_slice",
+            "recorded_variant"
+          ]
+        },
+        "start": {
+          "type": "integer"
+        },
+        "end": {
+          "type": "integer"
+        },
+        "length": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sequence": {
+          "type": "string",
+          "maxLength": 1000000,
+          "pattern": "^[A-Z*]+$"
+        },
+        "sequence_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      },
+      "required": [
+        "target_id",
+        "construct_id",
+        "species",
+        "taxon_id",
+        "identifier_accession",
+        "identifier_source",
+        "sequence_accession",
+        "sequence_source",
+        "sequence_basis",
+        "start",
+        "end",
+        "length",
+        "sequence",
+        "sequence_sha256",
+        "warnings",
+        "evidence"
+      ],
+      "additionalProperties": false
+    },
+    "descriptor": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "no_results",
+            "unavailable",
+            "not_applicable",
+            "error",
+            "unknown"
+          ]
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "pages": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        }
+      },
+      "required": [
+        "state",
+        "reason",
+        "total",
+        "pages"
+      ],
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "summary": {
+          "$ref": "#/$defs/summary"
+        },
+        "sections": {
+          "type": "object",
+          "properties": {
+            "topology": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "domains": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "ptms": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "orthologs": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "paralogs": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "family": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "assembly": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "structures": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "similarity": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "literature": {
+              "$ref": "#/$defs/descriptor"
+            },
+            "disease": {
+              "$ref": "#/$defs/descriptor"
+            }
+          },
+          "required": [
+            "topology",
+            "domains",
+            "ptms",
+            "orthologs",
+            "paralogs",
+            "family",
+            "assembly",
+            "structures",
+            "similarity",
+            "literature",
+            "disease"
+          ],
+          "additionalProperties": false
+        },
+        "constructs": {
+          "$ref": "#/$defs/descriptor"
+        },
+        "reference_sequence_path": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 1024
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "construct_sequence_paths": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "summary",
+        "sections",
+        "constructs",
+        "reference_sequence_path",
+        "construct_sequence_paths"
+      ],
+      "additionalProperties": false
+    },
+    "author": {
+      "type": "object",
+      "properties": {
+        "given": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "family": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "given",
+        "family",
+        "orcid"
+      ],
+      "additionalProperties": false
+    },
+    "citation": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/author"
+          }
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "date": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "authors",
+        "doi",
+        "version",
+        "journal",
+        "date",
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "software_commit": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "snapshot_id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source_versions": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "source_dates": {
+          "type": "object",
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "input_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        }
+      },
+      "required": [
+        "software_commit",
+        "snapshot_id",
+        "source_versions",
+        "source_dates",
+        "input_sha256",
+        "notes"
+      ],
+      "additionalProperties": false
+    },
+    "file": {
+      "type": "object",
+      "properties": {
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "media_type": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "gzip"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "sha256",
+        "bytes",
+        "media_type",
+        "encoding",
+        "schema"
+      ],
+      "additionalProperties": false
+    },
+    "download": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "url": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "media_type": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "gzip"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "license": {
+          "type": "string",
+          "maxLength": 16384
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "path",
+        "media_type",
+        "bytes",
+        "sha256",
+        "encoding",
+        "row_count",
+        "schema",
+        "license"
+      ],
+      "additionalProperties": false
+    },
+    "species_manifest": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "type": "integer"
+        },
+        "index_path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "target_paths": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "maxLength": 1024
+          }
+        },
+        "downloads": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/download"
+          }
+        },
+        "counts": {
+          "type": "object",
+          "properties": {
+            "targets": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "resolved_targets": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "constructs": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "status": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "required": [
+            "targets",
+            "resolved_targets",
+            "constructs",
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "sections": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "topology",
+                  "domains",
+                  "ptms",
+                  "orthologs",
+                  "paralogs",
+                  "family",
+                  "assembly",
+                  "structures",
+                  "similarity",
+                  "literature",
+                  "disease"
+                ]
+              }
+            },
+            "disease": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "sections",
+            "disease"
+          ],
+          "additionalProperties": false
+        },
+        "records_download": {
+          "$ref": "#/$defs/download"
+        }
+      },
+      "required": [
+        "taxon_id",
+        "index_path",
+        "target_paths",
+        "downloads",
+        "counts",
+        "capabilities",
+        "records_download"
+      ],
+      "additionalProperties": false
+    },
+    "core": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "payload_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "asset_sha256": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "provenance",
+        "payload_sha256",
+        "asset_sha256"
+      ],
+      "additionalProperties": false
+    },
+    "release_manifest": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "manifest_url": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "citation": {
+          "$ref": "#/$defs/citation"
+        },
+        "licenses": {
+          "type": "object",
+          "properties": {
+            "software": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "annotations": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "third_party": {
+              "type": "string",
+              "maxLength": 16384
+            }
+          },
+          "required": [
+            "software",
+            "annotations",
+            "third_party"
+          ],
+          "additionalProperties": false
+        },
+        "species": {
+          "type": "object",
+          "properties": {
+            "human": {
+              "$ref": "#/$defs/species_manifest"
+            },
+            "mouse": {
+              "$ref": "#/$defs/species_manifest"
+            }
+          },
+          "required": [
+            "human",
+            "mouse"
+          ],
+          "additionalProperties": false
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/file"
+          }
+        },
+        "core": {
+          "$ref": "#/$defs/core"
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "manifest_url",
+        "provenance",
+        "citation",
+        "licenses",
+        "species",
+        "files",
+        "core"
+      ],
+      "additionalProperties": false
+    },
+    "root_manifest": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": 1
+        },
+        "current_release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "releases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "release_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "manifest_path": {
+                "type": "string",
+                "maxLength": 1024
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "release_id",
+              "manifest_path",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "retired_releases": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/retired_release"
+          },
+          "maxItems": 1000
+        }
+      },
+      "required": [
+        "schema_version",
+        "current_release_id",
+        "releases"
+      ],
+      "additionalProperties": false
+    },
+    "retired_release": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retired_by_release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "archive_url": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 16384
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "release_id",
+        "retired_by_release_id",
+        "archive_url"
+      ],
+      "additionalProperties": false
+    },
+    "index": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/summary"
+          }
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "target_shard": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "$ref": "#/$defs/target"
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "construct_page": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/construct"
+          }
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "sequence_shard": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "$ref": "#/$defs/sequence"
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_topology": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "topology"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/topology"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_domains": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "domains"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/domain"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_ptms": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "ptms"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/processing_record"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_orthologs": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "orthologs"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ortholog"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_paralogs": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "paralogs"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/family_member"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_family": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "family"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/family"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_assembly": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "assembly"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/assembly_record"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_structures": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "structures"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/structure"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_similarity": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "similarity"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/similarity"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_literature": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "literature"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/literature"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "section_disease": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "data": {
+          "type": "object",
+          "properties": {
+            "target_id": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "section": {
+              "const": "disease"
+            },
+            "state": {
+              "type": "string",
+              "enum": [
+                "available",
+                "no_results",
+                "unavailable",
+                "not_applicable",
+                "error",
+                "unknown"
+              ]
+            },
+            "reason": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/disease"
+              }
+            }
+          },
+          "required": [
+            "target_id",
+            "section",
+            "state",
+            "reason",
+            "items"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "release_id",
+        "schema_version",
+        "species",
+        "data"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

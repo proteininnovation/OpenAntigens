@@ -4592,9 +4592,7 @@ def _render_construct_tabs(
     labels = [full_label, "PDB", "Annotated domains / repeats", "Strict", "Lenient", "Full-length multipass", "Trimmed multipass"]
     groups: list[list[dict[str, Any]]] = [[] for _ in labels]
     for construct in constructs:
-        group = _construct_display_group(construct)[0]
-        if group == 5 and construct.get("name") != "membrane_expression_full_length":
-            group = 6
+        group = _CONSTRUCT_CATEGORIES.index(_construct_category(construct))
         groups[group].append(construct)
     tabs: list[str] = []
     panels: list[str] = []
@@ -8843,6 +8841,16 @@ def _construct_display_group(construct: dict[str, Any]) -> tuple[int, int, int, 
     if name.startswith("lenient_"):
         return (4, start, end, name)
     return (2, start, end, name)
+
+
+_CONSTRUCT_CATEGORIES = ("full_region", "pdb", "domain_repeat", "strict", "lenient", "multipass_full_length", "multipass_trimmed")
+
+
+def _construct_category(construct: dict[str, Any]) -> str:
+    group = _construct_display_group(construct)[0]
+    if group == 5 and construct.get("name") != "membrane_expression_full_length":
+        group = 6
+    return _CONSTRUCT_CATEGORIES[group]
 
 
 def _sorted_constructs_for_display(constructs: list[dict[str, Any]]) -> list[dict[str, Any]]:

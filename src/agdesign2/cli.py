@@ -258,6 +258,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="Copy/download browser libraries into the portal directory for a self-contained static site",
     )
 
+    public_api = subparsers.add_parser(
+        "build-public-api", help="Build the public API data bundle from frozen human and mouse reports"
+    )
+    public_api.add_argument("--human-summary", required=True, help="Frozen human batch_summary.json")
+    public_api.add_argument("--mouse-summary", required=True, help="Frozen mouse batch_summary.json")
+    public_api.add_argument("--public-site", required=True, help="Final human portal root containing mouse/ and both indexes")
+    public_api.add_argument("--output-dir", required=True, help="New or empty API bundle directory")
+    public_api.add_argument("--software-commit", required=True, help="Scientific/projector source commit for provenance")
+    public_api.add_argument("--snapshot-id", required=True, help="Identifier of the frozen scientific snapshot")
+    public_api.add_argument("--previous-bundle", default=None, help="Validated previous bundle to retain")
+    public_api.add_argument("--static-origin", default="https://openantigens.org", help="Canonical HTTPS origin for public downloads")
+
+    validate_api = subparsers.add_parser("validate-public-api", help="Validate API bundle schemas, files and hashes")
+    validate_api.add_argument("bundle_dir", help="Public API data bundle directory")
+
     build_portal_db_parser = subparsers.add_parser(
         "build-portal-db",
         help="Build a SQLite portal database from existing batch JSON/report files",
@@ -977,6 +992,31 @@ def main() -> None:
             bundle_vendor_assets=args.bundle_vendor_assets,
         )
         print(index_path)
+        return
+    if args.command == "build-public-api":
+        from .public_api_data import build_public_api_bundle
+
+        try:
+            manifest = build_public_api_bundle(
+                args.human_summary, args.mouse_summary, args.output_dir,
+                public_site_dir=args.public_site,
+                software_commit=args.software_commit,
+                snapshot_id=args.snapshot_id,
+                previous_bundle_dir=args.previous_bundle,
+                static_origin=args.static_origin,
+            )
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(manifest)
+        return
+    if args.command == "validate-public-api":
+        from .public_api_data import validate_public_api_bundle
+
+        try:
+            manifest = validate_public_api_bundle(args.bundle_dir)
+        except (OSError, ValueError) as exc:
+            parser.error(str(exc))
+        print(f"valid release={manifest['current_release_id']}")
         return
     if args.command == "build-portal-db":
         from .portal_db import build_portal_database

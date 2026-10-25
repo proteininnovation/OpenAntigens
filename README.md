@@ -38,6 +38,8 @@ The portal is the primary output. Each build produces:
 
 Static builds are written to `outputs/<batch>/portal/`. Dynamic serving reads the same JSON and report files live and exposes the same pages plus JSON APIs.
 
+The [public API and MCP service](services/public-api/README.md) serves one frozen human/mouse release through HTTP and six read-only MCP tools. The [implementation plan](docs/API_MCP_PLAN.md) and [deployment runbook](docs/API_MCP_DEPLOYMENT.md) describe the public data boundary, release checks, hosting prerequisites, and rollback.
+
 ## Website analytics and privacy
 
 The public portal uses Plausible Analytics to count page visits, clicks on static TSV/JSON downloads, and five browser-generated export actions. The integration uses no analytics cookies, session replay, advertising identifiers, cross-site tracking, or custom event properties. Search terms, protein sequences, residue selections, clipboard contents, names, and email addresses are not attached to analytics events.
