@@ -4,9 +4,9 @@
 
 Keep the human and mouse websites static. Add one public, read-only Node.js application on `https://api.openantigens.org`, with a versioned HTTP API and an MCP endpoint. Build its data from the same frozen inputs and final records used for the published portals. HTTP and MCP call the same read functions. Scientific analysis stays in the existing Python build pipeline.
 
-Use a compact search index and immutable JSON files, packaged with the application. This avoids a runtime database, native Node extensions, upstream requests, and a second implementation of the scientific methods. Start with the Node.js app slot included in the GoDaddy account, subject to the deployment gates in section 10. A hosting upgrade requires a separate decision if those gates fail.
+Use a compact search index and immutable JSON files, packaged with the application. This avoids a runtime database, native Node extensions, upstream scientific requests, and a second implementation of the scientific methods. The full catalogue exceeds the included GoDaddy managed app's upload limit, as recorded in section 10. A hosting change requires a separate decision.
 
-The first release supports target discovery, target and evidence retrieval, released construct selection, exact released sequence export, release metadata, citations, and bulk-download discovery for both species. It serves released public information. User sequence submission, custom boundary editing, mutations, fresh predictions, BLAST jobs, private IPI data, accounts, and write operations remain outside this release.
+The first release supports target discovery, target and evidence retrieval, released construct selection, exact released sequence export, release metadata, and citation/schema references for both species. Bulk analysis uses the static website's downloads. The service returns released public information. User sequence submission, custom boundary editing, mutations, fresh predictions, BLAST jobs, private IPI data, accounts, and write operations remain outside this release.
 
 ```text
 Frozen human and mouse reports + source records
@@ -108,7 +108,7 @@ Serve the following routes under `https://api.openantigens.org`. Data routes req
 | `GET /v1/releases` | List retained releases and identify `current`; include availability/retention policy. |
 | `GET /v1/releases/current` | Resolve current release metadata. Return its literal ID and links; `Cache-Control: no-store`. |
 | `GET /v1/releases/{release_id}` | Counts, capability map per species, dates, source/software provenance, license, citations, schemas, and final manifest. |
-| `GET /v1/releases/{release_id}/{species}/targets` | Search/filter, fixed stable-ID order, bounded cursor pagination. Default empty query lists the catalogue. |
+| `GET /v1/releases/{release_id}/{species}/targets` | Require a literal `q` with at least two trimmed characters. Return candidates in stable-ID order within the fixed 20-match window; request a narrower query beyond that window. |
 | `GET .../{species}/targets/{target_id}` | Bounded target summary and section counts/availability; sequences and large evidence arrays require explicit routes. |
 | `GET .../{species}/targets/{target_id}/sections/{section}` | Allowlisted, paged evidence section; section enum defined below in section 5. |
 | `GET .../{species}/targets/{target_id}/constructs` | Paged constructs; optional `category` filter with the seven tokens defined in section 4. |
@@ -123,7 +123,7 @@ Search accepts only `q`, `track`, `status`, `structure`, `constructs`, `limit`, 
 
 | Filter | Exact contract |
 | --- | --- |
-| `q` | One string; case-insensitive substring over projected public search fields, including accession/aliases. Empty lists the catalogue. |
+| `q` | Required string with at least two trimmed literal characters; case-insensitive substring over projected public search fields, including accessions and aliases. Reject empty queries and wildcards. |
 | `track` | `secreted`, `gpi`, `single_pass`, `multipass`, `other`, `unknown`. Derive using a tested shared catalogue-bucket normalization; retain the raw bucket label and keep analyzed topology separate. Missing source → unknown. |
 | `status` | `ok`, `error`, `pending`, `running`, `started`, `skipped_existing`, `unknown`; preserve the final portal source state. These describe the frozen build record, not a live running job. An unrecognized source token is preserved in a raw label and maps to unknown until reviewed. |
 | `structure` | `available`, `unavailable`, `unknown`, referring to packaged public structure availability, not biological absence. |
@@ -185,7 +185,7 @@ Keep the existing Python scientific package and add a small isolated JavaScript 
 | `tests/` and service tests | Projection/contract/parity/security/regression/integration tests described below. |
 | Shared site docs and README | API/MCP connection instructions, species/release examples, limits, citation, privacy and retention. Generate identical common guidance for both portals through `site_docs.py`. |
 
-Startup validates the manifest and schema versions before readiness. Load only compact search/filter indexes into memory; full summaries come from the selected target records. Resolve data through a build-generated ID-to-file manifest, never by joining user input to a path. Validate types, containment, symlink rejection, sizes and hashes for query data while staging/startup, and fail closed on changed or missing query bytes. Avoid a general result cache until profiling shows a need.
+Startup validates the manifest and schema versions before readiness. Keep compact search/filter indexes and validated release metadata in memory; full summaries come from the selected target records. Resolve data through a build-generated ID-to-file manifest, never by joining user input to a path. Validate types, containment, symlink rejection, sizes and hashes for query data while staging/startup, and fail closed on changed or missing query bytes. Avoid a general result cache until profiling shows a need.
 
 The physical deployment transport groups related target records into bounded deterministic gzip containers. It preserves their virtual paths, canonical bytes, per-member checksums, schemas and scientific release identity. A separately hashed storage index binds the containers to the source root manifest; the generated application build record pins those hashes. Oversized targets use bounded parts. Node reads and validates container members without extracting or writing scientific files. Unpacked source bundles remain supported for local compilation and verification.
 
@@ -249,9 +249,11 @@ Every response and download exposes OpenAntigens citation and data-license refer
 
 The preferred deployment is **one managed Node app plus the existing static site**, under the same account. Put API/MCP routes on a dedicated subdomain so the current static deployer cannot overwrite the app. Package application code and immutable projected data together; use managed deployment/restart rather than an SSH-launched background process.
 
-Official GoDaddy documentation inspected on October 24 describes managed **Node 22**, a root `package.json` with build/start scripts, `main` included for compatibility with the help requirements, and a listener using `process.env.PORT`. Use plain JavaScript with a validation-only build script and `node server.js` start. Upload source/lockfile/data as a ZIP **under 100 MB**; omit `node_modules`, `.env`, caches and the full repository. Use the same app ID for updates. Upload replaces preview source; publish promotes it. Preview and publish have separate source/configuration, and STDOUT/STDERR logs are available. Check source import, publish status and runtime readiness separately. Deployment history does not prove a one-click rollback or persistent disk.
+Official GoDaddy documentation inspected on October 24 describes managed **Node 22**, a root `package.json` with build/start scripts, `main` included for compatibility with the help requirements, and a listener using `process.env.PORT`. Use plain JavaScript with a validation-only build script and `npm start`, which runs `node src/server.js`. Upload source/lockfile/data as a ZIP **under 100 MB**; omit `node_modules`, `.env`, caches and the full repository. Use the same app ID for updates. Upload replaces preview source; publish promotes it. Preview and publish have separate source/configuration, and STDOUT/STDERR logs are available. Check source import, publish status and runtime readiness separately. Deployment history does not prove a one-click rollback or persistent disk.
 
 The documented Node 22 runtime and ZIP limit are evidence for the design; verify the live account matches them. Extracted disk, memory, build/connection timeouts, and process/replica limits remain unknown. GoDaddy's logs API documents queries up to seven days back; align the app retention policy with actual host capabilities rather than assume the proposed 14-day window is supported. Do not assume a cPanel Python selector or SSH executable proves hosted Python web-app support.
+
+The October 25 full-catalogue check measured a 245,426,866-byte ZIP. The packager refused it against the existing limits. The current self-contained release therefore fails this managed-host launch gate despite the included Node app slot. Full local runtime measurements and the next hosting decision are recorded in [host verification](API_MCP_HOST_VERIFICATION.md); no upload or deployment occurred.
 
 Before app creation or public deployment, verify all of the following:
 
@@ -298,7 +300,7 @@ Use small synthetic and approved public fixtures. Cover both species and each co
 | Public boundary | Nested private-field canaries, local paths, raw reports/SQLite/caches/secrets, symlinks and external assets rejected; archive contents and final checksums inspected; poisoned ambient caches cannot affect a frozen build. |
 | Host/HTTP security | Direct and forwarded Host/Origin spoofing, preflight/CORS, no Origin CLI, invalid headers/methods/media, slow body, body/URL/result bounds, traversal encodings, malformed Unicode, disconnect/cancellation, global/per-client quotas, no source-text execution or SSRF. |
 | MCP compatibility | Official SDK client plus at least one intended agent client; current negotiation and supported stable legacy flow; tool list/call, invalid/version/batch/notification behavior; JSON-only stateless operation without SSE/session requirements. |
-| Resource/deployment | Selected full release package and startup profile; peak RSS below verified budget with headroom; cold start/restart, eight concurrent representative queries, p95 within an agreed measured budget; disk/inodes/log growth; replica quota behavior; no live load test without authorization. |
+| Resource/deployment | Selected full release package and startup profile; peak RSS below verified budget with headroom; cold start/restart, two admitted concurrent queries across distinct clients and bounded refusal above the configured limits, p95 within an agreed measured budget; disk/inodes/log growth; replica quota behavior; no live load test without authorization. |
 | Release/rollback | Final compressed bytes and asset availability; same ID both portals and service; old pinned calls during publication; stale edge/current cache; failed upload/start/hash; two simultaneous releases; rehearsal of coordinated rollback and maintenance failure. |
 
 Acceptance requires all contract/security tests, selected existing Python tests, actual human and mouse build-path checks, and service tests on the host's supported Node major. Smoke-test the final domain through its real proxy/WAF. Include a second client implementation to detect a test that merely mirrors the server SDK. Do not mark a deployment complete from local success or a GoDaddy upload acknowledgement.

@@ -4,6 +4,17 @@ Build the Node service from a frozen, validated public data bundle. Keep the cod
 build ID separate from the data release ID. A code update can preserve the same
 human and mouse scientific release.
 
+The full-catalogue local trial on October 25, 2026 measured a 245,426,866-byte
+ZIP, above the 100,000,000-byte hard ceiling and 80,000,000-byte effective budget.
+The current self-contained GoDaddy launch is blocked. A separately sealed local
+runtime passed both publication states and all five HTTP/MCP read tools; it
+reached readiness in about 60 seconds and peaked at 1,213,923,328 bytes RSS.
+Those functional diagnostics do not establish an admissible upload or managed
+hosting capacity. The rejected ZIP was withheld from publication.
+The commands below retain the existing gate. Keep the complete scientific
+contract and select a separately approved hosting target with sufficient
+artifact, memory and startup allowances before launch.
+
 The public API projection includes up to 100 human disease associations per
 target in the published website's source order. Evidence metadata reports the
 projected count, full recorded source count and selection coverage. The complete
@@ -95,6 +106,13 @@ The builder verifies the canonical origin, both species, canonical release IDs,
 manifest checksums, every retained file, complete-record downloads, and matching
 final static copies. It rejects symlinks, unexpected data files, unsafe paths,
 changed bytes, missing static copies, and exceeded local size budgets.
+
+The full local engineering profile was compiled with local projector commit
+`cce700c05861442ba93657576ad781fe0cfa7bc3`. Its exact Git tree
+`4317716f47968a0924cb6919dd6be73c86307a3d` is available in published commit
+`f77344d`. The profile retains its original release ID and provenance. For a
+future launch build, use the selected published canonical revision and finalize
+both portals and their privacy/guidance pages before projecting the data.
 
 The hard ZIP ceiling is **less than 100,000,000 bytes**. Defaults reserve 20% of a
 100,000,000-byte compressed budget and a 500,000,000-byte expanded budget. These

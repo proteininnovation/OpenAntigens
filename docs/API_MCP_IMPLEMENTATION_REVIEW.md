@@ -113,4 +113,42 @@ All four original seats resumed and passed the corrected source and local behavi
 
 The final root Python suite passed 688 tests; the Node 22 suite passed 83 tests. Independent scientific checks retained exact agreement for 112 selected native constructs, six references and six frozen literature links. Fresh human and mouse build paths contained the shared guidance and privacy changes. Offline report interaction and count checks passed; rendered report layout remains unverified because of the browser's explicit file-access block.
 
-Source review has converged. Full-catalogue physical packaging and runtime measurements remain separate gates. No service, DNS or analytics settings were changed.
+Source review converged. Full-catalogue physical packaging and runtime measurements followed as separate gates. No production service, DNS or analytics settings were changed.
+
+### Full-catalogue results
+
+The complete source/static validation and physical transport checks passed. The upload gate then rejected the measured ZIP and published neither a ZIP nor an artifact record. A separate private runtime directory was generated from that already validated immutable source for local functional diagnostics; it is not an admissible upload artifact.
+
+| Measurement | Result |
+| --- | --- |
+| Targets / constructs | 9,949 / 78,125, across both species |
+| Logical files including manifests | 226,329 files / 2,167,020,277 bytes |
+| Physical runtime data | 9,963 files / 316,899,235 bytes |
+| Immutable static copies | 24 files / 1,148,459,779 bytes |
+| Measured ZIP | 245,426,866 bytes: fails 80,000,000-byte local budget and hard limit below 100,000,000 bytes |
+| Node 22.23.4 maintenance readiness / peak RSS | 59.901 seconds / 1,154,908,160 bytes |
+| Node 22.23.4 active readiness / peak RSS | 60.929 seconds / 1,213,923,328 bytes |
+| Functional checks | All five tools through HTTP and MCP in both modes, both species, 18 paced requests per mode, matching sequences and hashes, clean exits |
+| Production dependency install and audit | Passed; zero reported vulnerabilities |
+
+These local macOS runs kept default quotas, loopback binding, trusted forwarding disabled and Plausible delivery off. The profile contains one full release. Two full retained releases, production concurrency/latency, the selected host's runtime limits and report visual rendering remain unverified. Local diagnostics establish full-catalogue function; they do not establish public launch readiness.
+
+Lossless Brotli feasibility was checked without changing source or dependencies. Thirty deterministic samples covered the target-container size deciles; the three largest containers were measured separately. Exact-byte round trips passed. Correctly weighted sampling estimated about 189 MB including measured metadata compression and calculated ZIP headers, before small app overhead. This is an estimate, not a complete Brotli archive measurement or a mathematical size bound. It does not support implementing that codec as a fix for the current upload gate.
+
+Keep the full scientific contract and the current strict package limits. The self-contained GoDaddy managed upload path is blocked. A different hosting target or data-hosting design requires the separate scoped decision already defined in the plan; no provider, cost, access or account change was made.
+
+### Round 7
+
+All four original seats checked the full-catalogue evidence and revised deployment conclusions. They confirmed local functionality, unchanged source/data integrity and the blocked launch. The interface seat found three stale plan statements, also accepted by the software seat:
+
+| Finding | Priority | Decision and correction |
+| --- | --- | --- |
+| Plan still promises empty-query catalogue access and bulk-download discovery | P2 | Accept. Require at least two trimmed literal query characters, describe the fixed 20-match window, and direct bulk analysis to the static website. Runtime and OpenAPI already enforce this policy. |
+
+The opening design now also states the measured hosting blocker. These documentation corrections change no runtime, scientific data, limits or deployment settings. The same four seats resume for closure in round 8.
+
+### Round 8 and conclusion
+
+All four original seats passed the final source and documentation. The three stale contract statements are closed; no material implementation finding remains. Runtime and scientific data were unchanged, so the reviewers reused the demonstrated checks instead of repeating them for documentation edits.
+
+The source is ready for a PR. Public launch remains blocked by the measured GoDaddy upload limit. Report visual QA and the remaining host, capacity, proxy, TLS, retention, analytics and recovery checks retain their stated scope. Review convergence authorizes no deployment or account change.
