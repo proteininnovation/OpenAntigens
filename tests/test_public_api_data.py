@@ -16,6 +16,7 @@ from agdesign2.public_api_data import (
     project_public_target, sequence_fasta, validate_public_api_bundle,
     semantic_hash,
     strict_json_loads,
+    archive_url_policy, validate_archive_url, validate_retirement_metadata,
 )
 from agdesign2.public_api_schema import PUBLIC_SCHEMA, validate_schema
 
@@ -963,6 +964,68 @@ class PublicApiDataTests(unittest.TestCase):
                     validate_public_api_bundle(bundle)
                 self.assertNotIn("SHADOW_UNPUBLISHED_VALUE", str(error.exception))
                 self.assertNotIn(str(bundle), str(error.exception))
+
+    def test_retirement_archives_are_safe_public_permalinks_without_false_scientific_matches(self) -> None:
+        safe = (None, "https://archive.org/details/openantigens-release", "https://zenodo.org/records/12345", "https://archive.org:443/details/secreted-protein-data")
+        for value in safe:
+            with self.subTest(value=value):
+                self.assertEqual(validate_archive_url(value), value)
+        invalid = (
+            "http://archive.org/details/release", "//archive.org/details/release",
+            "https://user:password@archive.org/details/release", "https://archive.org:8443/details/release",
+            "https://@archive.org/details/release", "https://:@archive.org/details/release",
+            "https://archive.org/details/release?token=synthetic", "https://archive.org/details/release#credential",
+            "https://127.0.0.1/release", "https://localhost/release", "https://host.internal/release", "https://archive.example/release",
+            "https://host.home.arpa/release", "https://host.localdomain/release",
+            "https://archive.org/PRIVATE_CANARY_RETIREMENT", "https://archive.org/private/release", "https://archive.org/Users/example/release",
+            "https://archive.org/PRIVATE%5FCANARY_RETIREMENT", "https://archive.org/PRIVATE%255FCANARY_RETIREMENT",
+            "https://archive.org/public%0Arelease", "https://archive.org/public\nrelease", "https://archive.org/%2e%2e/release",
+            "https://archive.org/public\u00a0release", "https://archive.org/public%C2%A0release", "https://archive.org/public\u0085release",
+            "https://archive.org/release%3Ftoken%3Dsynthetic", "https://archive.org/invalid%QQ", "https://archive.org/" + "x" * 1024,
+        )
+        for value in invalid:
+            with self.subTest(value=value[:48]):
+                with self.assertRaises(PublicDataError) as error:
+                    validate_archive_url(value)
+                self.assertNotIn("PRIVATE_CANARY_RETIREMENT", str(error.exception))
+        validate_retirement_metadata({"retired_releases": [], "description": "Secreted proteins with recorded scientific metadata."})
+
+    def test_rehashed_retirement_canary_rejects_validation_and_new_production(self) -> None:
+        for archive in ("https://archive.org/PRIVATE_CANARY_RETIREMENT", "https://archive.org/PRIVATE%255FCANARY_RETIREMENT", "https://archive.org/release?access_token=synthetic"):
+            with self.subTest(archive=archive[:48]), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                previous = self.build(root / "previous")
+                manifest = json.loads((previous / "manifest.json").read_bytes())
+                manifest["retired_releases"] = [{"release_id": "f" * 64, "retired_by_release_id": manifest["current_release_id"], "archive_url": archive}]
+                body = canonical_bytes(manifest) + b"\n"
+                (previous / "manifest.json").write_bytes(body)
+                (previous / "manifest.sha256").write_text(hashlib.sha256(body).hexdigest() + "  manifest.json\n")
+                with self.assertRaises(PublicDataError):
+                    validate_public_api_bundle(previous)
+                human, mouse, site = source_fixture(root / "next")
+                before = [(site / path).read_bytes() for path in ("portal_metadata.json", "mouse/portal_metadata.json")]
+                with self.assertRaises(PublicDataError):
+                    build_public_api_bundle(human, mouse, root / "next/bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="unsafe-retirement", previous_bundle_dir=previous)
+                self.assertFalse((root / "next/bundle/manifest.json").exists())
+                self.assertEqual(before, [(site / path).read_bytes() for path in ("portal_metadata.json", "mouse/portal_metadata.json")])
+
+    def test_null_and_safe_archive_metadata_are_preserved_across_producer_retention(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            previous = self.build(root / "previous")
+            old = json.loads((previous / "manifest.json").read_bytes())
+            history = [{"release_id": "e" * 64, "retired_by_release_id": old["current_release_id"], "archive_url": None}, {"release_id": "f" * 64, "retired_by_release_id": old["current_release_id"], "archive_url": "https://zenodo.org/records/12345"}]
+            old["retired_releases"] = history
+            content = canonical_bytes(old) + b"\n"
+            (previous / "manifest.json").write_bytes(content)
+            (previous / "manifest.sha256").write_text(hashlib.sha256(content).hexdigest() + "  manifest.json\n")
+            self.assertEqual(validate_public_api_bundle(previous)["retired_releases"], history)
+            current = self.build(root / "current", previous=previous, snapshot="safe-retained-history")
+            self.assertEqual(validate_public_api_bundle(current)["retired_releases"], history)
+
+    def test_runtime_schema_uses_the_same_code_owned_archive_policy(self) -> None:
+        schema = json.loads((Path(__file__).resolve().parents[1] / "services/public-api/src/query-schema.json").read_bytes())
+        self.assertEqual(schema["x-public-text-policy"], archive_url_policy())
 
 
 if __name__ == "__main__":

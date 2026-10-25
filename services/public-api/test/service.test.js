@@ -1354,7 +1354,7 @@ test("legal long retirement history keeps current and pinned HTTP/MCP discovery 
   root.retired_releases = Array.from({ length: 300 }, (_, index) => ({
     release_id: createHash("sha256").update(`retired-${index}`).digest("hex"),
     retired_by_release_id: f.release_id,
-    archive_url: `https://archive.example/${"x".repeat(740)}?record=${index}`,
+    archive_url: `https://archive.org/details/${"x".repeat(740)}-${index}`,
   }));
   const bytes = Buffer.from(JSON.stringify(root));
   assert.ok(bytes.length > LIMITS.json && bytes.length < LIMITS.shard);

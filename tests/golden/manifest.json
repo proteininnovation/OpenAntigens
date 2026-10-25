@@ -1,5 +1,5 @@
 {
-  "human/.htaccess": "b50454e9704a200abc4427fe11d66bb1ca639e3a6114ea4a88b1818d90170fa2",
+  "human/.htaccess": "a4e5a713e415d6e41dd27cee69b08bdf7d886ee3076b794761c6ffd9c084e5f2",
   "human/agent-guide.html": "2131d7825417ca1a1ee6d2732f46d58d42f489e7e2310a9c9da2b42b9decb722",
   "human/agent-guide.js": "7ec26bb185de0ff8f14691b2cdff80fe33c25fdbe55472b19985ccd2a3fd6f76",
   "human/apple-touch-icon.png": "f7d8ecbf7712435813abb629bf6e29750405b5f253761b529211f5e27b90fd57",
@@ -56,7 +56,7 @@
   "human/reports/vdac1_human.html": "cbd661ed70d1a72506bf881aedf840de326664ff4de12182928cd63df42588d4",
   "human/site.webmanifest": "8c53b708e2110198a20f7c8f90f242029b155a28ca51c13bbff2492006f71c4a",
   "human/terms.html": "749839f43218d932a619b64edf9e9d612b3313895cfd78a4c7e3690fc496694e",
-  "mouse/.htaccess": "2e47a2640263066eae6d01ae8a111103574b0c2e1d1e4fbfb6ba33788de0d045",
+  "mouse/.htaccess": "418dd18deaebf2e5dc2dfc76f3c0b8600ad10039bcb0dc970618f32ab427873d",
   "mouse/agent-guide.html": "418cbfc9c8ca4bf4a84d28c2e820bca2ecba5976e310ccbc1c3e159462a7ea27",
   "mouse/agent-guide.js": "7ec26bb185de0ff8f14691b2cdff80fe33c25fdbe55472b19985ccd2a3fd6f76",
   "mouse/apple-touch-icon.png": "f7d8ecbf7712435813abb629bf6e29750405b5f253761b529211f5e27b90fd57",

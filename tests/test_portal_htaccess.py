@@ -90,6 +90,32 @@ class PortalHtaccessTests(unittest.TestCase):
             self.assertTrue((public / ".htaccess").exists())
             self.assertFalse((public / ".secret").exists())
 
+    def test_query_asset_headers_and_bytes_survive_both_portals_and_recompression(self) -> None:
+        from agdesign2.deployment import compress_public_site
+
+        with TemporaryDirectory() as tmp:
+            site = Path(tmp) / "public_site"
+            mouse = site / "mouse"
+            mouse.mkdir(parents=True)
+            for portal in (site, mouse):
+                (portal / "index.html").write_text("<html>fixture</html>")
+                _write_portal_htaccess(portal, mouse_redirects=portal == mouse)
+            asset = site / "api-runtime" / ("a" * 64) / "human" / "fixture.oap"
+            asset.parent.mkdir(parents=True)
+            payload = b"\x1f\x8bopaque exact query payload\x00"
+            asset.write_bytes(payload)
+            for _ in range(2):
+                compress_public_site(site)
+                self.assertEqual(asset.read_bytes(), payload)
+                for portal in (site, mouse):
+                    text = (portal / ".htaccess").read_text()
+                    self.assertIn('<FilesMatch "\\.oap$">', text)
+                    self.assertIn("ForceType application/octet-stream", text)
+                    self.assertIn("Header unset Content-Encoding", text)
+                    self.assertIn("immutable, no-transform", text)
+                    self.assertIn('"expr=%{REQUEST_STATUS} == 200"', text)
+                    self.assertIn("SetEnv no-gzip 1", text)
+
 
 if __name__ == "__main__":
     unittest.main()

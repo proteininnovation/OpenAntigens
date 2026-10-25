@@ -38,7 +38,7 @@ The portal is the primary output. Each build produces:
 
 Static builds are written to `outputs/<batch>/portal/`. Dynamic serving reads the same JSON and report files live and exposes the same pages plus JSON APIs.
 
-The [public API and MCP service](services/public-api/README.md) serves one frozen human/mouse release through HTTP and five read-only MCP tools. It supports individual lookups and small follow-ups, with explicit queries, bounded results and request limits. The [implementation plan](docs/API_MCP_PLAN.md) and [deployment runbook](docs/API_MCP_DEPLOYMENT.md) describe the public data boundary, release checks, hosting prerequisites, and rollback.
+The [public API and MCP service](services/public-api/README.md) serves frozen human/mouse releases through HTTP and five read-only MCP tools. The GoDaddy design uses a small Node app with sealed metadata and local search summaries, plus immutable target data on the existing GoDaddy static site. It supports individual lookups and small follow-ups, with explicit queries, bounded results and request limits. The [implementation plan](docs/API_MCP_PLAN.md) and [deployment runbook](docs/API_MCP_DEPLOYMENT.md) describe the public data boundary, release checks, hosting prerequisites, and rollback.
 
 ## Website analytics and privacy
 

@@ -18,7 +18,7 @@ from email.message import Message
 from types import SimpleNamespace
 
 from agdesign2.public_api_data import build_public_api_bundle
-from agdesign2.public_api_release import SOURCE_FILES, build_api_service_release
+from agdesign2.public_api_release import SOURCE_FILES, build_api_service_release, repack_api_service_release
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -121,7 +121,9 @@ class PublicApiReleaseTests(unittest.TestCase):
                 payload = archive.read(entry)
                 assert hashlib.sha256(payload).hexdigest() == artifact["files"][entry.filename]["sha256"]
                 assert b"PRIVATE_ENV_CANARY" not in payload and b"PRIVATE_MODULE_CANARY" not in payload
-        assert snapshot(release) == before
+        after = snapshot(release)
+        assert all(after[name] == value for name, value in before.items())
+        assert all(name.startswith("site/api-runtime/") for name in after.keys() - before.keys())
 
 
     def test_cli_stdout_is_compact_and_points_to_complete_local_record(self):
@@ -144,63 +146,151 @@ class PublicApiReleaseTests(unittest.TestCase):
         assert len(record["files"]) == record["file_count"]
         assert "artifact_record" not in record
         for key, value in record.items():
-            if key != "files":
+            if key not in {"files", "query_static_assets"}:
                 assert summary[key] == value
         with zipfile.ZipFile(output) as archive:
             assert set(archive.namelist()) == set(record["files"])
             for name, descriptor in record["files"].items():
                 assert hashlib.sha256(archive.read(name)).hexdigest() == descriptor["sha256"]
 
-    def test_physical_transport_is_sealed_and_preserves_logical_member_bytes(self):
+    def test_code_only_repack_reuses_exact_data_and_replaces_only_current_code(self):
+        from agdesign2 import public_api_data, public_api_query
+        original = self.tmp_path / "original.zip"
+        receipt = package(self.release, original)
+        (self.release / "service/src/server.js").write_text("// reviewed runtime-only patch\n" + (self.release / "service/src/server.js").read_text())
+        before = snapshot(self.release)
+        output = self.tmp_path / "code-update.zip"
+        with patch.object(public_api_data, "validate_public_api_bundle", side_effect=AssertionError("scientific validation must be inherited")), patch.object(public_api_query, "_build_query_runtime", side_effect=AssertionError("data must not be recompiled")):
+            dry = repack_api_service_release(original.with_suffix(".artifact.json"), receipt["sha256"], self.release / "service", self.release / "site", output, repo_root=REPO, dry_run=True)
+            assert not output.exists() and snapshot(self.release) == before
+            updated = repack_api_service_release(original.with_suffix(".artifact.json"), receipt["sha256"], self.release / "service", self.release / "site", output, repo_root=REPO)
+        assert updated["sha256"] == dry["sha256"] and updated["service_build_id"] != receipt["service_build_id"]
+        assert updated["data_transport"] == receipt["data_transport"] and updated["current_release_id"] == receipt["current_release_id"]
+        assert updated["validation_lineage"]["parent_zip_sha256"] == receipt["sha256"]
+        assert "not_rerun" in updated["validation_lineage"]["scientific_validation"]
+        with zipfile.ZipFile(original) as old, zipfile.ZipFile(output) as new:
+            old_names = {name for name in old.namelist() if name.startswith("data/")}
+            assert old_names == {name for name in new.namelist() if name.startswith("data/")}
+            for name in old_names:
+                assert old.read(name) == new.read(name)
+            assert new.read("src/server.js").startswith(b"// reviewed runtime-only patch")
+        assert snapshot(self.release) == before
+
+    def test_code_only_repack_requires_independent_hash_and_all_static_bytes(self):
+        original = self.tmp_path / "original.zip"
+        receipt = package(self.release, original)
+        output = self.tmp_path / "repacked.zip"
+        before = snapshot(self.release)
+        with self.assertRaises(ValueError):
+            repack_api_service_release(original.with_suffix(".artifact.json"), "f" * 64, self.release / "service", self.release / "site", output, repo_root=REPO)
+        assert not output.exists() and snapshot(self.release) == before
+        missing = self.release / "site" / next(iter(receipt["query_static_assets"]))
+        saved = missing.read_bytes()
+        missing.unlink()
+        try:
+            with self.assertRaises(ValueError):
+                repack_api_service_release(original.with_suffix(".artifact.json"), receipt["sha256"], self.release / "service", self.release / "site", output, repo_root=REPO)
+            assert not output.exists()
+        finally:
+            missing.write_bytes(saved)
+
+    def test_code_only_repack_uses_current_query_policy_without_rewriting_data(self):
+        original = self.tmp_path / "original.zip"
+        receipt = package(self.release, original)
+        from agdesign2 import public_api_query
+        before = snapshot(self.release)
+        with patch.object(public_api_query, "validate_query_runtime", side_effect=ValueError("current retirement policy rejects this data")):
+            with self.assertRaises(ValueError):
+                repack_api_service_release(original.with_suffix(".artifact.json"), receipt["sha256"], self.release / "service", self.release / "site", self.tmp_path / "no-fallback.zip", repo_root=REPO)
+        assert snapshot(self.release) == before and not (self.tmp_path / "no-fallback.zip").exists()
+
+    def test_query_catalog_is_sealed_and_static_assets_preserve_logical_bytes(self):
         from agdesign2.public_api_transport import decode_part
-        output = self.tmp_path / "packed.zip"
+        output = self.tmp_path / "query.zip"
         artifact = package(self.release, output)
         root = json.loads((self.release / "bundle/manifest.json").read_text())
         manifest = json.loads((self.release / "bundle" / root["releases"][0]["manifest_path"]).read_text())
         with zipfile.ZipFile(output) as archive:
             build = json.loads(archive.read("service-build.json"))
-            assert build["data_transport"] == artifact["data_transport"]
-            assert build["data_transport"]["root_manifest_sha256"] == hashlib.sha256(archive.read("data/manifest.json")).hexdigest()
-            transport_bytes = archive.read("data/transport-index.json")
-            assert build["data_transport"]["transport_index_sha256"] == hashlib.sha256(transport_bytes).hexdigest()
-            transport = json.loads(transport_bytes)
-            for parts in transport["targets"].values():
-                for descriptor in parts:
-                    members = decode_part(archive.read("data/" + descriptor["path"]), descriptor, manifest["files"])
+            seal = build["data_transport"]
+            assert seal == artifact["data_transport"] and seal["format"] == "openantigens-own-static-query-v1"
+            assert seal["source_root_manifest_sha256"] == hashlib.sha256((self.release / "bundle/manifest.json").read_bytes()).hexdigest()
+            assert seal["query_root_sha256"] == hashlib.sha256(archive.read("data/query-root.json")).hexdigest()
+            assert "data/manifest.json" not in archive.namelist()
+            assert "data/" + root["releases"][0]["manifest_path"] not in archive.namelist()
+            transport = json.loads(archive.read("data/transport-index.json"))
+            for target, parts in transport["targets"].items():
+                elements = Path(target).parts
+                for number, descriptor in enumerate(parts):
+                    asset = f"api-runtime/{elements[1]}/{elements[2]}/{Path(target).stem}-{number}-{descriptor['sha256']}.oap"
+                    assert asset in artifact["query_static_assets"]
+                    members = decode_part((self.release / "site" / asset).read_bytes(), descriptor, manifest["files"])
                     for name, content in members.items():
                         assert content == (self.release / "bundle" / name).read_bytes()
-            assert archive.read("data/" + root["releases"][0]["manifest_path"]) == (self.release / "bundle" / root["releases"][0]["manifest_path"]).read_bytes()
-            excluded = {"index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"}
+            excluded = {"index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"}
             assert not any("/downloads/" in name and Path(name).name in excluded for name in archive.namelist())
+            assert not any(name.endswith(".oap") or name.startswith("data/packs/") for name in archive.namelist())
             data_entries = [info for info in archive.infolist() if info.filename.startswith("data/")]
             assert artifact["physical_data_file_count"] == len(data_entries)
             assert artifact["physical_data_bytes"] == sum(info.file_size for info in data_entries)
-        assert artifact["physical_data_file_count"] < artifact["logical_data_file_count"]
+        assert artifact["query_static_asset_file_count"] == len(artifact["query_static_assets"])
         assert artifact["external_bulk_download_verification"]["runtime"] == "metadata_only_external_static_files"
 
-    def test_changed_physical_transport_is_rejected_before_zip(self):
-        from agdesign2 import public_api_transport
-        real_build = public_api_transport.build_runtime_data
+    def test_changed_query_outputs_are_rejected_before_zip(self):
+        from agdesign2 import public_api_query
+        real_build = public_api_query._build_query_runtime
         before = snapshot(self.release)
-        for defect in ("part", "extra", "seal", "private seal field"):
+        for defect in ("runtime", "asset", "extra", "seal", "private seal field"):
             with self.subTest(defect=defect):
-                def tamper(source, destination, **kwargs):
-                    seal = real_build(source, destination, **kwargs)
-                    if defect == "part":
-                        path = next(destination.glob("packs/*/*/*.json.gz"))
+                def tamper(source, destination, assets, **kwargs):
+                    result = real_build(source, destination, assets, **kwargs)
+                    if defect == "runtime":
+                        path = destination / "query-root.json"
+                        path.write_bytes(path.read_bytes() + b"PRIVATE_CANARY")
+                    elif defect == "asset":
+                        path = assets / next(iter(result["static_assets"]))
                         path.write_bytes(path.read_bytes() + b"PRIVATE_CANARY")
                     elif defect == "extra":
                         (destination / "private.sqlite").write_bytes(b"PRIVATE_CANARY")
                     elif defect == "seal":
-                        seal["root_manifest_sha256"] = "f" * 64
+                        result["seal"]["source_root_manifest_sha256"] = "f" * 64
                     else:
-                        seal["source_directory"] = "/Users/PRIVATE_CANARY"
-                    return seal
-                with patch.object(public_api_transport, "build_runtime_data", tamper):
+                        result["seal"]["source_directory"] = "/Users/PRIVATE_CANARY"
+                    return result
+                with patch.object(public_api_query, "_build_query_runtime", tamper):
                     with self.assertRaises(ValueError):
-                        package(self.release, self.tmp_path / "corrupt-physical.zip")
-                assert not (self.tmp_path / "corrupt-physical.zip").exists()
+                        package(self.release, self.tmp_path / "corrupt-query.zip")
+                assert not (self.tmp_path / "corrupt-query.zip").exists()
                 assert snapshot(self.release) == before
+
+    def test_dry_run_stages_nothing_and_immutable_collisions_preserve_existing_bytes(self):
+        output = self.tmp_path / "query.zip"
+        before = snapshot(self.release)
+        preview = package(self.release, output, dry_run=True)
+        assert snapshot(self.release) == before and not (self.release / "site/api-runtime").exists()
+        name = next(iter(preview["query_static_assets"]))
+        target = self.release / "site" / name
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"USER_EXISTING_IMMUTABLE_BYTES")
+        collision = snapshot(self.release)
+        with self.assertRaises(ValueError):
+            package(self.release, output)
+        assert snapshot(self.release) == collision and not output.exists()
+
+    def test_publisher_derives_assets_from_sealed_zip_not_hash_shaped_directory_files(self):
+        from agdesign2.public_api_release import write_query_asset_list
+        output = self.tmp_path / "query.zip"
+        artifact = package(self.release, output)
+        unknown = self.release / "site/api-runtime" / ("f" * 64) / "human" / (("e" * 64) + "-0-" + ("d" * 64) + ".oap")
+        unknown.parent.mkdir(parents=True)
+        unknown.write_bytes(b"PRIVATE_CANARY")
+        file_list = self.tmp_path / "publish.list"
+        count = write_query_asset_list(self.release / "site", output.with_suffix(".artifact.json"), file_list)
+        names = file_list.read_bytes().rstrip(b"\0").decode().split("\0")
+        assert count == len(artifact["query_static_assets"]) + 24
+        assert {name for name in names if name.startswith("api-runtime/")} == set(artifact["query_static_assets"])
+        assert len([name for name in names if name.startswith("data/releases/")]) == 24
+        assert unknown.relative_to(self.release / "site").as_posix() not in names
 
     def test_symlinks_rejected_and_inputs_preserved(self):
         release, tmp_path = self.release, self.tmp_path
@@ -370,7 +460,9 @@ class PublicApiReleaseTests(unittest.TestCase):
         assert not any("open_targets_disease_associations.tsv" in name for name in artifact["files"])
         with zipfile.ZipFile(output) as archive:
             assert not any(b"ORIGINAL_WEBSITE_DISEASE_TSV_CANARY" in archive.read(name) for name in archive.namelist())
-        assert snapshot(self.release) == before
+        after = snapshot(self.release)
+        assert all(after[name] == value for name, value in before.items())
+        assert all(name.startswith("site/api-runtime/") for name in after.keys() - before.keys())
 
     def test_external_bulk_limits_are_distinct_from_runtime_and_tiny_references(self):
         from agdesign2.public_api_release import _public_file_limit

@@ -128,7 +128,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         env = os.environ.copy()
         env.update(
             {
-                "PATH": f"{bin_dir}:{env['PATH']}",
+                "PATH": f"{bin_dir}:{Path(sys.executable).parent}:{env['PATH']}",
                 "GODADDY_TARGET": "deploy@example:public_html/",
                 "GODADDY_IDENTITY_FILE": str(identity_file),
                 "AGDESIGN2_BIN": str(bin_dir / "agdesign2"),
@@ -204,6 +204,9 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         self.assertIn("--delete-before", rsync_args)
         self.assertIn("--exclude=.ftpquota", rsync_args)
         self.assertIn("--exclude=.well-known/", rsync_args)
+        self.assertIn("--filter=P /api-runtime/***", rsync_args)
+        self.assertIn("--filter=P /data/releases/***", rsync_args)
+        self.assertIn("--exclude=/api-runtime/***", rsync_args)
         self.assertIn(str(Path(env["GODADDY_IDENTITY_FILE"])), rsync_args)
         self.assertIn("IdentitiesOnly=yes", rsync_args)
         ssh_args = (marker_dir / "ssh_args").read_text(encoding="utf-8")
@@ -213,6 +216,121 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         self.assertIn("test -w public_html/", ssh_args)
         self.assertIn("dry-run complete; no remote files were changed", result.stdout)
         self.assertFalse((marker_dir / "agdesign2").exists())
+
+    def test_local_mirror_preserves_historical_assets_and_excludes_unreviewed_sender_files(self) -> None:
+        real_rsync = shutil.which("rsync")
+        if real_rsync is None:
+            self.skipTest("local rsync unavailable")
+        tmp, snapshot, marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
+        result = self._run(snapshot, env, "--dry-run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        arguments = (marker_dir / "rsync_args").read_text().splitlines()
+        filters = [value for value in arguments if value.startswith(("--filter=", "--exclude=")) or value == "--delete-before"]
+        source = snapshot / "public_site"
+        unknown = source / "api-runtime/new/private-renamed.oap"
+        unknown.parent.mkdir(parents=True)
+        unknown.write_bytes(b"PRIVATE_CANARY")
+        remote = Path(tmp.name) / "local-receiver"
+        old_asset = remote / "api-runtime/old-release/retained.oap"
+        old_manifest = remote / "data/releases/old-release/manifest.json"
+        for path, content in ((old_asset, b"OLD_QUERY_BYTES"), (old_manifest, b"OLD_MANIFEST")):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        (remote / "obsolete-page.html").write_text("authorized static mirror deletion")
+        outside = Path(tmp.name) / "unrelated-user-material"
+        outside.write_bytes(b"KEEP_OUTSIDE_STATIC_SCOPE")
+        local = subprocess.run([real_rsync, "-a", *filters, str(source) + "/", str(remote) + "/"], capture_output=True, text=True)
+        self.assertEqual(local.returncode, 0, local.stderr)
+        self.assertEqual(old_asset.read_bytes(), b"OLD_QUERY_BYTES")
+        self.assertEqual(old_manifest.read_bytes(), b"OLD_MANIFEST")
+        self.assertFalse((remote / "api-runtime/new/private-renamed.oap").exists())
+        self.assertFalse((remote / "obsolete-page.html").exists())
+        self.assertEqual(outside.read_bytes(), b"KEEP_OUTSIDE_STATIC_SCOPE")
+
+    def test_noncanonical_origin_fails_before_any_remote_action(self) -> None:
+        tmp, snapshot, marker_dir, env = self._fixture()
+        self.addCleanup(tmp.cleanup)
+        self._write_command(Path(tmp.name) / "bin/git", 'printf "https://github.com/private-fork/OpenAntigens.git\\n"\n')
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
+        result = self._run(snapshot, env, "--dry-run")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("origin must resolve", result.stderr)
+        self.assertFalse((marker_dir / "ssh_args").exists())
+        self.assertFalse((marker_dir / "rsync_args").exists())
+
+    def _asset_publish_fixture(self):
+        from agdesign2.portal import _write_portal_htaccess
+        tmp, snapshot, marker_dir, env = self._fixture()
+        root = Path(tmp.name)
+        env.update({"COMPRESS": "0", "PURGE_SUCURI": "0", "TEST_REAL_PYTHON": sys.executable})
+        self._write_command(
+            root / "bin/python3",
+            'if [[ "$2" == *"write_query_asset_list"* ]]; then printf "api-runtime/reviewed.oap\\0" > "$5"; printf "1\\n"; else exec "$TEST_REAL_PYTHON" "$@"; fi\n',
+        )
+        self._write_command(
+            root / "bin/rsync",
+            'printf "%s\\n" "$*" >> "$TEST_MARKER_DIR/rsync_calls"\n'
+            'printf "%s\\n" "$@" > "$TEST_MARKER_DIR/rsync_args"\n'
+            'if [[ "$*" == *"--existing"* && "${TEST_API_COLLISION:-0}" == "1" ]]; then printf ">fc........ immutable collision\\n"; fi\n'
+            'if [[ "$*" == *"--dry-run"* && "$*" != *"--existing"* && "$*" != *"--ignore-existing"* && "$*" == *"--files-from"* && "${TEST_API_INCOMPLETE:-0}" == "1" ]]; then printf ">f+++++++++ missing asset\\n"; fi\n',
+        )
+        record = root / "reviewed.artifact.json"
+        record.write_text("mocked reviewed record; real validator is covered separately")
+        _write_portal_htaccess(snapshot / "public_site")
+        _write_portal_htaccess(snapshot / "public_site/mouse", mouse_redirects=True)
+        return tmp, snapshot, marker_dir, env, record
+
+    def test_api_transfer_requires_current_headers_with_compression_disabled(self) -> None:
+        for name in (".htaccess", "mouse/.htaccess"):
+            with self.subTest(portal=name):
+                tmp, snapshot, markers, env, record = self._asset_publish_fixture()
+                self.addCleanup(tmp.cleanup)
+                (snapshot / "public_site" / name).write_text("# frozen legacy headers\n")
+                result = self._run(snapshot, env, "--api-artifact-record", str(record))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("prepare current opaque query asset headers", result.stderr)
+                self.assertFalse((markers / "rsync_calls").exists())
+
+    def test_query_asset_dry_run_uses_only_reviewed_additive_file_list(self) -> None:
+        tmp, snapshot, markers, env, record = self._asset_publish_fixture()
+        self.addCleanup(tmp.cleanup)
+        result = self._run(snapshot, env, "--dry-run", "--api-artifact-record", str(record))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = (markers / "rsync_calls").read_text().splitlines()
+        self.assertEqual(len(calls), 3)
+        for call in calls[:2]:
+            self.assertIn("--files-from=", call)
+            self.assertIn("--from0", call)
+            self.assertIn("--dry-run", call)
+            self.assertNotIn("--delete", call)
+        self.assertIn("--existing", calls[0])
+        self.assertIn("--ignore-existing", calls[1])
+        self.assertIn("--exclude=/api-runtime/***", calls[2])
+
+    def test_existing_remote_query_collision_stops_before_transfer_or_mirror(self) -> None:
+        tmp, snapshot, markers, env, record = self._asset_publish_fixture()
+        self.addCleanup(tmp.cleanup)
+        env["TEST_API_COLLISION"] = "1"
+        result = self._run(snapshot, env, "--api-artifact-record", str(record))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("immutable query asset collision", result.stderr)
+        calls = (markers / "rsync_calls").read_text().splitlines()
+        self.assertEqual(len(calls), 1)
+        self.assertIn("--dry-run --existing", calls[0])
+        self.assertNotIn("--delete", calls[0])
+
+    def test_failed_asset_readback_stops_before_generic_mirror(self) -> None:
+        tmp, snapshot, markers, env, record = self._asset_publish_fixture()
+        self.addCleanup(tmp.cleanup)
+        env["TEST_API_INCOMPLETE"] = "1"
+        result = self._run(snapshot, env, "--api-artifact-record", str(record))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("transfer did not converge", result.stderr)
+        calls = (markers / "rsync_calls").read_text().splitlines()
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all("--delete" not in call for call in calls))
 
     def test_legacy_gzip_suffix_stops_before_rsync(self) -> None:
         tmp, snapshot, marker_dir, env = self._fixture()
@@ -327,6 +445,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         (checkout / "src").symlink_to(ROOT / "src", target_is_directory=True)
         script = checkout / "scripts" / DEPLOY_SCRIPT.name
         shutil.copy2(DEPLOY_SCRIPT, script)
+        self._write_command(Path(tmp.name) / "bin/git", 'printf "https://github.com/proteininnovation/OpenAntigens.git\\n"\n')
         with mock.patch(__name__ + ".DEPLOY_SCRIPT", script):
             result = self._run(snapshot, env)
 

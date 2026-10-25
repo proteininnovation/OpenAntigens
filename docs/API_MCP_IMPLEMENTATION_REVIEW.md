@@ -152,3 +152,62 @@ The opening design now also states the measured hosting blocker. These documenta
 All four original seats passed the final source and documentation. The three stale contract statements are closed; no material implementation finding remains. Runtime and scientific data were unchanged, so the reviewers reused the demonstrated checks instead of repeating them for documentation edits.
 
 The source is ready for a PR. Public launch remains blocked by the measured GoDaddy upload limit. Report visual QA and the remaining host, capacity, proxy, TLS, retention, analytics and recovery checks retain their stated scope. Review convergence authorizes no deployment or account change.
+
+## Fixed-GoDaddy architecture revision
+
+The owner confirmed that GoDaddy remains the provider and the plan must change. This supersedes the earlier recommendation to choose a different hosting target. The 245 MB ZIP and 1.21 GB startup peak above describe the previous all-data transport; they are not measurements of the revised reader.
+
+### Round 9 plan review
+
+The same four seats reviewed the small managed app plus immutable target assets on the existing GoDaddy static site. The plan keeps full summaries local for zero-origin search and pins target-container hashes for bounded reads. It preserves every scientific record, public schema, release ID, tool, quota and traffic/privacy rule. Full source validation remains in staging.
+
+The prototype with exact local summary lookup files measured 6,470,661 bytes compressed and 41,144,863 bytes expanded. This establishes sizing feasibility only. Implementation, full current-plus-previous packaging, memory, cold/warm reads, failure recovery, retention and actual GoDaddy behavior still require verification.
+
+| Finding | Priority | Decision and correction |
+| --- | --- | --- |
+| Inherited security wording still prohibits every runtime URL fetch | P2 | Accept. Permit only sealed fixed-origin static data reads and the separately controlled optional collector; continue to prohibit client-directed URLs, uploads and proxying. |
+| Inherited isolation fallback suggests another provider | P2 | Accept. Require GoDaddy-supported isolation controls or explicit owner acceptance of the documented residual risk; otherwise keep launch blocked within the fixed provider decision. |
+
+The related prompt-injection and integrity rows now distinguish user-directed fetching from sealed asset reads and local readiness from per-read remote validation. No runtime or host action occurred during this plan review. The same seats resume for round 10 closure before implementation.
+
+### Round 10 plan closure
+
+All four original seats passed the revised fixed-GoDaddy plan for implementation. The inherited fetch and provider wording is closed. The static sender must also restrict transfers to catalog-authorized assets while preserving the existing receiver asset union. No runtime implementation, host change or deployment is implied by plan approval. The same seats will review the resulting code and measured full-data artifacts.
+
+### Round 11 implementation review
+
+The same seats reviewed the implemented catalog, local summary reader, bounded static reader, packaging and additive publication path. Scientific and interface checks passed, including an independent replay of 291 legacy operations and exact agreement for all 118 selected FASTA exports. Source startup/search made zero target-origin reads. The full Python run had only the two intended human/mouse `.htaccess` golden changes; those hashes were reviewed and their three focused tests passed.
+
+| Finding | Priority | Decision and correction |
+| --- | --- | --- |
+| SYS-I11-1: retirement archive metadata bypasses the public-text screen | P2 | Accept. Apply one shared Python guard to source roots and compact query roots, and the matching code-owned policy to all Node root formats and retired responses. Allow safe public HTTPS permalinks or null; reject private text, encoded markers, credentials, unsafe hosts, query/fragment and controls. Preserve the 1,024-character limit and fail rather than discard a tombstone. |
+| SYS-I11-2: originless immutable responses omit `Vary: Origin` | P2 | Accept. Merge `Origin` into the response's cache variation even when no Origin header is present; preserve other tokens and wildcard semantics. Check both species, allowed origins, HEAD, 304 and denial responses. |
+
+The inherited service README provider-choice sentence was also corrected during review. Runtime fixes passed 110 Node tests; producer/compiler checks passed with matching policy declarations. Scientific payloads, public schema bytes and release IDs stayed unchanged.
+
+The normal two-full-release package passed mandatory source/static validation and size gates: 12,907,468 bytes ZIP, 82,192,952 bytes expanded, 35 files. Its 18 query-data files occupy 81,976,791 bytes; 19,898 authorized target assets occupy 447,159,606 bytes on the static side. This R11 archive predates the two fixes and is retained as a validated data baseline, not the final code release. Its ZIP SHA is `819a943fbbe31ca72660b67b5bd87047d901c6263d68972bd56602930e786c82`.
+
+Software and security accepted the narrow code-only repack described in the plan for these fixes: independently pin that full-build baseline, validate the unchanged data with current policy, verify static bytes, and replace every old code file. Scientific validation is inherited explicitly. Default new-data builds retain complete validation. The two local static header files were refreshed separately with before/after evidence; scientific files and original artifacts stayed unchanged.
+
+The same seats resume for round 12 to review the fixes and repack implementation. Final artifact/runtime measurements and live GoDaddy gates remain separate; no deployment or host change occurred.
+
+### Round 12 verification and artifact
+
+The corrected source passed the full 717-test Python suite and all 110 Node tests. Only the two intended human/mouse `.htaccess` golden hashes changed in this revision. The independent scientific replay remains exact for 291 operations and 118 FASTA exports; no scientific payload, public schema bytes or release ID changed.
+
+The final code-only artifact is 12,909,859 bytes ZIP, 82,198,385 bytes expanded and 36 entries. Its SHA-256 is `2b1b4b1ab8d5066ab26614b51067e9fed4d24119fe4962cd87cd00a0f51005c5`. All 18 data entries and their seal are byte-identical to the independently pinned full-build baseline; all 17 code/license files match the current checkout. Production installation and audit passed with zero reported vulnerabilities. The receipt labels scientific validation as inherited and current metadata/static checks as rerun.
+
+| Final local Node 22.23.4 check | Result |
+| --- | --- |
+| Active / maintenance reported app startup | 436.5 ms / 434.9 ms |
+| Active / maintenance peak OS RSS | 256,163,840 / 257,327,104 bytes |
+| Largest-target diagnostic peak OS RSS | 348,897,280 bytes |
+| HTTP/MCP parity | All five tools, both species and both full releases, passed in both modes |
+| API attempts / retries | 87 / 0, with default quotas and expected maintenance responses |
+| Target assets at startup / metadata / search | 0 / 0 / 0 |
+| Cold / immediate warm reads | One asset for the first target read, zero additional asset reads for warm calls |
+| Local fixture reads / denials / failures | 9 / 0 / 0 |
+
+The largest exercised container was 10,710,380 bytes decoded and 710,914 bytes compressed. All application children exited cleanly, the fixture stopped and input/code/data hashes remained unchanged. The first HTTP readiness observations include deliberate request pacing; startup values above are the app's own reported startup duration. Local transport, cache and latency checks do not establish live GoDaddy behavior. Real two-client concurrency was unavailable because a second loopback source address could not bind. External `ps` sampling was blocked; Node sampling and its OS peak counter remained available. Traffic-report visual QA remains unverified under the existing browser restriction.
+
+All four original seats passed round 12 after independently closing the two findings and checking the code-only artifact. No material implementation finding remains. GoDaddy is the fixed provider, the measured app now fits its documented upload limit, and the existing PR can carry this implementation. No app, deployment, DNS, billing, access or live analytics change was made. Live GoDaddy checks require the separately authorized publication procedure.

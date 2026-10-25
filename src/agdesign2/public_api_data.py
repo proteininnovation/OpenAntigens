@@ -21,7 +21,7 @@ from html.parser import HTMLParser
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
-from urllib.parse import quote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 from jsonschema import Draft202012Validator
 
 from .public_api_schema import (
@@ -55,6 +55,8 @@ PUBLIC_DOWNLOAD_ROLES = {
 EXTERNAL_DOWNLOAD_ROLES = frozenset({"index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"})
 SOURCE_DOMAINS = frozenset({"www.uniprot.org", "rest.uniprot.org", "www.rcsb.org", "www.ebi.ac.uk", "alphafold.ebi.ac.uk", "www.ncbi.nlm.nih.gov", "platform.opentargets.org", "identifiers.org", "doi.org", "orcid.org", "www.genenames.org", "www.ensembl.org", "gpcrdb.org"})
 _PRIVATE_MARKERS = ("/Users/", "/private/", "/home/", "file://", "-----BEGIN PRIVATE KEY", "Authorization: Bearer", "PRIVATE_CANARY", "sk-proj-")
+_ARCHIVE_HOST_SUFFIXES = ("localhost", "local", "localdomain", "internal", "intranet", "corp", "home", "home.arpa", "lan", "test", "invalid", "example", "onion")
+_ARCHIVE_DNS = r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]"
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -251,6 +253,53 @@ def _scan_public(value: Any) -> None:
         for key, child in value.items():
             _safe_text(key)
             _scan_public(child)
+
+
+def archive_url_policy() -> dict[str, Any]:
+    """Declarative code-owned policy mirrored in the runtime query schema and tests."""
+    return {"max_length": 1024, "percent_decode_passes": 4, "scheme": "https", "allowed_ports": [443], "allow_query": False, "allow_fragment": False, "reject_dot_segments": True, "reject_backslash": True, "reject_unicode_whitespace": True, "dns_pattern": _ARCHIVE_DNS, "blocked_host_suffixes": list(_ARCHIVE_HOST_SUFFIXES), "private_markers": list(_PRIVATE_MARKERS), "case_insensitive_archive_markers": True}
+
+
+def validate_archive_url(value: str | None) -> str | None:
+    """Retirement links are public HTTPS permalinks; unsafe metadata is never dropped."""
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value or len(value) > 1024 or re.search(r"%(?![0-9a-fA-F]{2})", value):
+        raise PublicDataError("Unsafe public archive URL")
+    text = value
+    for layer in range(5):
+        _scan_public(text)
+        if any(marker.casefold() in text.casefold() for marker in _PRIVATE_MARKERS) or any(char.isspace() or ord(char) <= 32 or ord(char) == 127 for char in text) or "\\" in text:
+            raise PublicDataError("Unsafe public archive URL text")
+        try:
+            parsed = urlsplit(text)
+            host = parsed.hostname or ""
+            valid = text.startswith("https://") and parsed.scheme == "https" and parsed.username is None and parsed.password is None and parsed.port in (None, 443) and not parsed.query and not parsed.fragment and "?" not in text and "#" not in text
+        except ValueError as exc:
+            raise PublicDataError("Unsafe public archive URL") from exc
+        if not valid or not re.fullmatch(_ARCHIVE_DNS, host.lower()) or any(host.lower() == suffix or host.lower().endswith("." + suffix) for suffix in _ARCHIVE_HOST_SUFFIXES) or any(segment in (".", "..") for segment in parsed.path.split("/")):
+            raise PublicDataError("Unsafe public archive URL")
+        try:
+            decoded = unquote(text, errors="strict")
+        except UnicodeError as exc:
+            raise PublicDataError("Unsafe public archive URL encoding") from exc
+        if decoded == text:
+            return value
+        if layer == 4:
+            raise PublicDataError("Public archive URL exceeds supported encoding depth")
+        text = decoded
+    raise PublicDataError("Unsafe public archive URL")
+
+
+def validate_retirement_metadata(root: dict[str, Any]) -> None:
+    """Validate public root text and every retained retirement link without data loss."""
+    if not isinstance(root, dict) or not isinstance(root.get("retired_releases", []), list):
+        raise PublicDataError("Invalid public retirement metadata")
+    _scan_public(root)
+    for tombstone in root.get("retired_releases", []):
+        if not isinstance(tombstone, dict):
+            raise PublicDataError("Invalid public retirement metadata")
+        validate_archive_url(tombstone.get("archive_url"))
 
 
 def public_citation_downloads(citation: dict[str, Any]) -> dict[str, bytes]:
@@ -1200,6 +1249,7 @@ def _build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path:
                 seen_retired.add(tombstone["release_id"])
         retired_releases = retired_releases[:1000]
     root_manifest = {"schema_version": SCHEMA_VERSION, "current_release_id": release_id, "releases": releases, "retired_releases": retired_releases}
+    validate_retirement_metadata(root_manifest)
     if len(canonical_bytes(root_manifest)) + 1 > SHARD_LIMIT:
         raise PublicDataError("Public root manifest exceeds its bounded service budget")
     root_bytes = _write_json(output, "manifest.json", root_manifest)
@@ -1374,6 +1424,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
         raise PublicDataError("Root public manifest checksum mismatch")
     manifest = _read_json(root / "manifest.json")
     validate_schema("root_manifest", manifest)
+    validate_retirement_metadata(manifest)
     release_ids = [row["release_id"] for row in manifest["releases"]]
     if not 1 <= len(release_ids) <= 2 or len(set(release_ids)) != len(release_ids) or manifest["current_release_id"] not in release_ids:
         raise PublicDataError("Invalid current/retained public releases")
@@ -1383,10 +1434,6 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
         if retired_id in retired_ids or retired_id in release_ids or retired_id == tombstone["retired_by_release_id"]:
             raise PublicDataError("Invalid or duplicate retired public release identity")
         retired_ids.add(retired_id)
-        if tombstone["archive_url"] is not None:
-            archive = urlsplit(tombstone["archive_url"])
-            if archive.scheme != "https" or not archive.hostname or archive.username or archive.password:
-                raise PublicDataError("Unsafe recorded retired-release archive URL")
     allowed = {"manifest.json", "manifest.sha256"}
     total_index_bytes = 0
     for pointer in manifest["releases"]:

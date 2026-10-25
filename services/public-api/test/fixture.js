@@ -23,6 +23,7 @@ export async function fixture(
   {
     legacyRootSchema = false,
     extraUnresolved = 0,
+    unresolvedFirst = false,
     legacyIndex = false,
     inputHashes = {},
     sequenceWarnings = ["Warning with unicode α; spaces and = / ? %."],
@@ -302,6 +303,9 @@ export async function fixture(
       entry_name: "unresolved",
       gene_symbol: "UNRESOLVED",
       search_text: "catalog unresolved",
+      section_availability: Object.fromEntries(
+        SECTIONS.map((section) => [section, "unknown"]),
+      ),
       construct_count: 0,
       construct_state: "unavailable",
     };
@@ -363,12 +367,14 @@ export async function fixture(
       );
       unresolvedRows.push([record, path]);
     }
+    const sourceRows = [[summary, target], ...unresolvedRows];
+    if (unresolvedFirst) sourceRows.push(sourceRows.shift());
     const index_path = await shard(
       s,
       `${prefix}/index.json`,
       legacyIndex
-        ? [summary, ...unresolvedRows.map(([record]) => record)]
-        : [[summary, target], ...unresolvedRows].map(([record, path]) => ({
+        ? sourceRows.map(([record]) => record)
+        : sourceRows.map(([record, path]) => ({
             ...Object.fromEntries(rowFields.map((key) => [key, record[key]])),
             summary_path: path,
           })),
@@ -510,7 +516,12 @@ export async function fixture(
     const targets = entries
       .filter((entry) => entry.kind === "target")
       .map((entry) => entry.payload.data);
-    const summaries = targets.map((target) => target.summary);
+    const summaryByRecord = new Map(
+      targets.map((target) => [target.summary.record_id, target.summary]),
+    );
+    const summaries = entries
+      .find((entry) => entry.kind === "index")
+      .payload.data.map((row) => summaryByRecord.get(row.record_id));
     const constructs = entries
       .filter((entry) => entry.kind === "constructs")
       .flatMap((entry) => entry.payload.data);

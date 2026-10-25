@@ -5,7 +5,13 @@ import { resolve, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { createStorage } from "./storage.js";
+import { loadQueryCatalog } from "./query-catalog.js";
+import { createRemoteQueryStorage } from "./query-storage.js";
 import { parsePublicJson } from "./json.js";
+import {
+  validateRetirementMetadata,
+  isPublicArchiveUrl,
+} from "./public-boundary.js";
 import {
   outputSchema,
   provenanceOutputSchema,
@@ -227,7 +233,7 @@ export class Provider {
       ? this.storage.read(path, max, expected, collect, targetPath)
       : this.readPhysical(path, max, expected, collect);
   }
-  async readPhysical(path, max, expected, collect = true) {
+  async openPhysical(path, max, expected) {
     if (!safePath(path)) throw new Error("Invalid bundle path");
     let current = this.directory;
     for (const part of path.split("/")) {
@@ -253,6 +259,15 @@ export class Provider {
         (expected && stat.size !== expected.bytes)
       )
         throw new Error("Bundle size");
+      return { handle, stat };
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+  async readPhysical(path, max, expected, collect = true) {
+    const { handle, stat } = await this.openPhysical(path, max, expected);
+    try {
       const collected = collect ? Buffer.alloc(stat.size) : null;
       const checksum = createHash("sha256");
       let length = 0;
@@ -285,9 +300,89 @@ export class Provider {
       await handle.close();
     }
   }
+  async readPhysicalRange(path, offset, length, expected) {
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < 0 ||
+      !Number.isSafeInteger(length) ||
+      length < 1 ||
+      length > LIMITS.shard ||
+      !Number.isSafeInteger(offset + length) ||
+      offset + length > expected.bytes
+    )
+      throw new Error("Invalid local summary range");
+    const { handle, stat } = await this.openPhysical(
+      path,
+      LIMITS.externalDownload,
+      expected,
+    );
+    try {
+      const bytes = Buffer.alloc(length);
+      let read = 0;
+      while (read < length) {
+        const result = await handle.read(
+          bytes,
+          read,
+          length - read,
+          offset + read,
+        );
+        if (!result.bytesRead) throw new Error("Invalid local summary range");
+        read += result.bytesRead;
+      }
+      if ((await handle.stat()).size !== stat.size)
+        throw new Error("Invalid local summary range");
+      return bytes;
+    } finally {
+      await handle.close();
+    }
+  }
+  async initializeQuery() {
+    const catalog = await loadQueryCatalog(
+      this.directory,
+      this.options.querySeal,
+      {
+        readPhysical: this.readPhysical.bind(this),
+        readRange: this.readPhysicalRange.bind(this),
+        semanticHash,
+      },
+    );
+    this.queryCatalog = catalog;
+    this.releases = catalog.infos;
+    this.retired = catalog.retired;
+    this.current = catalog.root.current_release_id;
+    this.storage = createRemoteQueryStorage({
+      transportIndex: catalog.transportIndex,
+      releases: this.releases,
+      readSummary: catalog.readSummary,
+      fetchImpl: this.options.fetchImpl,
+    });
+    const current = this.releases.get(this.current);
+    const metadata = this.envelope(
+      current,
+      null,
+      this.releaseMetadata(current),
+      {
+        discovery_state: "active",
+        current_release_id: this.current,
+        releases: [...this.releases.values()].map((info) =>
+          this.releaseMetadata(info),
+        ),
+        retirement_history: {
+          known_retired_count: this.retired.size,
+          limit: 1000,
+          lookup_endpoint: "/v1/releases/{release_id}",
+        },
+      },
+    );
+    if (Buffer.byteLength(JSON.stringify(metadata)) > LIMITS.json)
+      throw new Error("Local release metadata exceeds response limit");
+    this.ready = true;
+    return this;
+  }
   async initialize() {
     this.ready = false;
     this.directory = await realpath(this.directory);
+    if (this.options.querySeal) return this.initializeQuery();
     this.storage = await createStorage(
       this.directory,
       this.options,
@@ -306,6 +401,7 @@ export class Provider {
     this.retired.clear();
     this.directory = await realpath(this.directory);
     const root = parseJson(await this.readSafe("manifest.json", LIMITS.shard));
+    validateRetirementMetadata(root);
     if (!rootSchema.safeParse(root).success) throw new Error("Bundle manifest");
     const retainedIds = new Set(
       root.releases.map((pointer) => pointer.release_id),
@@ -852,6 +948,19 @@ export class Provider {
       throw new Error("Asset payload identity");
   }
   async json(info, path, max = LIMITS.shard, targetPath) {
+    if (info.query) {
+      try {
+        return await this.storage.readJson(info, path, targetPath);
+      } catch (error) {
+        if (error.localQueryIntegrity) this.ready = false;
+        if (error instanceof ApiError) throw error;
+        throw new ApiError(
+          503,
+          "unavailable",
+          "The requested released data is temporarily unavailable.",
+        );
+      }
+    }
     try {
       const file = info.manifest.files[path];
       if (!file) throw new Error("Unlisted shard");
@@ -874,6 +983,14 @@ export class Provider {
     const info = this.releases.get(id);
     if (!info) {
       const retirement = this.retired.get(id);
+      if (retirement && !isPublicArchiveUrl(retirement.archive_url)) {
+        this.ready = false;
+        throw new ApiError(
+          503,
+          "unavailable",
+          "The released metadata is unavailable.",
+        );
+      }
       if (retirement)
         throw new ApiError(
           410,
@@ -903,7 +1020,7 @@ export class Provider {
       notes,
       input_sha256,
       projection_methods,
-    } = info.manifest.provenance;
+    } = info.provenanceDTO ?? info.manifest.provenance;
     const manifest = this.manifestReference(info);
     return {
       software_commit,
@@ -913,7 +1030,9 @@ export class Provider {
       notes,
       projection_methods: projection_methods ?? null,
       input_hashes: {
-        count: Object.keys(input_sha256).length,
+        count: info.provenanceDTO
+          ? info.provenanceDTO.input_hashes.count
+          : Object.keys(input_sha256).length,
         manifest_url: manifest.url,
         manifest_sha256: manifest.sha256,
         json_pointer: "/provenance/input_sha256",
@@ -963,7 +1082,9 @@ export class Provider {
   }
   call(name, raw, signal) {
     return this.storage
-      ? this.storage.withContext(() => this.callData(name, raw, signal))
+      ? this.storage.withContext(() => this.callData(name, raw, signal), {
+          signal,
+        })
       : this.callData(name, raw, signal);
   }
   async callData(name, raw, signal) {
@@ -1038,8 +1159,17 @@ export class Provider {
             "handler_timeout",
             "The request exceeded its time budget.",
           );
-        const summary = (await this.json(info, row.summary_path, LIMITS.target))
-          .summary;
+        let summary;
+        if (info.query) {
+          try {
+            summary = await this.queryCatalog.readSummary(info, row);
+          } catch (error) {
+            this.ready = false;
+            throw error;
+          }
+        } else
+          summary = (await this.json(info, row.summary_path, LIMITS.target))
+            .summary;
         if (
           summary.target_id !== row.target_id ||
           summary.record_id !== row.record_id

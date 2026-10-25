@@ -10,7 +10,7 @@ from agdesign2.portal import build_portal
 from agdesign2.public_api_data import build_public_api_bundle
 
 
-def build(root: Path, *, warning_heavy: bool = False) -> Path:
+def build(root: Path, *, warning_heavy: bool = False, remote: bool = False) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     summaries: dict[str, Path] = {}
     for species, taxon, accession in (("human", 9606, "P00001"), ("mouse", 10090, "P00002")):
@@ -78,8 +78,19 @@ def build(root: Path, *, warning_heavy: bool = False) -> Path:
     from agdesign2.public_api_transport import build_runtime_data
 
     build_runtime_data(root / "bundle", root / "runtime")
+    if remote:
+        from agdesign2.public_api_query import build_query_runtime
+        result = build_query_runtime(
+            root / "bundle", root / "remote-runtime", root / "remote-static",
+            schema_path=Path(__file__).resolve().parents[1] / "services/public-api/src/query-schema.json",
+        )
+        (root / "remote-seal.json").write_text(json.dumps(result["seal"], sort_keys=True) + "\n", encoding="utf-8")
     return manifest
 
 
+def build_remote(root: Path, *, warning_heavy: bool = False) -> Path:
+    return build(root, warning_heavy=warning_heavy, remote=True)
+
+
 if __name__ == "__main__":
-    print(build(Path(sys.argv[1]).resolve(), warning_heavy="--warning-heavy" in sys.argv[2:]))
+    print(build(Path(sys.argv[1]).resolve(), warning_heavy="--warning-heavy" in sys.argv[2:], remote="--remote" in sys.argv[2:]))

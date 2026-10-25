@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isPublicArchiveUrl } from "./public-boundary.js";
 export const SECTIONS = [
   "topology",
   "domains",
@@ -83,7 +84,7 @@ export const tombstoneSchema = z
   .object({
     release_id: release,
     retired_by_release_id: release,
-    archive_url: z.string().max(1024).url().nullable(),
+    archive_url: z.string().max(1024).nullable().refine(isPublicArchiveUrl),
   })
   .strict();
 export const rootSchema = z

@@ -4,6 +4,8 @@ Use the existing [Plausible dashboard](https://plausible.io/openantigens.org) fo
 
 Plausible filters some automated traffic. An accepted event can still be absent from its visitor or location reports. For API/MCP calls, locations describe the verified network client, which may be an agent or gateway. The local report keeps those two measures separate. It reports approximate anonymous daily clients when an identity is available; it does not infer people, country or city from those identities. The application ledger is on by default; Plausible delivery is off by default.
 
+The app's immutable target-asset reads use fixed service headers. Incoming client IP addresses, user agents, cookies and credentials are excluded from those static-host requests. Backend asset reads and cache hits are internal service work; the API/MCP ledger counts application requests independently of cache behavior.
+
 ## Export production logs
 
 1. Sign in to the existing GoDaddy account and open **Node.js Hosting**, then **My Apps**. Select the OpenAntigens service and open **Runtime Logs**. These controls are described in [GoDaddy's Node.js Hosting help](https://www.godaddy.com/help/deploy-my-loveable-app-with-godaddy-nodejs-hosting-42981).

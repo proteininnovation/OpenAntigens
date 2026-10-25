@@ -154,6 +154,13 @@ export function makeServer(provider, options = {}) {
       res.setHeader("X-Request-ID", id);
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("Cache-Control", "no-store");
+      const previousVary = res.getHeader("Vary");
+      const vary = (Array.isArray(previousVary) ? previousVary : [previousVary ?? ""])
+        .flatMap((value) => String(value).split(","))
+        .map((value) => value.trim())
+        .filter(Boolean);
+      if (!vary.some((value) => value === "*" || value.toLowerCase() === "origin"))
+        res.setHeader("Vary", [...vary, "Origin"].join(", "));
       const send = (
         status,
         data,
@@ -286,7 +293,6 @@ export function makeServer(provider, options = {}) {
           );
         if (origin) {
           res.setHeader("Access-Control-Allow-Origin", origin);
-          res.setHeader("Vary", "Origin");
           res.setHeader(
             "Access-Control-Expose-Headers",
             "ETag, X-Request-ID, Retry-After, Link, Content-Disposition",
@@ -656,6 +662,15 @@ export async function readBuildPins(
     throw new Error("Invalid service build seal");
   if (!Object.hasOwn(value, "data_transport")) return {};
   const seal = value.data_transport;
+  if (seal?.format === "openantigens-own-static-query-v1") {
+    if (
+      seal.static_origin !== "https://openantigens.org" ||
+      !/^[a-f0-9]{64}$/.test(seal.query_root_sha256 ?? "") ||
+      !/^[a-f0-9]{64}$/.test(seal.source_root_manifest_sha256 ?? "")
+    )
+      throw new Error("Invalid service build seal");
+    return { querySeal: seal };
+  }
   if (
     !seal ||
     seal.format !== "openantigens-target-gzip-v1" ||

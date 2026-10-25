@@ -662,7 +662,23 @@ def _pubtator_count_or_existing(pubtator_info: dict[str, Any] | None, item: dict
 _MOUSE_REDIRECT_MAP = "mouse_portal_redirects.tsv"
 
 
-_PORTAL_HTACCESS_COMMON = """\
+_QUERY_ASSET_HTACCESS = """\
+# Immutable query containers are gzip payloads, not HTTP-encoded text assets.
+<FilesMatch "\\.oap$">
+  ForceType application/octet-stream
+  <IfModule mod_env.c>
+    SetEnv no-gzip 1
+  </IfModule>
+  <IfModule mod_headers.c>
+    Header unset Content-Encoding
+    Header set X-Content-Type-Options nosniff
+    Header set Cache-Control "public, max-age=31536000, immutable, no-transform" "expr=%{REQUEST_STATUS} == 200"
+  </IfModule>
+</FilesMatch>
+"""
+
+
+_PORTAL_HTACCESS_COMMON = _QUERY_ASSET_HTACCESS + """\
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript image/svg+xml
 </IfModule>

@@ -8,14 +8,22 @@ import json
 import sys
 from pathlib import Path
 
-from agdesign2.public_api_release import build_api_service_release
+from agdesign2.public_api_release import build_api_service_release, repack_api_service_release
 
 
 def main(argv: list[str] | None = None) -> int:
     repo = Path(__file__).resolve().parents[1]
-    parser = argparse.ArgumentParser(description=__doc__)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    repack = argv[:1] == ["repack"]
+    if repack:
+        argv = argv[1:]
+    parser = argparse.ArgumentParser(description="Explicit code-only repack of separately pinned reviewed data." if repack else __doc__)
     parser.add_argument("--service-dir", type=Path, default=repo / "services/public-api")
-    parser.add_argument("--bundle-dir", type=Path, required=True, help="Validated frozen API data bundle.")
+    if repack:
+        parser.add_argument("--reviewed-record", type=Path, required=True)
+        parser.add_argument("--expected-zip-sha256", required=True, help="Independent SHA from the known full-validation receipt; never derive it from the candidate.")
+    else:
+        parser.add_argument("--bundle-dir", type=Path, required=True, help="Validated frozen API data bundle.")
     parser.add_argument("--public-site-dir", type=Path, required=True, help="Final static artifact with all retained downloads.")
     parser.add_argument("--output", type=Path, required=True, help="New .zip path outside the input directories.")
     parser.add_argument("--repo-root", type=Path, default=repo, help="Canonical source checkout containing public licenses.")
@@ -26,17 +34,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dependency-audit-report", type=Path, help="Record a local npm audit JSON report hash; this does not assert a passed gate.")
     args = parser.parse_args(argv)
     try:
-        result = build_api_service_release(
-            args.service_dir, args.bundle_dir, args.public_site_dir, args.output,
+        common = dict(
             repo_root=args.repo_root, dry_run=args.dry_run,
             max_zip_bytes=args.max_zip_bytes, max_expanded_bytes=args.max_expanded_bytes,
             reserve_fraction=args.reserve_fraction,
             dependency_audit_report=args.dependency_audit_report,
         )
+        if repack:
+            result = repack_api_service_release(args.reviewed_record, args.expected_zip_sha256, args.service_dir, args.public_site_dir, args.output, **common)
+        else:
+            result = build_api_service_release(args.service_dir, args.bundle_dir, args.public_site_dir, args.output, **common)
     except (ValueError, OSError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    summary = {key: value for key, value in result.items() if key != "files"}
+    summary = {key: value for key, value in result.items() if key not in {"files", "query_static_assets"}}
     summary["artifact_record"] = None if args.dry_run else str(args.output.expanduser().resolve().with_suffix(".artifact.json"))
     print(json.dumps(summary, ensure_ascii=False, sort_keys=True, indent=2))
     return 0

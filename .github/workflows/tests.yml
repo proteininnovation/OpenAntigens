@@ -34,9 +34,14 @@ jobs:
         run: |
           npm ci --prefix services/public-api --ignore-scripts
           npm --prefix services/public-api run build
-          python -m tests.build_public_api_fixture "$RUNNER_TEMP/public-api-fixture"
-          python -m tests.build_public_api_fixture "$RUNNER_TEMP/public-api-overflow" --warning-heavy
-          OPENANTIGENS_TEST_DATA_DIR="$RUNNER_TEMP/public-api-fixture/bundle" OPENANTIGENS_PACKED_FIXTURE="$RUNNER_TEMP/public-api-fixture/runtime" OPENANTIGENS_TEST_OVERFLOW_DATA_DIR="$RUNNER_TEMP/public-api-overflow/bundle" npm --prefix services/public-api test
+          python -m tests.build_public_api_fixture "$RUNNER_TEMP/public-api-fixture" --remote
+          python -m tests.build_public_api_fixture "$RUNNER_TEMP/public-api-overflow" --warning-heavy --remote
+          OPENANTIGENS_TEST_DATA_DIR="$RUNNER_TEMP/public-api-fixture/bundle" \
+          OPENANTIGENS_PACKED_FIXTURE="$RUNNER_TEMP/public-api-fixture/runtime" \
+          OPENANTIGENS_TEST_OVERFLOW_DATA_DIR="$RUNNER_TEMP/public-api-overflow/bundle" \
+          OPENANTIGENS_QUERY_FIXTURE="$RUNNER_TEMP/public-api-fixture" \
+          OPENANTIGENS_QUERY_OVERFLOW_FIXTURE="$RUNNER_TEMP/public-api-overflow" \
+          npm --prefix services/public-api test
           npm --prefix services/public-api audit --audit-level=high
       - name: Browser regressions
         run: |
