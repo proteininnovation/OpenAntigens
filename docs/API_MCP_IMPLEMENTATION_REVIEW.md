@@ -103,7 +103,7 @@ All four original seats reread the R4 corrections, packed transport, disease cov
 | --- | --- | --- |
 | SEC-IMP-R5-1 / SYS-R5-1: duplicate JSON keys hide a value from validation while its raw bytes enter the ZIP | P2 | Accept. Reject duplicate keys at every public JSON boundary, including manifests, schemas, logical shards, JSONL exports, packed members and runtime reads. Test rehashed hidden values, keys that decode to the same text, and nested duplicates. Preserve valid numeric spellings and exact original bytes. |
 
-The disease projection follows the website's first 100 associations in source order, with explicit projected/source counts and original-source checksums. The full website TSV is preserved. This is an implementation scope decision; no explicit user approval of the 100-row policy is inferred. Target search excludes disease-ID filtering to avoid misleading membership results from this selection.
+The disease projection follows the website's first 100 associations in source order, with explicit projected/source counts and original-source checksums. The full website TSV is preserved. The owner explicitly confirmed this scope on October 25, 2026. Target search excludes disease-ID filtering to avoid misleading membership results from this selection.
 
 Physical packing preserves logical paths, checksums and canonical bytes. Related target shards share bounded gzip containers. The app keeps sealed metadata for the seven static bulk roles; staging checks their complete byte parity. Runtime does not claim to verify remote static copies.
 
