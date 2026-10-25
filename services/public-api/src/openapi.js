@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   inputs,
   provenanceOutputSchema,
+  diseaseCoverageSchema,
   GUIDANCE,
   LIMITS,
   SECTIONS,
@@ -32,7 +33,7 @@ const target = {
 };
 const query = (name, schema) => ({ name, in: "query", schema });
 const pages = [
-  query("limit", { type: "integer", minimum: 1, maximum: 100, default: 25 }),
+  query("limit", { type: "integer", minimum: 1, maximum: 10, default: 5 }),
   query("cursor", { type: "string", maxLength: 2048 }),
 ];
 const response = {
@@ -51,15 +52,15 @@ const errors = Object.fromEntries(
     code,
     {
       description: {
-        400: "invalid_arguments, invalid_cursor, species_mismatch or unsupported_capability",
+        400: "invalid_arguments, invalid_cursor, refine_query, species_mismatch or unsupported_capability",
         403: "invalid_host or invalid_origin",
         404: "not_found",
         405: "method_not_allowed",
         406: "not_acceptable",
         410: "retired_release (only with a published tombstone)",
-        413: "request_too_large or result_too_large; data overflow supplies a complete records download",
+        413: "request_too_large or result_too_large; data overflow supplies a complete records download; sequence overflow also supplies its exact record_selector",
         415: "unsupported_media_type",
-        429: "rate_limited, Retry-After: 60",
+        429: "rate_limited; Retry-After gives the bounded wait in seconds",
         503: "unavailable or handler_timeout",
       }[code],
       content: {
@@ -110,7 +111,7 @@ export const openapi = {
   },
   "x-limits": LIMITS,
   "x-query-policy":
-    "Unknown or duplicate query arguments are rejected. Literal release IDs required on data routes. Species and target ID must agree. Data is frozen and processing state is historical.",
+    "Interactive lookups require at least two literal query characters; unfiltered catalogue requests and wildcards are rejected. Collections default to 5, maximum 10; searches expose a 20-record window and require refinement for further matches. Unknown or duplicate query arguments are rejected. Literal release IDs required on data routes. Species and target ID must agree.",
   "x-mcp": {
     endpoint: "/mcp",
     protocol: "2026-07-28",
@@ -140,16 +141,20 @@ export const openapi = {
     ),
     [`${base}/targets`]: operation(
       "searchTargets",
-      "Search or list released catalogue",
+      "Find an interactive window of up to 20 matching targets",
       [
         release,
         species,
-        query("q", {
-          type: "string",
-          maxLength: 200,
-          description:
-            "Case-insensitive substring over public aliases, accessions, names, family and topology.",
-        }),
+        {
+          ...query("q", {
+            type: "string",
+            minLength: 2,
+            maxLength: 200,
+            description:
+              "Required case-insensitive literal substring of at least two trimmed characters. Wildcards are rejected. Refine the query after the first 20 matches.",
+          }),
+          required: true,
+        },
         query("track", { type: "string", enum: TRACKS }),
         query("status", { type: "string", enum: STATUSES }),
         query("structure", {
@@ -159,13 +164,6 @@ export const openapi = {
         query("constructs", {
           type: "string",
           enum: ["available", "unavailable", "unknown"],
-        }),
-        query("disease_id", {
-          type: "string",
-          minLength: 1,
-          maxLength: 128,
-          description:
-            "Exact recorded association source ID; human capability only.",
         }),
         ...pages,
       ],
@@ -177,7 +175,7 @@ export const openapi = {
     ]),
     [`${detail}/sections/{section}`]: operation(
       "getSection",
-      "Read one evidence section page; similarity limit maximum 50",
+      "Read one evidence section page; disease coverage declares the first-100 public selection and original source count",
       [
         release,
         species,
@@ -236,11 +234,6 @@ export const openapi = {
         }),
       ],
     ),
-    [`${base}/downloads`]: operation(
-      "getDownloads",
-      "Discover complete immutable bulk records, index, constructs, sequences, schemas and citations",
-      [release, species],
-    ),
     "/mcp": {
       post: {
         summary: "Stateless tools-only MCP endpoint",
@@ -292,6 +285,8 @@ export const openapi = {
           provenance: { $ref: "#/components/schemas/ProvenanceOutput" },
           next_cursor: { type: ["string", "null"] },
           total: { type: "integer", minimum: 0 },
+          search_window: { const: 20 },
+          refine_query: { type: "boolean" },
           state: {
             enum: [
               "available",
@@ -303,12 +298,22 @@ export const openapi = {
             ],
           },
           reason: { type: ["string", "null"] },
+          coverage: z.toJSONSchema(diseaseCoverageSchema),
           current_release_id: { type: "string" },
           releases: { type: "array", items: { type: "object" } },
-          retired_releases: {
-            type: "array",
-            maxItems: 1000,
-            items: { $ref: "#/components/schemas/Retirement" },
+          retirement_history: {
+            type: "object",
+            required: ["known_retired_count", "limit", "lookup_endpoint"],
+            additionalProperties: false,
+            properties: {
+              known_retired_count: {
+                type: "integer",
+                minimum: 0,
+                maximum: 1000,
+              },
+              limit: { const: 1000 },
+              lookup_endpoint: { const: "/v1/releases/{release_id}" },
+            },
           },
           discovery_state: { enum: ["active", "publication_in_progress"] },
         },
@@ -357,6 +362,21 @@ export const openapi = {
               message: { type: "string" },
               request_id: { type: "string", format: "uuid" },
               download: { type: "object" },
+              record_selector: {
+                type: "object",
+                required: ["target_id", "construct_id"],
+                additionalProperties: false,
+                properties: {
+                  target_id: {
+                    type: "string",
+                    pattern: "^(9606|10090):(uniprot|refseq):[A-Za-z0-9_.-]+$",
+                  },
+                  construct_id: {
+                    type: ["string", "null"],
+                    pattern: "^[a-f0-9]{64}$",
+                  },
+                },
+              },
               release_id: { type: "string", pattern: "^[a-f0-9]{64}$" },
               retirement: { $ref: "#/components/schemas/Retirement" },
             },
@@ -489,7 +509,6 @@ export function openapiFor(provider) {
     listConstructs: "list_constructs",
     getReferenceSequence: "get_sequence",
     getConstructSequence: "get_sequence",
-    getDownloads: "get_downloads",
   };
   for (const item of Object.values(result.paths)) {
     const name = operations[item.get?.operationId];

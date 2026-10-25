@@ -38,13 +38,15 @@ The portal is the primary output. Each build produces:
 
 Static builds are written to `outputs/<batch>/portal/`. Dynamic serving reads the same JSON and report files live and exposes the same pages plus JSON APIs.
 
-The [public API and MCP service](services/public-api/README.md) serves one frozen human/mouse release through HTTP and six read-only MCP tools. The [implementation plan](docs/API_MCP_PLAN.md) and [deployment runbook](docs/API_MCP_DEPLOYMENT.md) describe the public data boundary, release checks, hosting prerequisites, and rollback.
+The [public API and MCP service](services/public-api/README.md) serves one frozen human/mouse release through HTTP and five read-only MCP tools. It supports individual lookups and small follow-ups, with explicit queries, bounded results and request limits. The [implementation plan](docs/API_MCP_PLAN.md) and [deployment runbook](docs/API_MCP_DEPLOYMENT.md) describe the public data boundary, release checks, hosting prerequisites, and rollback.
 
 ## Website analytics and privacy
 
 The public portal uses Plausible Analytics to count page visits, clicks on static TSV/JSON downloads, and five browser-generated export actions. The integration uses no analytics cookies, session replay, advertising identifiers, cross-site tracking, or custom event properties. Search terms, protein sequences, residue selections, clipboard contents, names, and email addresses are not attached to analytics events.
 
 Every portal page links to `privacy.html`, which explains what is measured and how aggregate results may be reported to funders. Dashboard access remains private. Funder reports suppress breakdowns with fewer than five unique visitors. See [`docs/ANALYTICS.md`](docs/ANALYTICS.md) for account setup, the event dictionary, testing, and quarterly reporting rules.
+
+The API/MCP service keeps sanitized request records, including automated traffic, errors and rate-limit refusals. [Traffic reports](docs/API_MCP_ANALYTICS.md) turn exported host logs into local HTML, JSON and CSV views. Optional server events use the existing Plausible dashboard for eligible visitor geography; bot filtering and delivery limits remain explicit so its counts can be compared with the complete application records.
 
 ## Quick start
 

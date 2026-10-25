@@ -2,6 +2,8 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { request } from "node:http";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import {
   readFile,
@@ -17,9 +19,9 @@ import {
   StreamableHTTPClientTransport,
 } from "@modelcontextprotocol/client";
 import { Provider, semanticHash, fasta } from "../src/provider.js";
-import { makeServer } from "../src/server.js";
+import { makeServer, readBuildPins, publicationState } from "../src/server.js";
 import { LIMITS } from "../src/contracts.js";
-import { fixture } from "./fixture.js";
+import { fixture, packedFixture } from "./fixture.js";
 import { z } from "zod";
 const decodedFasta = (text) => {
   const [header, ...lines] = text.trimEnd().split("\n");
@@ -41,6 +43,14 @@ const decodedFasta = (text) => {
     sequence: lines.join(""),
   };
 };
+const testAdmission = {
+  clientRate: 1000,
+  clientBurst: 1000,
+  globalRate: 10000,
+  globalBurst: 10000,
+  concurrency: 8,
+  clientConcurrency: 8,
+};
 const meta = {
   "io.modelcontextprotocol/protocolVersion": "2026-07-28",
   "io.modelcontextprotocol/clientCapabilities": {},
@@ -50,8 +60,7 @@ async function setup(t, config = {}) {
   const f = await fixture();
   const provider = await new Provider(f.directory).initialize();
   const server = makeServer(provider, {
-    clientRate: 1000,
-    globalRate: 10000,
+    ...testAdmission,
     ...config,
   });
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
@@ -108,19 +117,18 @@ test("HTTP routes preserve species, identity, filters, cursors, exact sequences 
   assert.equal(r.status, 200);
   assert.equal(r.headers.get("cache-control"), "no-store");
   assert.equal((await r.json()).current_release_id, f.release_id);
-  r = await fetch(`${f.root}/human/targets?limit=1`);
+  r = await fetch(`${f.root}/human/targets?q=catalog&limit=1`);
   const first = await r.json();
   assert.equal(first.total, 2);
   assert.equal(first.data[0].target_id, f.target_id);
   assert.ok(first.next_cursor);
   r = await fetch(
-    `${f.root}/human/targets?limit=1&cursor=${first.next_cursor}`,
+    `${f.root}/human/targets?q=catalog&limit=1&cursor=${first.next_cursor}`,
   );
   assert.equal((await r.json()).data[0].target_id, null);
   for (const args of [
     "q=ALIAS",
-    "track=secreted&status=ok&structure=unavailable&constructs=available",
-    "disease_id=EFO%3A0001",
+    "q=catalog&track=secreted&status=ok&structure=unavailable&constructs=available",
   ]) {
     r = await fetch(`${f.root}/human/targets?${args}`);
     assert.equal(r.status, 200);
@@ -173,17 +181,17 @@ test("HTTP routes preserve species, identity, filters, cursors, exact sequences 
     r.headers.get("content-disposition"),
     /^attachment; filename="openantigens-/,
   );
-  r = await fetch(`${f.root}/mouse/targets`);
+  r = await fetch(`${f.root}/mouse/targets?q=catalog`);
   assert.equal((await r.json()).data[0].taxon_id, 10090);
-  r = await fetch(`${f.root}/human/downloads`);
-  assert.equal((await r.json()).data[0].name, "records.jsonl.gz");
+  assert.equal((await fetch(`${f.root}/human/downloads`)).status, 404);
   for (const [path, status] of [
-    [`${f.root}/human/targets?limit=101`, 400],
+    [`${f.root}/human/targets?q=catalog&limit=101`, 400],
     [`${f.root}/human/targets?q=a&q=b`, 400],
     [`${f.target}?q=a`, 400],
     [`${f.root}/human/targets?cursor=${first.next_cursor}&q=changed`, 400],
     [`${f.root}/mouse/targets/${f.target_id}`, 400],
     [`${f.root}/mouse/targets?disease_id=EFO:1`, 400],
+    [`${f.root}/human/targets?q=catalog&disease_id=EFO:0001`, 400],
     [`${f.root}/mouse/targets/10090:uniprot:Q12345/sections/disease`, 400],
     [`${f.base}/v1/releases/current/human/targets`, 400],
     [`${f.target}/sequence?format=xml`, 400],
@@ -255,7 +263,7 @@ test("HTTP rejects untrusted origins, hosts, bodies, media and methods; exact CO
   assert.equal((await fetch(`${f.target}?${"a".repeat(4096)}`)).status, 413);
 });
 test("rate and concurrency admission limits return Retry-After and do not trust forwarded IPs", async (t) => {
-  const f = await setup(t, { clientRate: 1 });
+  const f = await setup(t, { clientRate: 1, clientBurst: 1 });
   assert.equal((await fetch(`${f.base}/healthz`)).status, 200);
   const r = await fetch(`${f.base}/healthz`, {
     headers: { "x-forwarded-for": "1.2.3.4" },
@@ -278,7 +286,7 @@ test("readiness fails closed; changed bytes and symlinks cannot become data", as
   assert.equal((await fetch(f.target)).status, 503);
   assert.equal((await fetch(`${f.base}/healthz`)).status, 200);
 });
-test("official MCP clients negotiate current and legacy, list six read-only tools and call provider", async (t) => {
+test("official MCP clients negotiate current and legacy, list five read-only tools and call provider", async (t) => {
   const f = await setup(t);
   for (const mode of ["auto", "legacy"]) {
     const client = new Client(
@@ -291,7 +299,7 @@ test("official MCP clients negotiate current and legacy, list six read-only tool
     await client.connect(transport);
     try {
       const tools = await client.listTools();
-      assert.equal(tools.tools.length, 6);
+      assert.equal(tools.tools.length, 5);
       for (const tool of tools.tools) {
         assert.equal(tool.annotations.readOnlyHint, true);
         assert.equal(tool.annotations.openWorldHint, false);
@@ -334,10 +342,10 @@ test("independent current and legacy MCP wire flow, protocol errors, notificatio
   assert.ok(result.result.capabilities.tools);
   r = await wire(f.base, "tools/list");
   result = await protocolBody(r);
-  assert.equal(result.result.tools.length, 6);
+  assert.equal(result.result.tools.length, 5);
   r = await wire(f.base, "tools/call", {
-    name: "get_downloads",
-    arguments: { release_id: f.release_id, species: "mouse" },
+    name: "search_targets",
+    arguments: { release_id: f.release_id, species: "mouse", q: "catalog" },
   });
   result = await protocolBody(r);
   assert.equal(result.result.structuredContent.species, "mouse");
@@ -440,7 +448,7 @@ test("maintenance blocks discovery while literal release reads remain available"
   assert.equal((await fetch(f.target)).status, 200);
 });
 test("global and concurrent quotas, deadlines and explicit overflow fallback", async (t) => {
-  const global = await setup(t, { globalRate: 1 });
+  const global = await setup(t, { globalRate: 1, globalBurst: 1 });
   assert.equal((await fetch(global.base + "/healthz")).status, 200);
   assert.equal((await fetch(global.base + "/healthz")).status, 429);
   const f = await setup(t, { concurrency: 1, handlerMs: 30 });
@@ -484,8 +492,7 @@ test(
       process.env.OPENANTIGENS_TEST_DATA_DIR,
     ).initialize();
     const server = makeServer(provider, {
-      clientRate: 1000,
-      globalRate: 10000,
+      ...testAdmission,
     });
     await new Promise((r) => server.listen(0, "127.0.0.1", r));
     t.after(
@@ -508,34 +515,31 @@ test(
       const args = { release_id: provider.current, species };
       const http = await (
         await fetch(
-          `${base}/v1/releases/${provider.current}/${species}/targets`,
+          `${base}/v1/releases/${provider.current}/${species}/targets?q=synthetic`,
         )
       ).json();
       const mcp = await client.callTool({
         name: "search_targets",
-        arguments: args,
+        arguments: { ...args, q: "synthetic" },
       });
       assert.deepEqual(mcp.structuredContent, http);
       const target = http.data.find((v) => v.target_id);
       assert.ok(target);
       const params = { ...args, target_id: target.target_id };
-      for (const name of [
-        "get_target",
-        "list_constructs",
-        "get_sequence",
-        "get_downloads",
-      ]) {
+      for (const name of ["get_target", "list_constructs", "get_sequence"]) {
         const result = await client.callTool({
           name,
-          arguments: name === "get_downloads" ? args : params,
+          arguments: params,
         });
         assert.notEqual(result.isError, true, name);
         assert.deepEqual(
           result.structuredContent,
-          await provider.call(name, name === "get_downloads" ? args : params),
+          await provider.call(name, params),
         );
       }
-      const downloads = (await provider.call("get_downloads", args)).data;
+      const downloads = provider.resolve(provider.current).manifest.species[
+        species
+      ].downloads;
       const constructs = (await provider.call("list_constructs", params)).data;
       for (const name of ["reference.fasta", "constructs.fasta"]) {
         const download = downloads.find((d) => d.name === name);
@@ -606,6 +610,125 @@ test(
         }
       }
     }
+    const releaseMetadata = await provider.call("get_release", {});
+    assert.deepEqual(releaseMetadata.provenance.projection_methods, {
+      disease: {
+        selection: "portal_top_100",
+        species: "human",
+        limit: 100,
+        order: "published_source_order",
+      },
+    });
+    const firstDisease = await provider.call("get_target", {
+      release_id: provider.current,
+      species: "human",
+      target_id: "9606:uniprot:P00001",
+      section: "disease",
+      limit: 10,
+    });
+    assert.equal(firstDisease.total, 100);
+    assert.equal(firstDisease.coverage.source_count, 105);
+    assert.equal(firstDisease.coverage.projected_count, 100);
+    assert.equal(firstDisease.coverage.limit, 100);
+    assert.equal(firstDisease.coverage.source_reference.state, "live");
+    assert.ok(
+      /^[a-f0-9]{64}$/.test(firstDisease.coverage.source_reference.sha256),
+    );
+    const allDisease = [];
+    let diseasePage = firstDisease;
+    for (;;) {
+      allDisease.push(...diseasePage.data);
+      if (!diseasePage.next_cursor) break;
+      diseasePage = await provider.call("get_target", {
+        release_id: provider.current,
+        species: "human",
+        target_id: "9606:uniprot:P00001",
+        section: "disease",
+        limit: 10,
+        cursor: diseasePage.next_cursor,
+      });
+      assert.deepEqual(diseasePage.coverage, firstDisease.coverage);
+    }
+    assert.deepEqual(
+      allDisease.map((row) => row.disease_id),
+      Array.from(
+        { length: 100 },
+        (_, index) => `EFO_SYNTHETIC_${String(index).padStart(4, "0")}`,
+      ),
+    );
+    const diseaseHttp = await (
+      await fetch(
+        `${base}/v1/releases/${provider.current}/human/targets/9606:uniprot:P00001/sections/disease?limit=10`,
+      )
+    ).json();
+    const diseaseMcp = await client.callTool({
+      name: "get_target",
+      arguments: {
+        release_id: provider.current,
+        species: "human",
+        target_id: "9606:uniprot:P00001",
+        section: "disease",
+        limit: 10,
+      },
+    });
+    assert.deepEqual(diseaseMcp.structuredContent, diseaseHttp);
+    assert.deepEqual(diseaseHttp.coverage, firstDisease.coverage);
+    assert.equal(
+      (
+        await fetch(
+          `${base}/v1/releases/${provider.current}/human/targets?q=SYNTHETIC&disease_id=EFO_SYNTHETIC_0000`,
+        )
+      ).status,
+      400,
+    );
+    const mouseSummary = (
+      await provider.call("get_target", {
+        release_id: provider.current,
+        species: "mouse",
+        target_id: "10090:uniprot:P00002",
+      })
+    ).data;
+    assert.equal(mouseSummary.disease_coverage.state, "not_applicable");
+    for (const [species, q, target_id] of [
+      ["mouse", "P00002", "10090:uniprot:P00002"],
+      ["mouse", "NP_000001.1", "10090:uniprot:P00002"],
+      ["human", "P00001-1", "9606:uniprot:P00001"],
+    ]) {
+      const response = await fetch(
+        `${base}/v1/releases/${provider.current}/${species}/targets?q=${encodeURIComponent(q)}`,
+      );
+      assert.equal(response.status, 200);
+      const http = await response.json();
+      assert.equal(http.total, 1, q);
+      assert.equal(http.data[0].target_id, target_id);
+      const result = await client.callTool({
+        name: "search_targets",
+        arguments: { release_id: provider.current, species, q },
+      });
+      assert.notEqual(result.isError, true);
+      assert.deepEqual(result.structuredContent, http);
+      const sequence = (
+        await provider.call("get_sequence", {
+          release_id: provider.current,
+          species,
+          target_id,
+        })
+      ).data;
+      assert.equal(sequence.sequence_sha256, http.data[0].sequence_sha256);
+      assert.equal(
+        sequence.sequence_accession,
+        http.data[0].sequence_accession,
+      );
+      if (species === "mouse") {
+        assert.equal(http.data[0].identifier_accession, "P00002");
+        assert.equal(sequence.sequence_accession, "NP_000001.1");
+      } else assert.equal(http.data[0].canonical_isoform_id, "P00001-1");
+      assert.ok(
+        provider
+          .fallback(provider.current, species)
+          .url.includes(provider.current),
+      );
+    }
     const r = await fetch(base + "/openapi.json");
     assert.equal(r.status, 200);
     const description = await r.json();
@@ -674,7 +797,10 @@ test("release identity rejects rewritten shard checksums and corrupted rehashed 
         bytes: content.length,
         sha256: checksum(content),
       });
-      manifest.species.human.downloads[0] =
+      const position = manifest.species.human.downloads.findIndex(
+        (download) => download.name === "records.jsonl.gz",
+      );
+      manifest.species.human.downloads[position] =
         manifest.species.human.records_download;
     }
     const manifestBytes = Buffer.from(JSON.stringify(manifest) + "\n");
@@ -689,7 +815,10 @@ test("release identity rejects rewritten shard checksums and corrupted rehashed 
 });
 
 test("three release snapshots distinguish retired IDs, retained IDs and unknown IDs", async (t) => {
-  const first = await fixture("first", { legacyRootSchema: true }),
+  const first = await fixture("first", {
+      legacyRootSchema: true,
+      legacyIndex: true,
+    }),
     second = await fixture("second"),
     third = await fixture("third");
   for (const f of [first, second, third])
@@ -735,7 +864,7 @@ test("three release snapshots distinguish retired IDs, retained IDs and unknown 
     JSON.stringify(thirdRoot),
   );
   const provider = await new Provider(third.directory).initialize();
-  const server = makeServer(provider, { clientRate: 1000, globalRate: 10000 });
+  const server = makeServer(provider, testAdmission);
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   t.after(
     () =>
@@ -775,7 +904,8 @@ test("three release snapshots distinguish retired IDs, retained IDs and unknown 
     else assert.notEqual(protocol.result.isError, true);
   }
   const current = await (await fetch(base + "/v1/releases/current")).json();
-  assert.deepEqual(current.retired_releases, thirdRoot.retired_releases);
+  assert.equal(current.retirement_history.known_retired_count, 1);
+  assert.equal(Object.hasOwn(current, "retired_releases"), false);
   delete thirdRoot.retired_releases;
   await writeFile(
     join(third.directory, "manifest.json"),
@@ -791,6 +921,26 @@ test("operational OpenAPI response schemas match actual bodies, status and cache
   const f = await setup(t);
   const response = await fetch(f.base + "/openapi.json");
   const description = await response.json();
+  for (const method of ["get", "head"]) {
+    const parameters =
+      description.paths["/v1/releases/{release_id}/{species}/targets"][method]
+        .parameters;
+    assert.equal(
+      parameters.find((parameter) => parameter.name === "q").required,
+      true,
+    );
+    assert.equal(
+      parameters.find((parameter) => parameter.name === "q").schema.minLength,
+      2,
+    );
+    assert.ok(
+      parameters
+        .filter(
+          (parameter) => parameter.in === "query" && parameter.name !== "q",
+        )
+        .every((parameter) => parameter.required !== true),
+    );
+  }
   assert.equal(
     description.externalDocs.url,
     "https://openantigens.org/agent-guide.html",
@@ -875,7 +1025,7 @@ test("FASTA primary identifiers keep reference and multiple constructs distinct"
     );
 });
 
-test("measurement trial separates 64 MiB manifests and aggregate indexes from unchanged shard limits", async (t) => {
+test("measurement trial separates 96 MiB manifests and aggregate indexes from unchanged shard limits", async (t) => {
   const checksum = (bytes) => createHash("sha256").update(bytes).digest("hex");
   const f = await fixture("budget-trial");
   t.after(() => rm(f.directory, { recursive: true, force: true }));
@@ -902,7 +1052,7 @@ test("measurement trial separates 64 MiB manifests and aggregate indexes from un
   await assert.rejects(
     new Provider(f.directory).initialize(),
     /Bundle size/,
-    "Release manifest remains bounded at 64 MiB",
+    "Release manifest remains bounded at 96 MiB",
   );
   for (const species of ["human", "mouse"]) {
     const path = manifest.species[species].index_path;
@@ -950,7 +1100,7 @@ test("measurement trial separates 64 MiB manifests and aggregate indexes from un
   );
   assert.equal(LIMITS.index, 32 * 1024 * 1024);
   assert.equal(LIMITS.shard, 1024 * 1024);
-  assert.equal(LIMITS.manifest, 64 * 1024 * 1024);
+  assert.equal(LIMITS.manifest, 96 * 1024 * 1024);
   assert.equal(LIMITS.indexes, 64 * 1024 * 1024);
 });
 
@@ -964,7 +1114,7 @@ test("ten thousand input hashes stay in immutable manifests while HTTP and MCP r
   const f = await fixture("large-input-provenance", { inputHashes });
   t.after(() => rm(f.directory, { recursive: true, force: true }));
   const provider = await new Provider(f.directory).initialize();
-  const server = makeServer(provider, { clientRate: 1000, globalRate: 10000 });
+  const server = makeServer(provider, testAdmission);
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   t.after(
     () =>
@@ -996,7 +1146,7 @@ test("ten thousand input hashes stay in immutable manifests while HTTP and MCP r
     "/v1/releases",
     "/v1/releases/current",
     `/v1/releases/${f.release_id}`,
-    `/v1/releases/${f.release_id}/human/targets?limit=1`,
+    `/v1/releases/${f.release_id}/human/targets?q=catalog&limit=1`,
     `/v1/releases/${f.release_id}/human/targets/${f.target_id}`,
   ]) {
     const response = await fetch(base + route);
@@ -1015,7 +1165,7 @@ test("ten thousand input hashes stay in immutable manifests while HTTP and MCP r
     ["get_release", {}],
     [
       "search_targets",
-      { release_id: f.release_id, species: "human", limit: 1 },
+      { release_id: f.release_id, species: "human", q: "catalog", limit: 1 },
     ],
   ]) {
     const result = await client.callTool({ name, arguments: args });
@@ -1038,4 +1188,642 @@ test("ten thousand input hashes stay in immutable manifests while HTTP and MCP r
     assert.equal(record.provenance.input_hashes.count, 10001);
     assert.equal(Object.hasOwn(record.provenance, "input_sha256"), false);
   }
+});
+
+test("legal stored sequences with oversized encoded FASTA retain exact download recovery", async (t) => {
+  const cases = [
+    {
+      name: "ASCII reserved",
+      warnings: Array.from({ length: 40 }, () => "!".repeat(12000)),
+    },
+    {
+      name: "Unicode",
+      warnings: Array.from({ length: 50 }, () => "é".repeat(6000)),
+    },
+  ];
+  if (process.env.OPENANTIGENS_TEST_OVERFLOW_DATA_DIR)
+    cases.push({
+      name: "actual Python producer",
+      directory: process.env.OPENANTIGENS_TEST_OVERFLOW_DATA_DIR,
+    });
+  for (const item of cases) {
+    const stored = item.directory
+      ? { directory: item.directory }
+      : await fixture(`stored-overflow-${item.name}`, {
+          sequenceWarnings: item.warnings,
+        });
+    if (!item.directory)
+      t.after(() => rm(stored.directory, { recursive: true, force: true }));
+    const provider = await new Provider(stored.directory).initialize();
+    const species = "human",
+      release_id = provider.current;
+    const target_id = (
+      await provider.call("search_targets", {
+        release_id,
+        species,
+        q: item.directory ? "synthetic" : "catalog",
+      })
+    ).data.find((row) => row.target_id).target_id;
+    const target = await provider.json(
+      provider.resolve(release_id),
+      provider.resolve(release_id).manifest.species[species].target_paths[
+        target_id
+      ],
+      LIMITS.target,
+    );
+    let envelope;
+    for (const construct_id of [
+      null,
+      ...Object.keys(target.construct_sequence_paths),
+    ]) {
+      const candidate = await provider.call("get_sequence", {
+        release_id,
+        species,
+        target_id,
+        ...(construct_id ? { construct_id } : {}),
+      });
+      const encoded = fasta(candidate.data, {
+        release_id,
+        provenance_url: candidate.manifest.url,
+        records_url: provider.fallback(release_id, species).url,
+      });
+      if (Buffer.byteLength(encoded) > LIMITS.sequence) {
+        envelope = candidate;
+        break;
+      }
+    }
+    assert.ok(envelope, `${item.name} exercises encoded FASTA overflow`);
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(envelope)) < LIMITS.sequence,
+      "The actual JSON sequence result remains legal",
+    );
+    assert.equal(
+      provider.toolOutput("get_sequence").safeParse(envelope).success,
+      true,
+    );
+    const selector = {
+      target_id: envelope.data.target_id,
+      construct_id: envelope.data.construct_id,
+    };
+    const server = makeServer(provider, {
+      ...testAdmission,
+    });
+    await new Promise((r) => server.listen(0, "127.0.0.1", r));
+    t.after(
+      () =>
+        new Promise((r) => {
+          server.closeAllConnections();
+          server.close(r);
+        }),
+    );
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const suffix = `targets/${target_id}/${selector.construct_id ? `constructs/${selector.construct_id}/` : ""}sequence`;
+    const route = `${base}/v1/releases/${release_id}/${species}/${suffix}`;
+    const normal = await fetch(route);
+    assert.equal(normal.status, 200);
+    assert.deepEqual(await normal.json(), envelope);
+    const response = await fetch(route + "?format=fasta", {
+      headers: { accept: "text/x-fasta" },
+    });
+    assert.equal(response.status, 413, item.name);
+    assert.match(response.headers.get("content-type"), /^application\/json/);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.equal(response.headers.has("content-disposition"), false);
+    assert.equal(response.headers.has("link"), false);
+    const error = (await response.json()).error;
+    assert.equal(error.code, "result_too_large");
+    assert.ok(error.request_id);
+    assert.deepEqual(error.download, provider.fallback(release_id, species));
+    assert.deepEqual(error.record_selector, selector);
+    assert.match(
+      error.download.url,
+      new RegExp(`/data/releases/${release_id}/human/records\\.jsonl\\.gz$`),
+    );
+    const records = gunzipSync(
+      await readFile(join(stored.directory, error.download.path)),
+    )
+      .toString("utf8")
+      .trimEnd()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    const recovered = records.filter(
+      (record) =>
+        record.kind === "sequence" &&
+        record.payload.data.target_id === selector.target_id &&
+        record.payload.data.construct_id === selector.construct_id,
+    );
+    assert.equal(recovered.length, 1);
+    assert.deepEqual(recovered[0].payload.data, envelope.data);
+    for (const [url, status] of [
+      [route + "?format=xml", 400],
+      [route + "?format=fasta&limit=1", 400],
+      [route.replace("/human/", "/rat/") + "?format=fasta", 400],
+      [route.replace("/human/", "/mouse/") + "?format=fasta", 400],
+    ])
+      assert.equal((await fetch(url)).status, status);
+    const client = new Client(
+      { name: "overflow-json-control", version: "1" },
+      { versionNegotiation: { mode: "auto" } },
+    );
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(base + "/mcp")),
+    );
+    t.after(() => client.close());
+    const mcp = await client.callTool({
+      name: "get_sequence",
+      arguments: {
+        release_id,
+        species,
+        target_id,
+        ...(selector.construct_id
+          ? { construct_id: selector.construct_id }
+          : {}),
+      },
+    });
+    assert.notEqual(mcp.isError, true);
+    assert.deepEqual(mcp.structuredContent, envelope);
+  }
+  assert.equal(LIMITS.sequence, 1024 * 1024);
+});
+
+test("legal long retirement history keeps current and pinned HTTP/MCP discovery bounded", async (t) => {
+  const f = await fixture("long-retirement-history");
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const rootPath = join(f.directory, "manifest.json");
+  const root = JSON.parse(await readFile(rootPath));
+  root.retired_releases = Array.from({ length: 300 }, (_, index) => ({
+    release_id: createHash("sha256").update(`retired-${index}`).digest("hex"),
+    retired_by_release_id: f.release_id,
+    archive_url: `https://archive.example/${"x".repeat(740)}?record=${index}`,
+  }));
+  const bytes = Buffer.from(JSON.stringify(root));
+  assert.ok(bytes.length > LIMITS.json && bytes.length < LIMITS.shard);
+  await writeFile(rootPath, bytes);
+  const provider = await new Provider(f.directory).initialize();
+  const server = makeServer(provider, testAdmission);
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(
+    () =>
+      new Promise((r) => {
+        server.closeAllConnections();
+        server.close(r);
+      }),
+  );
+  const base = `http://127.0.0.1:${server.address().port}`;
+  for (const path of [
+    "/v1/releases",
+    "/v1/releases/current",
+    `/v1/releases/${f.release_id}`,
+  ]) {
+    const response = await fetch(base + path);
+    assert.equal(response.status, 200);
+    const text = await response.text();
+    assert.ok(Buffer.byteLength(text) < LIMITS.json);
+    const result = JSON.parse(text);
+    assert.deepEqual(result.retirement_history, {
+      known_retired_count: 300,
+      limit: 1000,
+      lookup_endpoint: "/v1/releases/{release_id}",
+    });
+    assert.equal(Object.hasOwn(result, "retired_releases"), false);
+  }
+  for (const args of [{}, { release_id: f.release_id }]) {
+    const wireResult = await protocolBody(
+      await wire(base, "tools/call", { name: "get_release", arguments: args }),
+    );
+    assert.notEqual(wireResult.result.isError, true);
+    assert.equal(
+      wireResult.result.structuredContent.retirement_history
+        .known_retired_count,
+      300,
+    );
+    assert.ok(Buffer.byteLength(JSON.stringify(wireResult)) < LIMITS.json);
+  }
+  const retired = await fetch(
+    `${base}/v1/releases/${root.retired_releases[0].release_id}`,
+  );
+  assert.equal(retired.status, 410);
+  assert.deepEqual(
+    (await retired.json()).error.retirement,
+    root.retired_releases[0],
+  );
+});
+
+test("compact indexes return full summaries through bounded interactive search", async (t) => {
+  const f = await fixture("interactive-search-window", { extraUnresolved: 25 });
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const provider = await new Provider(f.directory).initialize();
+  const index = provider.resolve(f.release_id).indexes.human;
+  assert.equal(index.length, 27);
+  for (const row of index) {
+    assert.equal(Object.hasOwn(row, "protein_name"), false);
+    assert.equal(Object.hasOwn(row, "aliases"), false);
+    assert.equal(Object.hasOwn(row, "disease_ids"), false);
+    assert.equal(Object.hasOwn(row, "design_region"), false);
+    assert.ok(row.summary_path);
+  }
+  let reads = 0;
+  const json = provider.json.bind(provider);
+  provider.json = async (...args) => {
+    if (args[1].includes("/targets/")) reads++;
+    return json(...args);
+  };
+  const args = {
+    release_id: f.release_id,
+    species: "human",
+    q: "catalog",
+    limit: 10,
+  };
+  const first = await provider.call("search_targets", args);
+  assert.equal(reads, 10);
+  assert.equal(first.total, 27);
+  assert.equal(first.data.length, 10);
+  assert.equal(first.refine_query, true);
+  assert.equal(first.search_window, 20);
+  assert.ok(first.next_cursor);
+  for (const summary of first.data) {
+    assert.ok(Object.hasOwn(summary, "protein_name"));
+    assert.ok(Object.hasOwn(summary, "disease_ids"));
+    assert.equal(Object.hasOwn(summary, "summary_path"), false);
+  }
+  const second = await provider.call("search_targets", {
+    ...args,
+    cursor: first.next_cursor,
+  });
+  assert.equal(reads, 20);
+  assert.equal(second.data.length, 10);
+  assert.equal(second.next_cursor, null);
+  assert.equal(
+    new Set([...first.data, ...second.data].map((row) => row.record_id)).size,
+    20,
+  );
+  const cursor = JSON.parse(Buffer.from(first.next_cursor, "base64url"));
+  cursor.position = 20;
+  await assert.rejects(
+    provider.call("search_targets", {
+      ...args,
+      cursor: Buffer.from(JSON.stringify(cursor)).toString("base64url"),
+    }),
+    (error) => error.code === "refine_query",
+  );
+  reads = 0;
+  await assert.rejects(
+    provider.call("search_targets", { ...args, disease_id: "EFO:0001" }),
+    (error) => error.code === "invalid_arguments",
+  );
+  assert.equal(
+    reads,
+    0,
+    "Unsupported disease membership filters load no records",
+  );
+  const server = makeServer(provider, testAdmission);
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(
+    () =>
+      new Promise((r) => {
+        server.closeAllConnections();
+        server.close(r);
+      }),
+  );
+  const base = `http://127.0.0.1:${server.address().port}/v1/releases/${f.release_id}/human`;
+  for (const suffix of [
+    "targets",
+    "targets?q=a",
+    "targets?q=%20%20",
+    "targets?q=ca*&limit=1",
+    "targets?q=catalog&limit=11",
+    "targets?track=secreted",
+  ]) {
+    assert.equal((await fetch(`${base}/${suffix}`)).status, 400, suffix);
+  }
+  const normal = await (await fetch(`${base}/targets?q=catalog`)).json();
+  assert.equal(normal.data.length, 5);
+  assert.equal((await fetch(`${base}/downloads`)).status, 404);
+  const metadata = await provider.call("get_release", {});
+  for (const species of ["human", "mouse"]) {
+    const info = metadata.data.species[species];
+    assert.equal(Object.hasOwn(info, "downloads"), false);
+    assert.deepEqual(
+      info.references.map((reference) => reference.name).sort(),
+      ["citation.json", "openantigens.bib", "openantigens.ris", "schema.json"],
+    );
+  }
+});
+test("correctly hashed private, unknown-download and unreachable typed artifacts fail readiness", async (t) => {
+  const checksum = (value) => createHash("sha256").update(value).digest("hex");
+  for (const kind of ["private", "unknown_download", "orphan_typed"]) {
+    const f = await fixture(`artifact-rejection-${kind}`);
+    t.after(() => rm(f.directory, { recursive: true, force: true }));
+    const rootPath = join(f.directory, "manifest.json");
+    const root = JSON.parse(await readFile(rootPath));
+    const manifestPath = join(f.directory, root.releases[0].manifest_path);
+    const manifest = JSON.parse(await readFile(manifestPath));
+    let path, bytes, file;
+    if (kind === "orphan_typed") {
+      const original = Object.keys(manifest.files).find(
+        (path) =>
+          path.includes("/human/sections/") && path.endsWith("topology-0.json"),
+      );
+      path = original.replace("topology-0.json", "topology-1.json");
+      bytes = await readFile(join(f.directory, original));
+      file = { ...manifest.files[original] };
+    } else {
+      path = `releases/${f.release_id}/human/downloads/${kind === "private" ? "private.sqlite" : "extra.json"}`;
+      bytes = Buffer.from("PRIVATE_CANARY synthetic raw confidential input\n");
+      file = {
+        media_type: "application/octet-stream",
+        schema: null,
+        encoding: null,
+      };
+    }
+    await writeFile(join(f.directory, path), bytes);
+    Object.assign(file, { bytes: bytes.length, sha256: checksum(bytes) });
+    manifest.files[path] = file;
+    if (kind === "unknown_download")
+      manifest.species.human.downloads.push({
+        name: "extra.json",
+        url: `https://openantigens.org/data/releases/${f.release_id}/human/extra.json`,
+        path,
+        ...file,
+        row_count: null,
+        license: "fixture",
+      });
+    const manifestBytes = Buffer.from(JSON.stringify(manifest) + "\n");
+    await writeFile(manifestPath, manifestBytes);
+    root.releases[0].sha256 = checksum(manifestBytes);
+    await writeFile(rootPath, JSON.stringify(root));
+    await assert.rejects(
+      new Provider(f.directory).initialize(),
+      kind === "orphan_typed"
+        ? /Unreachable artifact file/
+        : /Unapproved artifact role|Download role coverage/,
+    );
+  }
+});
+
+test("sealed packed Provider preserves query results without shipping external bulk bytes", async (t) => {
+  const source = await fixture("packed-provider-equivalence");
+  t.after(() => rm(source.directory, { recursive: true, force: true }));
+  const plain = await new Provider(source.directory).initialize();
+  const packed = await packedFixture(source.directory);
+  t.after(() => rm(packed.directory, { recursive: true, force: true }));
+  await assert.rejects(
+    new Provider(packed.directory).initialize(),
+    /explicit pins/,
+  );
+  await assert.rejects(
+    new Provider(packed.directory, {
+      ...packed.pins,
+      expectedRootSha256: "f".repeat(64),
+    }).initialize(),
+    /root pin mismatch/,
+  );
+  const transportPath = join(packed.directory, "transport-index.json");
+  const transportBytes = await readFile(transportPath);
+  await rm(transportPath);
+  await assert.rejects(
+    new Provider(packed.directory, packed.pins).initialize(),
+    (error) => error.code === "ENOENT",
+  );
+  await writeFile(transportPath, transportBytes);
+  const provider = await new Provider(
+    packed.directory,
+    packed.pins,
+  ).initialize();
+  assert.equal(provider.storage.packed, true);
+  const args = {
+    release_id: provider.current,
+    species: "human",
+    target_id: source.target_id,
+  };
+  for (const [name, parameters] of [
+    ["get_release", {}],
+    [
+      "search_targets",
+      { release_id: provider.current, species: "human", q: "catalog" },
+    ],
+    ["get_target", args],
+    ["get_target", { ...args, section: "topology" }],
+    ["list_constructs", args],
+    ["get_sequence", args],
+    ["get_sequence", { ...args, construct_id: source.construct_id }],
+  ])
+    assert.deepEqual(
+      await provider.call(name, parameters),
+      await plain.call(name, parameters),
+      name,
+    );
+  const download = provider.fallback(provider.current, "human");
+  await assert.rejects(
+    readFile(join(packed.directory, download.path)),
+    (error) => error.code === "ENOENT",
+  );
+  const server = makeServer(provider, testAdmission);
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(
+    () =>
+      new Promise((resolve) => {
+        server.closeAllConnections();
+        server.close(resolve);
+      }),
+  );
+  const base = `http://127.0.0.1:${server.address().port}`;
+  assert.equal((await fetch(base + "/readyz")).status, 200);
+  const client = new Client(
+    { name: "packed-client", version: "1" },
+    { versionNegotiation: { mode: "auto" } },
+  );
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL(base + "/mcp")),
+  );
+  t.after(() => client.close());
+  const result = await client.callTool({
+    name: "get_sequence",
+    arguments: { ...args, construct_id: source.construct_id },
+  });
+  assert.notEqual(result.isError, true);
+  assert.deepEqual(
+    result.structuredContent,
+    await plain.call("get_sequence", {
+      ...args,
+      construct_id: source.construct_id,
+    }),
+  );
+});
+test("trusted app-code build seal yields independent pins and rejects malformed or linked seals", async (t) => {
+  const f = await fixture("build-seal-reader");
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const path = join(f.directory, "service-build.json");
+  const data_transport = {
+    format: "openantigens-target-gzip-v1",
+    root_manifest_sha256: "a".repeat(64),
+    transport_index_sha256: "b".repeat(64),
+  };
+  assert.deepEqual(await readBuildPins(path), {});
+  await writeFile(
+    path,
+    JSON.stringify({ service_build_id: "fixture", data_transport }),
+  );
+  assert.deepEqual(await readBuildPins(path), {
+    expectedRootSha256: data_transport.root_manifest_sha256,
+    expectedTransportSha256: data_transport.transport_index_sha256,
+  });
+  await writeFile(
+    path,
+    JSON.stringify({
+      data_transport: { ...data_transport, format: "unknown" },
+    }),
+  );
+  await assert.rejects(readBuildPins(path), /Invalid service build seal/);
+  await rm(path);
+  await symlink(join(f.directory, "manifest.json"), path);
+  await assert.rejects(readBuildPins(path), /Invalid service build seal/);
+});
+
+test("approved external download roles require their exact immutable public URL", async (t) => {
+  const f = await fixture("external-download-url");
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const rootPath = join(f.directory, "manifest.json");
+  const root = JSON.parse(await readFile(rootPath));
+  const path = join(f.directory, root.releases[0].manifest_path);
+  const manifest = JSON.parse(await readFile(path));
+  const download = manifest.species.human.downloads.find(
+    (item) => item.name === "records.jsonl.gz",
+  );
+  download.url = `https://openantigens.org/data/releases/${f.release_id}/human/private.sqlite`;
+  manifest.species.human.records_download = download;
+  const bytes = Buffer.from(JSON.stringify(manifest) + "\n");
+  await writeFile(path, bytes);
+  root.releases[0].sha256 = createHash("sha256").update(bytes).digest("hex");
+  await writeFile(rootPath, JSON.stringify(root));
+  await assert.rejects(
+    new Provider(f.directory).initialize(),
+    /Download manifest/,
+  );
+});
+
+test("publication state configuration accepts only the documented enum", () => {
+  for (const value of [undefined, "", "active"])
+    assert.equal(publicationState(value), "active");
+  assert.equal(publicationState("maintenance"), "maintenance");
+  for (const value of [
+    "maintenence",
+    " maintenance ",
+    "ACTIVE",
+    null,
+    false,
+    0,
+  ])
+    assert.throws(() => publicationState(value), {
+      message: "Invalid publication state configuration.",
+    });
+});
+test("a publication-state typo exits before data access or any listener without logging raw configuration", () => {
+  const result = spawnSync(
+    process.execPath,
+    [fileURLToPath(new URL("../src/server.js", import.meta.url))],
+    {
+      encoding: "utf8",
+      timeout: 2000,
+      maxBuffer: 16384,
+      env: {
+        ...process.env,
+        OPENANTIGENS_PUBLICATION_STATE: "PRIVATE_BAD_PUBLICATION_STATE",
+        OPENANTIGENS_DATA_DIR: "/private/tmp/DO_NOT_READ_PRIVATE_DATA_ROOT",
+        OPENANTIGENS_ANALYTICS_PLAUSIBLE: "0",
+        PORT: "43129",
+      },
+    },
+  );
+  assert.equal(result.status, 1);
+  assert.equal(result.signal, null);
+  assert.equal(result.stdout, "");
+  assert.equal(result.stderr, "public_api startup_failed\n");
+  for (const value of [
+    "PRIVATE_BAD_PUBLICATION_STATE",
+    "DO_NOT_READ_PRIVATE_DATA_ROOT",
+    "listening",
+    "bundle_validation_failed",
+  ])
+    assert.equal((result.stdout + result.stderr).includes(value), false, value);
+});
+
+test("only the seven external bulk roles accept metadata above 128 MiB and unpacked bodies stream", async (t) => {
+  const f = await fixture("external-role-budget");
+  t.after(() => rm(f.directory, { recursive: true, force: true }));
+  const provider = new Provider(f.directory);
+  const external = [
+    "index.jsonl",
+    "index.tsv",
+    "constructs.jsonl",
+    "constructs.tsv",
+    "constructs.fasta",
+    "reference.fasta",
+    "records.jsonl.gz",
+  ];
+  const mutate = (name, size) => {
+    const manifest = structuredClone(f.manifest);
+    const download = manifest.species.human.downloads.find(
+      (item) => item.name === name,
+    );
+    download.bytes = size;
+    manifest.files[download.path].bytes = size;
+    if (name === "records.jsonl.gz")
+      manifest.species.human.records_download.bytes = size;
+    return { manifest, download };
+  };
+  for (const name of external) {
+    const { manifest, download } = mutate(name, 129 * 1024 * 1024);
+    assert.equal(
+      provider.approvedFiles(manifest).get(download.path).bound,
+      1024 * 1024 * 1024,
+      name,
+    );
+    const tooLarge = mutate(name, LIMITS.externalDownload + 1);
+    assert.throws(
+      () => provider.approvedFiles(tooLarge.manifest),
+      (error) =>
+        error.message ===
+        `Bundle size: role=${name} actual=${LIMITS.externalDownload + 1} limit=${LIMITS.externalDownload}`,
+    );
+  }
+  for (const name of [
+    "schema.json",
+    "citation.json",
+    "openantigens.bib",
+    "openantigens.ris",
+  ]) {
+    const { manifest } = mutate(name, LIMITS.shard + 1);
+    assert.throws(() => provider.approvedFiles(manifest), /Bundle size/);
+  }
+  for (const [schema, limit] of [
+    ["target_shard", LIMITS.target],
+    ["sequence_shard", LIMITS.shard],
+    ["section_topology", LIMITS.shard],
+    ["index", LIMITS.index],
+  ]) {
+    const manifest = structuredClone(f.manifest);
+    const path = Object.keys(manifest.files).find(
+      (path) => manifest.files[path].schema === schema,
+    );
+    manifest.files[path].bytes = limit + 1;
+    assert.throws(() => provider.approvedFiles(manifest), /Bundle size/);
+  }
+  const original = provider.readPhysical.bind(provider);
+  let streams = 0;
+  provider.readPhysical = async (path, max, expected, collect = true) => {
+    if (external.some((name) => path.endsWith("/downloads/" + name))) {
+      assert.equal(max, LIMITS.externalDownload);
+      assert.equal(collect, false);
+      streams++;
+    }
+    return original(path, max, expected, collect);
+  };
+  await provider.initialize();
+  assert.equal(streams, 14);
+  assert.equal(LIMITS.json, 256 * 1024);
+  assert.equal(LIMITS.sequence, 1024 * 1024);
+  assert.equal(LIMITS.manifest, 96 * 1024 * 1024);
+  assert.equal(LIMITS.index, 32 * 1024 * 1024);
+  assert.equal(LIMITS.indexes, 64 * 1024 * 1024);
 });

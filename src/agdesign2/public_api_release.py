@@ -7,6 +7,7 @@ records, contacts a host, or publishes an artifact.
 from __future__ import annotations
 
 import hashlib
+import codecs
 import json
 import re
 import shutil
@@ -22,6 +23,9 @@ HARD_ZIP_LIMIT = 100_000_000
 SOURCE_FILES = (
     "package.json", "package-lock.json", "src/server.js", "src/mcp.js",
     "src/provider.js", "src/contracts.js", "src/openapi.js",
+    "src/analytics.js",
+    "src/client-identity.js",
+    "src/storage.js",
 )
 LICENSE_FILES = ("LICENSE", "DATA_LICENSE.md")
 HOST_GATES = (
@@ -33,6 +37,21 @@ HOST_GATES = (
     "rights_review_and_named_owner", "final_domain_http_and_mcp",
 )
 _SHA = re.compile(r"[0-9a-f]{64}\Z")
+DOWNLOAD_ROLES = {
+    "index.jsonl": ("application/x-ndjson", "summary", None),
+    "index.tsv": ("text/tab-separated-values", None, None),
+    "constructs.jsonl": ("application/x-ndjson", "construct", None),
+    "constructs.tsv": ("text/tab-separated-values", None, None),
+    "constructs.fasta": ("text/x-fasta", None, None),
+    "reference.fasta": ("text/x-fasta", None, None),
+    "schema.json": ("application/schema+json", None, None),
+    "citation.json": ("application/json", "citation", None),
+    "openantigens.bib": ("application/x-bibtex", None, None),
+    "openantigens.ris": ("application/x-research-info-systems", None, None),
+    "records.jsonl.gz": ("application/x-ndjson", None, "gzip"),
+}
+SECTIONS = {"topology", "domains", "ptms", "orthologs", "paralogs", "family", "assembly", "structures", "similarity", "literature", "disease"}
+EXTERNAL_BULK_ROLES = {"index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"}
 
 
 def _json_bytes(value: Any) -> bytes:
@@ -104,6 +123,142 @@ def _check_bytes(path: Path, entry: dict) -> None:
         raise ValueError("public file size or checksum mismatch")
 
 
+def _scan_public_text(path: Path) -> None:
+    from agdesign2.public_api_data import _scan_public
+
+    decoder = codecs.getincrementaldecoder("utf-8")()
+    previous = ""
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(65536), b""):
+            decoded = decoder.decode(chunk)
+            _scan_public(previous + decoded)
+            previous = (previous + decoded)[-256:]
+    _scan_public(previous + decoder.decode(b"", final=True))
+
+
+def _public_file_limit(name: str, media_type: str) -> int:
+    if "/downloads/" in name:
+        role = PurePosixPath(name).name
+        if role in EXTERNAL_BULK_ROLES:
+            return 1024 * 1024 * 1024
+        if role in {"schema.json", "citation.json", "openantigens.bib", "openantigens.ris"}:
+            return 1024 * 1024
+        raise ValueError("unapproved public download role")
+    if name.endswith("/index.json"):
+        return 32 * 1024 * 1024
+    if "/targets/" in name:
+        return 8 * 1024 * 1024
+    if media_type == "application/schema+json" or media_type == "application/json" and "/downloads/" not in name:
+        return 1024 * 1024
+    return 1024 * 1024
+
+
+def _check_public_file_roles(bundle: Path, manifest: dict) -> None:
+    """Require approved file roles and actual reachability, independent of membership."""
+    from agdesign2.public_api_data import _approved_release_schema, _scan_public, _validate_release_value, public_citation_downloads
+
+    release_id = manifest["release_id"]
+    _scan_public(manifest)
+    expected = set()
+
+    def role(path: str, media: str, schema_name: str | None, encoding: str | None = None) -> Path:
+        entry = manifest["files"].get(path)
+        if not isinstance(entry, dict) or (entry.get("media_type"), entry.get("schema"), entry.get("encoding")) != (media, schema_name, encoding):
+            raise ValueError("public file does not have its approved artifact role")
+        expected.add(path)
+        file = _file(bundle, path)
+        limit = _public_file_limit(path, media)
+        size = file.stat().st_size
+        if size > limit:
+            label = PurePosixPath(path).name if "/downloads/" in path else schema_name
+            raise ValueError(f"public {label} is {size} bytes; limit is {limit} bytes")
+        return file
+
+    schema_bytes = role(f"releases/{release_id}/human/downloads/schema.json", "application/schema+json", None).read_bytes()
+    schema = json.loads(schema_bytes)
+    _approved_release_schema(schema)
+    citations = public_citation_downloads(manifest["citation"])
+
+    def typed(path: str, schema_name: str, species: str) -> object:
+        value = _read_json(role(path, "application/json", schema_name))
+        _validate_release_value(schema, schema_name, value)
+        _scan_public(value)
+        if value.get("release_id") != release_id or value.get("species") != species:
+            raise ValueError("reachable public shard release/species mismatch")
+        return value["data"]
+
+    for species in ("human", "mouse"):
+        prefix = f"releases/{release_id}/{species}"
+        metadata = manifest["species"][species]
+        if metadata["index_path"] != f"{prefix}/index.json":
+            raise ValueError("public index has an unapproved path")
+        rows = typed(metadata["index_path"], "index", species)
+        for row in rows:
+            key = hashlib.sha256(_json_bytes(row["target_id"] or row["record_id"])).hexdigest()
+            path = f"{prefix}/targets/{key}.json"
+            if row.get("summary_path", path) != path:
+                raise ValueError("public summary reference has an unapproved path")
+            if row["target_id"] is None and path not in manifest["files"] and schema.get("x-openantigens-index-version", 1) == 1:
+                continue
+            if row["target_id"] is not None and metadata["target_paths"].get(row["target_id"]) != path:
+                raise ValueError("public target reference has an unapproved path")
+            target = typed(path, "target_shard", species)
+            if target["summary"]["record_id"] != row["record_id"] or target["summary"]["target_id"] != row["target_id"]:
+                raise ValueError("public target does not match its indexed identity")
+            if set(target["sections"]) != SECTIONS:
+                raise ValueError("public target evidence roles differ from the approved set")
+            for section, descriptor in target["sections"].items():
+                for number, page in enumerate(descriptor["pages"]):
+                    if page != f"{prefix}/sections/{key}/{section}-{number}.json":
+                        raise ValueError("public evidence page has an unapproved path")
+                    typed(page, f"section_{section}", species)
+            for number, page in enumerate(target["constructs"]["pages"]):
+                if page != f"{prefix}/constructs/{key}-{number}.json":
+                    raise ValueError("public construct page has an unapproved path")
+                typed(page, "construct_page", species)
+            reference = target["reference_sequence_path"]
+            if reference is not None:
+                if reference != f"{prefix}/sequences/{key}-reference.json":
+                    raise ValueError("public reference sequence has an unapproved path")
+                typed(reference, "sequence_shard", species)
+            for construct_id, sequence in target["construct_sequence_paths"].items():
+                if not _SHA.fullmatch(construct_id):
+                    raise ValueError("public construct sequence identity is invalid")
+                if sequence is not None:
+                    if sequence != f"{prefix}/sequences/{construct_id}.json":
+                        raise ValueError("public construct sequence has an unapproved path")
+                    typed(sequence, "sequence_shard", species)
+        downloads = metadata["downloads"]
+        if len(downloads) != len(DOWNLOAD_ROLES) or {item["name"] for item in downloads} != set(DOWNLOAD_ROLES):
+            raise ValueError("public downloads differ from the approved artifact roles")
+        for item in downloads:
+            name = item["name"]
+            media, schema_name, encoding = DOWNLOAD_ROLES[name]
+            path = f"{prefix}/downloads/{name}"
+            if item["path"] != path or (item["media_type"], item["schema"], item["encoding"]) != (media, schema_name, encoding):
+                raise ValueError("public download has an unapproved role or path")
+            file = role(path, media, schema_name, encoding)
+            if name == "schema.json":
+                if file.read_bytes() != schema_bytes:
+                    raise ValueError("public schema copies disagree")
+            elif name in citations:
+                if file.read_bytes() != citations[name]:
+                    raise ValueError("public citation export differs from its approved source")
+            elif name == "citation.json":
+                if file.read_bytes() != _json_bytes(manifest["citation"]) + b"\n":
+                    raise ValueError("public citation JSON differs from its approved source")
+            elif encoding is None:
+                _scan_public_text(file)
+                if name.endswith(".tsv"):
+                    record_type = "summary" if name == "index.tsv" else "construct"
+                    header = ("\t".join(schema["$defs"][record_type]["required"]) + "\n").encode()
+                    with file.open("rb") as handle:
+                        if handle.readline(65536) != header:
+                            raise ValueError("public tabular export has an unapproved header")
+    if set(manifest["files"]) != expected:
+        raise ValueError("public manifest contains unreachable or unapproved artifact files")
+
+
 def _bundle_files(bundle: Path, site: Path) -> tuple[dict, dict[str, Path], list[dict]]:
     # The producer validates schemas, canonical IDs, counts and complete-record equivalence.
     from agdesign2.public_api_data import validate_public_api_bundle
@@ -150,8 +305,8 @@ def _bundle_files(bundle: Path, site: Path) -> tuple[dict, dict[str, Path], list
         if pointer.get("manifest_path") != manifest_name:
             raise ValueError("release manifest is outside its immutable release")
         manifest_path = _file(bundle, manifest_name)
-        if manifest_path.stat().st_size > 64 * 1024 * 1024:
-            raise ValueError("release manifest exceeds the service's 64 MiB startup limit")
+        if manifest_path.stat().st_size > 96 * 1024 * 1024:
+            raise ValueError("release manifest exceeds the service's 96 MiB startup limit")
         if _hash_file(manifest_path) != pointer.get("sha256"):
             raise ValueError("release manifest checksum mismatch")
         manifest = _read_json(manifest_path)
@@ -159,22 +314,17 @@ def _bundle_files(bundle: Path, site: Path) -> tuple[dict, dict[str, Path], list
             raise ValueError("release identifier does not match its canonical core")
         if set(manifest.get("species", {})) != {"human", "mouse"}:
             raise ValueError("each release must contain human and mouse data")
+        _check_public_file_roles(bundle, manifest)
         files[manifest_name] = manifest_path
         for name, entry in manifest["files"].items():
             if not name.startswith(f"releases/{release_id}/"):
                 raise ValueError("release file is outside its immutable release")
             source = _file(bundle, name)
             _check_bytes(source, entry)
-            if name.endswith("/index.json"):
-                maximum = 32 * 1024 * 1024
-            elif "/targets/" in name:
-                maximum = 8 * 1024 * 1024
-            elif entry["media_type"] == "application/schema+json" or entry["media_type"] == "application/json" and "/downloads/" not in name:
-                maximum = 1024 * 1024
-            else:
-                maximum = 128 * 1024 * 1024
+            maximum = _public_file_limit(name, entry["media_type"])
             if entry["bytes"] > maximum:
-                raise ValueError("public file exceeds the service's startup read limit")
+                label = PurePosixPath(name).name if "/downloads/" in name else entry["schema"]
+                raise ValueError(f"public {label} is {entry['bytes']} bytes; limit is {maximum} bytes")
             files[name] = source
         species_summary = {}
         for species, taxon in (("human", 9606), ("mouse", 10090)):
@@ -225,6 +375,60 @@ def _bundle_files(bundle: Path, site: Path) -> tuple[dict, dict[str, Path], list
     return root, files, summaries
 
 
+def _runtime_files(runtime: Path, logical_files: dict[str, Path], seal: dict) -> dict[str, Path]:
+    """Read back only the sealed physical inventory generated from public inputs."""
+    from agdesign2.public_api_data import _scan_public
+
+    count_fields = {"transport_index_bytes", "physical_file_count", "physical_bytes", "packed_logical_file_count", "external_download_count"}
+    if set(seal) != {"format", "root_manifest_sha256", "transport_index_sha256", *count_fields} or any(type(seal[name]) is not int or seal[name] < 0 for name in count_fields):
+        raise ValueError("physical transport seal contains an unapproved field or count")
+    if seal.get("format") != "openantigens-target-gzip-v1" or seal.get("root_manifest_sha256") != _hash_file(logical_files["manifest.json"]):
+        raise ValueError("physical transport root seal disagrees with validated public data")
+    index_file = _file(runtime, "transport-index.json")
+    if index_file.stat().st_size > 16 * 1024 * 1024 or index_file.stat().st_size != seal["transport_index_bytes"] or _hash_file(index_file) != seal.get("transport_index_sha256"):
+        raise ValueError("physical transport index seal mismatch")
+    index = _read_json(index_file)
+    if set(index) != {"format", "root_manifest_sha256", "targets"} or index["format"] != seal["format"] or index["root_manifest_sha256"] != seal["root_manifest_sha256"] or not isinstance(index["targets"], dict):
+        raise ValueError("invalid physical transport index")
+    _scan_public(index)
+    targets = {name for name in logical_files if "/targets/" in name}
+    if set(index["targets"]) != targets:
+        raise ValueError("physical transport does not cover the validated target graph")
+    expected = {"transport-index.json": index_file}
+    tiny_references = {"schema.json", "citation.json", "openantigens.bib", "openantigens.ris"}
+    for name, original in logical_files.items():
+        standalone = name in {"manifest.json", "manifest.sha256"} or name.endswith("/manifest.json") or name.endswith("/index.json") or "/downloads/" in name and PurePosixPath(name).name in tiny_references
+        if standalone:
+            file = _file(runtime, name)
+            if file.stat().st_size != original.stat().st_size or _hash_file(file) != _hash_file(original):
+                raise ValueError("physical standalone file differs from its validated public source")
+            expected[name] = file
+    for target, parts in index["targets"].items():
+        path = PurePosixPath(target)
+        release_id, species, key = path.parts[1], path.parts[2], path.stem
+        if not isinstance(parts, list) or not parts:
+            raise ValueError("physical target has no transport parts")
+        previous_max = None
+        for number, descriptor in enumerate(parts):
+            if not isinstance(descriptor, dict) or set(descriptor) != {"path", "sha256", "bytes", "decoded_bytes", "members", "min_path", "max_path"}:
+                raise ValueError("invalid physical part descriptor")
+            name = f"packs/{release_id}/{species}/{key}-{number}.json.gz"
+            if descriptor["path"] != name or type(descriptor["decoded_bytes"]) is not int or not 0 < descriptor["decoded_bytes"] <= 16 * 1024 * 1024 or type(descriptor["members"]) is not int or descriptor["members"] < 1:
+                raise ValueError("invalid physical target part range or size")
+            low, high = descriptor["min_path"], descriptor["max_path"]
+            if not isinstance(low, str) or not isinstance(high, str) or low not in logical_files or high not in logical_files or low > high or previous_max is not None and low <= previous_max:
+                raise ValueError("physical target part ranges overlap or escape public inputs")
+            previous_max = high
+            file = _file(runtime, name)
+            _check_bytes(file, descriptor)
+            if file.stat().st_size > 17 * 1024 * 1024:
+                raise ValueError("compressed physical part exceeds its service limit")
+            expected[name] = file
+    if _all_files(runtime) != set(expected) or len(expected) != seal.get("physical_file_count") or sum(path.stat().st_size for path in expected.values()) != seal.get("physical_bytes"):
+        raise ValueError("physical runtime contains an unexpected file or changed inventory")
+    return expected
+
+
 def build_api_service_release(
     service_dir: Path | str, bundle_dir: Path | str, public_site_dir: Path | str,
     output_zip: Path | str, *, repo_root: Path | str,
@@ -262,98 +466,111 @@ def build_api_service_release(
         if output.resolve().is_relative_to(root_dir) or artifact_path.resolve().is_relative_to(root_dir):
             raise ValueError("output must be outside all packaging inputs")
     root, data_files, releases = _bundle_files(bundle, site)
-    sources = {name: _file(service, name) for name in SOURCE_FILES}
-    sources.update({name: _file(repo, name) for name in LICENSE_FILES})
-    package = _read_json(sources["package.json"])
-    lock = _read_json(sources["package-lock.json"])
-    if package.get("engines", {}).get("node") != ">=22 <23" or package.get("scripts", {}).get("start") != "node src/server.js":
-        raise ValueError("service package must declare the supported Node 22 start command")
-    if lock.get("lockfileVersion") != 3 or lock.get("packages", {}).get("", {}).get("dependencies") != package.get("dependencies"):
-        raise ValueError("dependency lock does not match package.json")
-    if not package.get("dependencies") or any(not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?", str(version)) for version in package["dependencies"].values()):
-        raise ValueError("runtime dependencies must use exact pinned versions")
-    for name, entry in lock["packages"].items():
-        if not name:
-            continue
-        resolved = urlsplit(entry.get("resolved", ""))
-        if not name.startswith("node_modules/") or entry.get("link") or resolved.scheme != "https" or resolved.netloc != "registry.npmjs.org" or resolved.query or resolved.fragment or not entry.get("integrity", "").startswith(("sha512-", "sha256-")):
-            raise ValueError("lockfile dependencies must use integrity-pinned public npm registry URLs")
-    code_files = {name: {"sha256": _hash_file(path), "bytes": path.stat().st_size} for name, path in sources.items()}
-    build_id = hashlib.sha256(_json_bytes(code_files)).hexdigest()
-    build = {"schema_version": 1, "service_build_id": build_id, "runtime": "node22", "files": code_files}
-    generated = {"service-build.json": _json_bytes(build) + b"\n"}
-    inputs = {**sources, **{f"data/{name}": path for name, path in data_files.items()}}
-    expected = {name: {"sha256": _hash_file(path), "bytes": path.stat().st_size} for name, path in inputs.items()}
-    expected.update({name: {"sha256": hashlib.sha256(value).hexdigest(), "bytes": len(value)} for name, value in generated.items()})
-    expanded = sum(entry["bytes"] for entry in expected.values())
-    static_bytes = sum(item["static_metadata_bytes"] + sum(value["download_bytes"] for value in item["species"].values()) for item in releases)
-    static_files = sum(2 + sum(value["download_files"] for value in item["species"].values()) for item in releases)
-    if expanded > max_expanded_bytes * (1 - reserve_fraction):
-        raise ValueError("expanded artifact exceeds its local budget with reserved headroom")
-    audit = {"status": "not_run", "command": "npm audit --omit=dev --audit-level=high", "report": None}
-    if dependency_audit_report is not None:
-        audit_path = Path(dependency_audit_report)
-        if audit_path.is_symlink() or not audit_path.is_file():
-            raise ValueError("dependency audit report must be a regular file")
-        report = _read_json(audit_path)
-        audit = {"status": "provided_unverified", "command": audit["command"], "report": {"name": audit_path.name, "sha256": _hash_file(audit_path), "bytes": audit_path.stat().st_size}, "reported_vulnerabilities": report.get("metadata", {}).get("vulnerabilities"), "note": "Report is recorded; command execution, freshness and the installed dependency tree require review."}
-    with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as spool:
-        with zipfile.ZipFile(spool, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-            for name in sorted(expected):
-                info = zipfile.ZipInfo(_relative(name), date_time=(1980, 1, 1, 0, 0, 0))
-                info.create_system = 3
-                info.external_attr = (stat.S_IFREG | 0o644) << 16
-                info.compress_type = zipfile.ZIP_DEFLATED
-                info.file_size = expected[name]["bytes"]
-                digest = hashlib.sha256()
-                count = 0
-                with archive.open(info, "w") as destination:
-                    if name in generated:
-                        chunks = (generated[name],)
-                        for chunk in chunks:
-                            destination.write(chunk)
-                            digest.update(chunk)
-                            count += len(chunk)
-                    else:
-                        with inputs[name].open("rb") as source:
-                            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+    from agdesign2.public_api_transport import build_runtime_data
+
+    logical_file_count = len(data_files)
+    logical_bytes = sum(path.stat().st_size for path in data_files.values())
+    with tempfile.TemporaryDirectory(prefix="oa-service-runtime-") as temporary:
+        runtime = Path(temporary).resolve() / "data"
+        transport = build_runtime_data(bundle, runtime, validate=False)
+        data_files = _runtime_files(runtime, data_files, transport)
+        sources = {name: _file(service, name) for name in SOURCE_FILES}
+        sources.update({name: _file(repo, name) for name in LICENSE_FILES})
+        package = _read_json(sources["package.json"])
+        lock = _read_json(sources["package-lock.json"])
+        if package.get("engines", {}).get("node") != ">=22 <23" or package.get("scripts", {}).get("start") != "node src/server.js":
+            raise ValueError("service package must declare the supported Node 22 start command")
+        if lock.get("lockfileVersion") != 3 or lock.get("packages", {}).get("", {}).get("dependencies") != package.get("dependencies"):
+            raise ValueError("dependency lock does not match package.json")
+        if not package.get("dependencies") or any(not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?", str(version)) for version in package["dependencies"].values()):
+            raise ValueError("runtime dependencies must use exact pinned versions")
+        for name, entry in lock["packages"].items():
+            if not name:
+                continue
+            resolved = urlsplit(entry.get("resolved", ""))
+            if not name.startswith("node_modules/") or entry.get("link") or resolved.scheme != "https" or resolved.netloc != "registry.npmjs.org" or resolved.query or resolved.fragment or not entry.get("integrity", "").startswith(("sha512-", "sha256-")):
+                raise ValueError("lockfile dependencies must use integrity-pinned public npm registry URLs")
+        code_files = {name: {"sha256": _hash_file(path), "bytes": path.stat().st_size} for name, path in sources.items()}
+        build_id = hashlib.sha256(_json_bytes(code_files)).hexdigest()
+        build = {"schema_version": 1, "service_build_id": build_id, "runtime": "node22", "files": code_files, "data_transport": transport}
+        generated = {"service-build.json": _json_bytes(build) + b"\n"}
+        inputs = {**sources, **{f"data/{name}": path for name, path in data_files.items()}}
+        expected = {name: {"sha256": _hash_file(path), "bytes": path.stat().st_size} for name, path in inputs.items()}
+        expected.update({name: {"sha256": hashlib.sha256(value).hexdigest(), "bytes": len(value)} for name, value in generated.items()})
+        expanded = sum(entry["bytes"] for entry in expected.values())
+        static_bytes = sum(item["static_metadata_bytes"] + sum(value["download_bytes"] for value in item["species"].values()) for item in releases)
+        static_files = sum(2 + sum(value["download_files"] for value in item["species"].values()) for item in releases)
+        if expanded > max_expanded_bytes * (1 - reserve_fraction):
+            raise ValueError(f"expanded artifact is {expanded} bytes; local budget with reserved headroom is {int(max_expanded_bytes * (1 - reserve_fraction))} bytes")
+        audit = {"status": "not_run", "command": "npm audit --omit=dev --audit-level=high", "report": None}
+        if dependency_audit_report is not None:
+            audit_path = Path(dependency_audit_report)
+            if audit_path.is_symlink() or not audit_path.is_file():
+                raise ValueError("dependency audit report must be a regular file")
+            report = _read_json(audit_path)
+            audit = {"status": "provided_unverified", "command": audit["command"], "report": {"name": audit_path.name, "sha256": _hash_file(audit_path), "bytes": audit_path.stat().st_size}, "reported_vulnerabilities": report.get("metadata", {}).get("vulnerabilities"), "note": "Report is recorded; command execution, freshness and the installed dependency tree require review."}
+        with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024) as spool:
+            with zipfile.ZipFile(spool, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+                for name in sorted(expected):
+                    info = zipfile.ZipInfo(_relative(name), date_time=(1980, 1, 1, 0, 0, 0))
+                    info.create_system = 3
+                    info.external_attr = (stat.S_IFREG | 0o644) << 16
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    info._compresslevel = 9
+                    info.file_size = expected[name]["bytes"]
+                    digest = hashlib.sha256()
+                    count = 0
+                    with archive.open(info, "w") as destination:
+                        if name in generated:
+                            chunks = (generated[name],)
+                            for chunk in chunks:
                                 destination.write(chunk)
                                 digest.update(chunk)
                                 count += len(chunk)
-                if {"sha256": digest.hexdigest(), "bytes": count} != expected[name]:
-                    raise ValueError("release input changed while packaging")
-        size = spool.tell()
-        if size >= HARD_ZIP_LIMIT or size > max_zip_bytes * (1 - reserve_fraction):
-            raise ValueError("compressed artifact exceeds its local budget with reserved headroom")
-        spool.seek(0)
-        archive_hash = hashlib.file_digest(spool, "sha256").hexdigest()
-        artifact = {
-            "schema_version": 1, "artifact": output.name, "sha256": archive_hash,
-            "bytes": size, "expanded_bytes": expanded, "file_count": len(expected),
-            "zip64_required": len(expected) > zipfile.ZIP_FILECOUNT_LIMIT or any(entry["bytes"] * 1.05 > zipfile.ZIP64_LIMIT for entry in expected.values()),
-            "retained_static_download_bytes": static_bytes, "retained_static_download_file_count": static_files,
-            "minimum_app_plus_retained_static_bytes": expanded + static_bytes,
-            "service_build_id": build_id, "current_release_id": root["current_release_id"],
-            "releases": releases, "runtime": "node22", "files": expected,
-            "retired_releases": root.get("retired_releases", []),
-            "local_budgets": {"zip_bytes": max_zip_bytes, "expanded_bytes": max_expanded_bytes, "reserve_fraction": reserve_fraction, "zip_remaining_bytes": max_zip_bytes - size, "expanded_remaining_bytes": max_expanded_bytes - expanded, "host_capacity_verified": False},
-            "dependency_audit": audit,
-            "gates": {"public_bundle_and_static_downloads": "passed", "exact_source_allowlist": "passed", "local_package_size_with_headroom": "passed", "dependency_audit": "not_verified", "service_contract_tests": "not_verified", **{name: "not_verified" for name in HOST_GATES}},
-            "publication_state": "prepared_local_artifact", "dry_run": dry_run,
-        }
-        if not dry_run:
-            output.parent.mkdir(parents=True, exist_ok=True)
-            created = []
-            try:
-                with output.open("xb") as destination:
-                    created.append(output)
-                    spool.seek(0)
-                    shutil.copyfileobj(spool, destination)
-                with artifact_path.open("xb") as destination:
-                    created.append(artifact_path)
-                    destination.write(_json_bytes(artifact) + b"\n")
-            except BaseException:
-                for path in created:
-                    path.unlink(missing_ok=True)
-                raise
-    return artifact
+                        else:
+                            with inputs[name].open("rb") as source:
+                                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                                    destination.write(chunk)
+                                    digest.update(chunk)
+                                    count += len(chunk)
+                    if {"sha256": digest.hexdigest(), "bytes": count} != expected[name]:
+                        raise ValueError("release input changed while packaging")
+            size = spool.tell()
+            if size >= HARD_ZIP_LIMIT or size > max_zip_bytes * (1 - reserve_fraction):
+                raise ValueError(f"compressed artifact is {size} bytes; local budget with reserved headroom is {int(max_zip_bytes * (1 - reserve_fraction))} bytes and hard ceiling is below {HARD_ZIP_LIMIT} bytes")
+            spool.seek(0)
+            archive_hash = hashlib.file_digest(spool, "sha256").hexdigest()
+            artifact = {
+                "schema_version": 1, "artifact": output.name, "sha256": archive_hash,
+                "bytes": size, "expanded_bytes": expanded, "file_count": len(expected),
+                "physical_data_file_count": len(data_files), "physical_data_bytes": transport["physical_bytes"],
+                "logical_data_file_count": logical_file_count, "logical_data_bytes": logical_bytes,
+                "data_transport": transport,
+                "external_bulk_download_verification": {"staging": "complete_bytes_and_exports_verified", "runtime": "metadata_only_external_static_files"},
+                "zip64_required": len(expected) > zipfile.ZIP_FILECOUNT_LIMIT or any(entry["bytes"] * 1.05 > zipfile.ZIP64_LIMIT for entry in expected.values()),
+                "retained_static_download_bytes": static_bytes, "retained_static_download_file_count": static_files,
+                "minimum_app_plus_retained_static_bytes": expanded + static_bytes,
+                "service_build_id": build_id, "current_release_id": root["current_release_id"],
+                "releases": releases, "runtime": "node22", "files": expected,
+                "retired_releases": root.get("retired_releases", []),
+                "local_budgets": {"zip_bytes": max_zip_bytes, "expanded_bytes": max_expanded_bytes, "reserve_fraction": reserve_fraction, "zip_remaining_bytes": max_zip_bytes - size, "expanded_remaining_bytes": max_expanded_bytes - expanded, "host_capacity_verified": False},
+                "dependency_audit": audit,
+                "gates": {"public_bundle_and_static_downloads": "passed", "exact_source_allowlist": "passed", "local_package_size_with_headroom": "passed", "physical_transport_integrity": "passed", "dependency_audit": "not_verified", "service_contract_tests": "not_verified", **{name: "not_verified" for name in HOST_GATES}},
+                "publication_state": "prepared_local_artifact", "dry_run": dry_run,
+            }
+            if not dry_run:
+                output.parent.mkdir(parents=True, exist_ok=True)
+                created = []
+                try:
+                    with output.open("xb") as destination:
+                        created.append(output)
+                        spool.seek(0)
+                        shutil.copyfileobj(spool, destination)
+                    with artifact_path.open("xb") as destination:
+                        created.append(artifact_path)
+                        destination.write(_json_bytes(artifact) + b"\n")
+                except BaseException:
+                    for path in created:
+                        path.unlink(missing_ok=True)
+                    raise
+        return artifact

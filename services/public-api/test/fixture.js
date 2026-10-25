@@ -3,8 +3,8 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { createHash } from "node:crypto";
 import { gzipSync } from "node:zlib";
-import { semanticHash } from "../src/provider.js";
-import { SECTIONS } from "../src/contracts.js";
+import { semanticHash, fasta } from "../src/provider.js";
+import { SECTIONS, DOWNLOAD_ROLES } from "../src/contracts.js";
 const sha = (b) => createHash("sha256").update(b).digest("hex");
 const canonical = (v) =>
   JSON.stringify(
@@ -20,13 +20,56 @@ const canonical = (v) =>
   );
 export async function fixture(
   snapshot = "fixture",
-  { legacyRootSchema = false, inputHashes = {} } = {},
+  {
+    legacyRootSchema = false,
+    extraUnresolved = 0,
+    legacyIndex = false,
+    inputHashes = {},
+    sequenceWarnings = ["Warning with unicode α; spaces and = / ? %."],
+  } = {},
 ) {
   const publicSchema = JSON.parse(
     await readFile(new URL("./schema.json", import.meta.url)),
   );
   if (legacyRootSchema)
     delete publicSchema.$defs.root_manifest.properties.retired_releases;
+  const rowFields = [
+    "target_id",
+    "record_id",
+    "species",
+    "taxon_id",
+    "search_text",
+    "track",
+    "status",
+    "structure_state",
+    "construct_state",
+  ];
+  publicSchema.$defs.search_row = {
+    type: "object",
+    additionalProperties: false,
+    required: [...rowFields, "summary_path"],
+    properties: {
+      ...Object.fromEntries(
+        rowFields.map((key) => [
+          key,
+          publicSchema.$defs.summary.properties[key],
+        ]),
+      ),
+      summary_path: { type: "string", maxLength: 1024 },
+    },
+  };
+  if (!legacyIndex) {
+    publicSchema["x-openantigens-index-version"] = 2;
+    publicSchema.$defs.index.properties.data.items = {
+      $ref: "#/$defs/search_row",
+    };
+  } else {
+    delete publicSchema["x-openantigens-index-version"];
+    publicSchema.$defs.index.properties.data.items = {
+      $ref: "#/$defs/summary",
+    };
+  }
+  publicSchema["x-openantigens-fasta-version"] = 2;
   const directory = await mkdtemp(join(tmpdir(), "oa-api-test-"));
   const core = {
     schema_version: 1,
@@ -90,6 +133,7 @@ export async function fixture(
   ]) {
     const prefix = `releases/${release_id}/${s}`;
     const target_id = `${taxon_id}:uniprot:${accession}`;
+    const targetHash = sha(canonical(target_id));
     const sequence = "ACDEFGHIKLMNPQRSTVWY";
     const sections = Object.fromEntries(
       SECTIONS.map((section) => [
@@ -109,7 +153,7 @@ export async function fixture(
       pages: [
         await shard(
           s,
-          `${prefix}/sections/topology-0.json`,
+          `${prefix}/sections/${targetHash}/topology-0.json`,
           {
             target_id,
             section: "topology",
@@ -172,7 +216,7 @@ export async function fixture(
       disease_ids: s === "human" ? ["EFO:0001"] : [],
       family_names: ["Example"],
       live_report_url: `https://openantigens.org/${s}/example.html`,
-      search_text: `EXAMPLE Alias ${accession} Example protein`,
+      search_text: `catalog EXAMPLE Alias ${accession} Example protein`,
     };
     const seq = {
       target_id,
@@ -189,18 +233,18 @@ export async function fixture(
       length: 20,
       sequence,
       sequence_sha256: sha(sequence),
-      warnings: ["Warning with unicode α; spaces and = / ? %."],
+      warnings: sequenceWarnings,
       evidence: ["fixture:evidence?scope=1"],
     };
     const reference = await shard(
       s,
-      `${prefix}/sequences/reference.json`,
+      `${prefix}/sequences/${targetHash}-reference.json`,
       seq,
       "sequence",
     );
     const cseq = await shard(
       s,
-      `${prefix}/sequences/construct.json`,
+      `${prefix}/sequences/${construct_id}.json`,
       { ...seq, construct_id, sequence_basis: "reference_slice" },
       "sequence",
     );
@@ -228,13 +272,13 @@ export async function fixture(
     };
     const cpage = await shard(
       s,
-      `${prefix}/constructs/0.json`,
+      `${prefix}/constructs/${targetHash}-0.json`,
       [construct],
       "constructs",
     );
     const target = await shard(
       s,
-      `${prefix}/targets/0.json`,
+      `${prefix}/targets/${targetHash}.json`,
       {
         summary,
         sections,
@@ -257,13 +301,13 @@ export async function fixture(
       identifier_source: null,
       entry_name: "unresolved",
       gene_symbol: "UNRESOLVED",
-      search_text: "unresolved",
+      search_text: "catalog unresolved",
       construct_count: 0,
       construct_state: "unavailable",
     };
-    await shard(
+    const unresolvedPath = await shard(
       s,
-      `${prefix}/targets/unresolved.json`,
+      `${prefix}/targets/${sha(canonical(unresolved.record_id))}.json`,
       {
         summary: unresolved,
         sections: Object.fromEntries(
@@ -283,60 +327,71 @@ export async function fixture(
       },
       "target",
     );
+    const unresolvedRows = [[unresolved, unresolvedPath]];
+    for (let index = 0; index < extraUnresolved; index++) {
+      const record = {
+        ...unresolved,
+        record_id: sha(`${s}:unresolved-extra:${index}`),
+        gene_symbol: `UNRESOLVED_${index}`,
+      };
+      const path = await shard(
+        s,
+        `${prefix}/targets/${sha(canonical(record.record_id))}.json`,
+        {
+          summary: record,
+          sections: Object.fromEntries(
+            SECTIONS.map((section) => [
+              section,
+              {
+                state: "unknown",
+                reason: "Source query history is unavailable.",
+                total: 0,
+                pages: [],
+              },
+            ]),
+          ),
+          constructs: {
+            state: "no_results",
+            reason: null,
+            total: 0,
+            pages: [],
+          },
+          reference_sequence_path: null,
+          construct_sequence_paths: {},
+        },
+        "target",
+      );
+      unresolvedRows.push([record, path]);
+    }
     const index_path = await shard(
       s,
       `${prefix}/index.json`,
-      [summary, unresolved],
+      legacyIndex
+        ? [summary, ...unresolvedRows.map(([record]) => record)]
+        : [[summary, target], ...unresolvedRows].map(([record, path]) => ({
+            ...Object.fromEntries(rowFields.map((key) => [key, record[key]])),
+            summary_path: path,
+          })),
       "index",
     );
-    const downloadPath = `${prefix}/downloads/records.jsonl.gz`;
-    await put(
-      downloadPath,
-      gzipSync(
-        Buffer.from(
-          envelopes
-            .filter((v) => v.payload.species === s)
-            .map((v) => canonical(v))
-            .join("\n") + "\n",
-        ),
-        { mtime: 0 },
-      ),
-      "application/gzip",
-      null,
-    );
-    const file = files[downloadPath];
-    const download = {
-      name: "records.jsonl.gz",
-      url: `https://openantigens.org/data/releases/${release_id}/${s}/records.jsonl.gz`,
-      path: downloadPath,
-      ...file,
-      row_count: 6,
-      license: "fixture",
-    };
     species[s] = {
       taxon_id,
       index_path,
       target_paths: { [target_id]: target },
-      downloads: [download],
+      downloads: [],
       counts: {
-        targets: 2,
+        targets: 2 + extraUnresolved,
         resolved_targets: 1,
         constructs: 1,
-        status: { ok: 2 },
+        status: { ok: 2 + extraUnresolved },
       },
       capabilities: {
         sections: SECTIONS.filter((v) => v !== "disease" || s === "human"),
         disease: s === "human",
       },
-      records_download: download,
+      records_download: null,
     };
   }
-  await put(
-    `releases/${release_id}/schema.json`,
-    publicSchema,
-    "application/schema+json",
-    null,
-  );
   const manifest = {
     release_id,
     schema_version: 1,
@@ -364,15 +419,15 @@ export async function fixture(
   );
   for (const name of ["human", "mouse"]) {
     const summaries = byPath.get(species[name].index_path);
-    const projected = summaries.map((summary) => {
+    const projected = summaries.map((row) => {
       const target = envelopes.find(
         (entry) =>
           entry.kind === "target" &&
           entry.payload.species === name &&
-          entry.payload.data.summary.record_id === summary.record_id,
+          entry.payload.data.summary.record_id === row.record_id,
       ).payload.data;
       return {
-        summary,
+        summary: target.summary,
         sections: Object.fromEntries(
           Object.entries(target.sections).map(([section, descriptor]) => [
             section,
@@ -421,36 +476,117 @@ export async function fixture(
       sha256: sha(bytes),
     };
   }
-  const schemaPath = `releases/${release_id}/schema.json`;
-  const schemaBytes = Buffer.from(canonical(publicSchema) + "\n");
-  await writeFile(join(directory, schemaPath), schemaBytes);
-  finalManifest.files[schemaPath] = {
-    ...files[`releases/${previousId}/schema.json`],
-    bytes: schemaBytes.length,
-    sha256: sha(schemaBytes),
-  };
+  const jsonl = (records) =>
+    Buffer.from(records.map(canonical).join("\n") + "\n");
+  const tsv = (records, fields) =>
+    Buffer.from(
+      fields.join("\t") +
+        "\n" +
+        records
+          .map((record) =>
+            fields
+              .map((key) => {
+                const value = record[key];
+                let text =
+                  value === null
+                    ? ""
+                    : typeof value === "object"
+                      ? canonical(value)
+                      : String(value);
+                if (/^[=+@-]/.test(text)) text = "'" + text;
+                return /[\t\n\r"]/.test(text)
+                  ? `"${text.replaceAll('"', '""')}"`
+                  : text;
+              })
+              .join("\t"),
+          )
+          .join("\n") +
+        "\n",
+    );
   for (const name of ["human", "mouse"]) {
-    const download = finalManifest.species[name].records_download;
     const entries = finalEnvelopes.filter(
       (entry) => entry.payload.species === name,
     );
-    const bytes = gzipSync(
-      Buffer.from(entries.map(canonical).join("\n") + "\n"),
-      { mtime: 0 },
-    );
-    await mkdir(dirname(join(directory, download.path)), { recursive: true });
-    await writeFile(join(directory, download.path), bytes);
-    Object.assign(download, {
-      bytes: bytes.length,
-      sha256: sha(bytes),
-      row_count: entries.length,
-    });
-    finalManifest.species[name].downloads[0] = download;
-    finalManifest.files[download.path] = {
-      ...finalManifest.files[download.path],
-      bytes: bytes.length,
-      sha256: sha(bytes),
+    const targets = entries
+      .filter((entry) => entry.kind === "target")
+      .map((entry) => entry.payload.data);
+    const summaries = targets.map((target) => target.summary);
+    const constructs = entries
+      .filter((entry) => entry.kind === "constructs")
+      .flatMap((entry) => entry.payload.data);
+    const sequences = entries
+      .filter((entry) => entry.kind === "sequence")
+      .map((entry) => entry.payload.data);
+    const provenance_url = `https://openantigens.org/data/releases/${release_id}/manifest.json`;
+    const records_url = `https://openantigens.org/data/releases/${release_id}/${name}/records.jsonl.gz`;
+    const contents = {
+      "index.jsonl": jsonl(summaries),
+      "index.tsv": tsv(
+        summaries,
+        Object.keys(publicSchema.$defs.summary.properties),
+      ),
+      "constructs.jsonl": jsonl(constructs),
+      "constructs.tsv": tsv(
+        constructs,
+        Object.keys(publicSchema.$defs.construct.properties),
+      ),
+      "constructs.fasta": Buffer.from(
+        sequences
+          .filter((sequence) => sequence.construct_id)
+          .map((sequence) =>
+            fasta(sequence, { release_id, provenance_url, records_url }),
+          )
+          .join(""),
+      ),
+      "reference.fasta": Buffer.from(
+        sequences
+          .filter((sequence) => sequence.construct_id === null)
+          .map((sequence) =>
+            fasta(sequence, { release_id, provenance_url, records_url }),
+          )
+          .join(""),
+      ),
+      "schema.json": Buffer.from(canonical(publicSchema) + "\n"),
+      "citation.json": Buffer.from(canonical(finalManifest.citation) + "\n"),
+      "openantigens.bib": Buffer.from("@misc{fixture, title={Fixture}}\n"),
+      "openantigens.ris": Buffer.from("TY  - GEN\nTI  - Fixture\nER  - \n"),
+      "records.jsonl.gz": gzipSync(jsonl(entries), { mtime: 0 }),
     };
+    finalManifest.species[name].downloads = [];
+    for (const [filename, [media_type, schema, encoding]] of Object.entries(
+      DOWNLOAD_ROLES,
+    )) {
+      const path = `releases/${release_id}/${name}/downloads/${filename}`;
+      const bytes = contents[filename];
+      await mkdir(dirname(join(directory, path)), { recursive: true });
+      await writeFile(join(directory, path), bytes);
+      const file = {
+        bytes: bytes.length,
+        sha256: sha(bytes),
+        media_type,
+        schema,
+        encoding,
+      };
+      finalManifest.files[path] = file;
+      const download = {
+        name: filename,
+        url: `https://openantigens.org/data/releases/${release_id}/${name}/${filename}`,
+        path,
+        ...file,
+        row_count:
+          filename === "records.jsonl.gz"
+            ? entries.length
+            : filename.startsWith("index.")
+              ? summaries.length
+              : filename.startsWith("constructs.")
+                ? constructs.length
+                : null,
+        license: "fixture",
+      };
+      finalManifest.species[name].downloads.push(download);
+      if (filename === "records.jsonl.gz")
+        finalManifest.species[name].records_download = download;
+    }
   }
   const path = `releases/${release_id}/manifest.json`;
   const bytes = Buffer.from(canonical(finalManifest) + "\n");
@@ -470,5 +606,94 @@ export async function fixture(
     construct_id,
     target_id: "9606:uniprot:P12345",
     manifest: finalManifest,
+  };
+}
+
+export async function packedFixture(sourceDirectory) {
+  const directory = await mkdtemp(join(tmpdir(), "oa-packed-provider-"));
+  const rootBytes = await readFile(join(sourceDirectory, "manifest.json"));
+  const root = JSON.parse(rootBytes);
+  const transport = {
+    format: "openantigens-target-gzip-v1",
+    root_manifest_sha256: sha(rootBytes),
+    targets: {},
+  };
+  const write = async (path, bytes) => {
+    await mkdir(dirname(join(directory, path)), { recursive: true });
+    await writeFile(join(directory, path), bytes);
+  };
+  await write("manifest.json", rootBytes);
+  await write(
+    "manifest.sha256",
+    Buffer.from(`${sha(rootBytes)}  manifest.json\n`),
+  );
+  for (const pointer of root.releases) {
+    const bytes = await readFile(join(sourceDirectory, pointer.manifest_path));
+    const manifest = JSON.parse(bytes);
+    await write(pointer.manifest_path, bytes);
+    for (const [path, file] of Object.entries(manifest.files)) {
+      if (
+        file.schema === "index" ||
+        [
+          "schema.json",
+          "citation.json",
+          "openantigens.bib",
+          "openantigens.ris",
+        ].some((name) => path.endsWith("/downloads/" + name))
+      )
+        await write(path, await readFile(join(sourceDirectory, path)));
+      if (file.schema !== "target_shard") continue;
+      const target = JSON.parse(
+        await readFile(join(sourceDirectory, path)),
+      ).data;
+      const paths = [
+        path,
+        ...Object.values(target.sections).flatMap((section) => section.pages),
+        ...target.constructs.pages,
+        target.reference_sequence_path,
+        ...Object.values(target.construct_sequence_paths),
+      ]
+        .filter(Boolean)
+        .sort();
+      const members = [];
+      for (const member of paths)
+        members.push([
+          member,
+          (await readFile(join(sourceDirectory, member))).toString("base64"),
+        ]);
+      const decoded = Buffer.from(
+        canonical({ format: transport.format, members }) + "\n",
+      );
+      const compressed = gzipSync(decoded, { level: 9, mtime: 0 });
+      const [, release_id, species, , leaf] = path.split("/");
+      const pack = `packs/${release_id}/${species}/${leaf.slice(0, -5)}-0.json.gz`;
+      await write(pack, compressed);
+      transport.targets[path] = [
+        {
+          path: pack,
+          sha256: sha(compressed),
+          bytes: compressed.length,
+          decoded_bytes: decoded.length,
+          members: members.length,
+          min_path: members[0][0],
+          max_path: members.at(-1)[0],
+        },
+      ];
+    }
+  }
+  const indexBytes = Buffer.from(canonical(transport) + "\n");
+  await write("transport-index.json", indexBytes);
+  const seal = {
+    format: transport.format,
+    root_manifest_sha256: sha(rootBytes),
+    transport_index_sha256: sha(indexBytes),
+  };
+  return {
+    directory,
+    seal,
+    pins: {
+      expectedRootSha256: seal.root_manifest_sha256,
+      expectedTransportSha256: seal.transport_index_sha256,
+    },
   };
 }

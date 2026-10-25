@@ -80,10 +80,13 @@ class PublicApiDataTests(unittest.TestCase):
                 index = json.loads((bundle / info["index_path"]).read_bytes())["data"]
                 self.assertEqual(index[0]["target_id"], identifier)
                 self.assertEqual(index[0]["track"], "gpi")
-                self.assertEqual(index[0]["analyzed_topology"], "single_pass_type_i")
-                self.assertEqual(index[0]["section_availability"]["ptms"], "unknown")
-                self.assertEqual(index[0]["sequence_accession"], "NP_000001.1" if species == "mouse" else "P00001")
                 target = json.loads((bundle / info["target_paths"][identifier]).read_bytes())["data"]
+                summary = target["summary"]
+                self.assertEqual(index[0]["summary_path"], info["target_paths"][identifier])
+                self.assertNotIn("aliases", index[0])
+                self.assertEqual(summary["analyzed_topology"], "single_pass_type_i")
+                self.assertEqual(summary["section_availability"]["ptms"], "unknown")
+                self.assertEqual(summary["sequence_accession"], "NP_000001.1" if species == "mouse" else "P00001")
                 sequence = json.loads((bundle / target["reference_sequence_path"]).read_bytes())["data"]
                 self.assertEqual(sequence["sequence"][0], "M" if species == "mouse" else "A")
                 self.assertIn(f"sequence_accession={sequence['sequence_accession']}", sequence_fasta(sequence, release_id=release["release_id"], provenance_url=release["manifest_url"], records_url=info["records_download"]["url"]))
@@ -314,7 +317,8 @@ class PublicApiDataTests(unittest.TestCase):
             self.assertEqual(info["counts"]["resolved_targets"], 1)
             rows = json.loads((root / "bundle" / info["index_path"]).read_bytes())["data"]
             unresolved = next(row for row in rows if row["target_id"] is None)
-            self.assertIsNone(unresolved["sequence_sha256"])
+            unresolved_summary = json.loads((root / "bundle" / unresolved["summary_path"]).read_bytes())["data"]["summary"]
+            self.assertIsNone(unresolved_summary["sequence_sha256"])
             self.assertEqual(unresolved["status"], "error")
 
     def test_identity_tuple_digest_and_portable_numeric_digest_are_frozen(self) -> None:
@@ -348,7 +352,7 @@ class PublicApiDataTests(unittest.TestCase):
             replace_file(info["index_path"], canonical_bytes(index) + b"\n")
             target_path = next(iter(info["target_paths"].values()))
             target = json.loads((bundle / target_path).read_bytes())
-            target["data"]["summary"] = index["data"][0]
+            target["data"]["summary"]["search_text"] = index["data"][0]["search_text"]
             replace_file(target_path, canonical_bytes(target) + b"\n")
             fallback_path = info["records_download"]["path"]
             fallback = [json.loads(line) for line in gzip.decompress((bundle / fallback_path).read_bytes()).splitlines()]
@@ -382,25 +386,52 @@ class PublicApiDataTests(unittest.TestCase):
                 self.assertEqual(before, {str(path.relative_to(site)): path.read_bytes() for path in site.rglob("*") if path.is_file()})
 
     def test_second_metadata_failure_rolls_back_first_exact_bytes(self) -> None:
+        import stat
         from agdesign2.public_api_data import _atomic_public_replace
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            human, mouse, site = source_fixture(root)
-            paths = [site / "portal_metadata.json", site / "mouse/portal_metadata.json"]
-            before = [path.read_bytes() for path in paths]
-            calls = []
+        for modes in ((0o644, 0o640), (0o640, 0o644)):
+            with self.subTest(modes=modes), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                human, mouse, site = source_fixture(root)
+                paths = [site / "portal_metadata.json", site / "mouse/portal_metadata.json"]
+                for path, mode in zip(paths, modes):
+                    path.chmod(mode)
+                before = [(path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in paths]
+                victim = root / "outside.txt"
+                victim.write_bytes(b"Unrelated outside bytes remain unchanged.")
+                victim.chmod(0o640)
+                outside = (victim.read_bytes(), stat.S_IMODE(victim.stat().st_mode))
+                calls = []
 
-            def fail_second(directory, relative, content):
-                calls.append(relative)
-                if len(calls) == 2:
-                    raise OSError("synthetic atomic replace failure")
-                return _atomic_public_replace(directory, relative, content)
+                def fail_second(directory, relative, content):
+                    calls.append(relative)
+                    if len(calls) == 2:
+                        raise OSError("synthetic atomic replace failure")
+                    return _atomic_public_replace(directory, relative, content)
 
-            with mock.patch("agdesign2.public_api_data._atomic_public_replace", side_effect=fail_second):
-                with self.assertRaisesRegex(OSError, "synthetic atomic"):
-                    build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="rollback")
-            self.assertEqual(before, [path.read_bytes() for path in paths])
-            self.assertEqual(calls, ["portal_metadata.json", "mouse/portal_metadata.json", "portal_metadata.json"])
+                with mock.patch("agdesign2.public_api_data._atomic_public_replace", side_effect=fail_second):
+                    with self.assertRaisesRegex(OSError, "synthetic atomic"):
+                        build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="rollback")
+                self.assertEqual(before, [(path.read_bytes(), stat.S_IMODE(path.stat().st_mode)) for path in paths])
+                self.assertEqual(outside, (victim.read_bytes(), stat.S_IMODE(victim.stat().st_mode)))
+                self.assertEqual(calls, ["portal_metadata.json", "mouse/portal_metadata.json", "portal_metadata.json"])
+
+    def test_metadata_success_preserves_human_mouse_modes_and_external_hardlink(self) -> None:
+        import stat
+        for modes in ((0o644, 0o640), (0o640, 0o644)):
+            with self.subTest(modes=modes), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                human, mouse, site = source_fixture(root)
+                paths = [site / "portal_metadata.json", site / "mouse/portal_metadata.json"]
+                for path, mode in zip(paths, modes):
+                    path.chmod(mode)
+                victim = root / "outside.json"
+                os.link(paths[0], victim)
+                outside = (victim.read_bytes(), stat.S_IMODE(victim.stat().st_mode))
+                build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="mode-preservation")
+                self.assertEqual(tuple(stat.S_IMODE(path.stat().st_mode) for path in paths), modes)
+                self.assertTrue(all(json.loads(path.read_bytes())["public_api"]["state"] == "packaged" for path in paths))
+                self.assertEqual(outside, (victim.read_bytes(), stat.S_IMODE(victim.stat().st_mode)))
+                self.assertNotEqual(paths[0].stat().st_ino, victim.stat().st_ino)
 
     def test_cysteine_source_interval_is_distinct_from_full_reference_export(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -513,6 +544,16 @@ class PublicApiDataTests(unittest.TestCase):
         from agdesign2.public_api_data import _approved_release_schema
         old = copy.deepcopy(PUBLIC_SCHEMA)
         old.pop("x-openantigens-fasta-version")
+        old.pop("x-openantigens-index-version")
+        old.pop("x-openantigens-disease-selection")
+        old["$defs"]["summary"]["properties"].pop("disease_coverage")
+        old["$defs"]["summary"]["required"].remove("disease_coverage")
+        old["$defs"]["section_disease"]["properties"]["data"]["properties"].pop("coverage")
+        old["$defs"]["section_disease"]["properties"]["data"]["required"].remove("coverage")
+        old["$defs"].pop("disease_coverage")
+        old["$defs"]["provenance"]["properties"].pop("projection_methods")
+        old["$defs"]["index"]["properties"]["data"]["items"] = {"$ref": "#/$defs/summary"}
+        old["$defs"].pop("search_row")
         for field in ("analysis_start", "analysis_end"):
             old["$defs"]["cysteine"]["properties"].pop(field)
             old["$defs"]["cysteine"]["required"].remove(field)
@@ -570,7 +611,7 @@ class PublicApiDataTests(unittest.TestCase):
 
     def test_raw_reports_are_read_once_and_released_before_the_next_target(self) -> None:
         import weakref
-        from agdesign2.public_api_data import _load_sources, _read_json_hashed
+        from agdesign2.public_api_data import _load_sources, _read_json_hashed, project_public_target as real_project
 
         class TrackedReport(dict):
             pass
@@ -596,7 +637,7 @@ class PublicApiDataTests(unittest.TestCase):
                 index.append({**original_entry, "entry_name": entry_name, "detail_page": page})
             human.write_text(json.dumps(summary))
             (site / "downloads/agdesign2_portal_index.json").write_text(json.dumps(index))
-            references, reads = [], []
+            references, projection_references, reads = [], [], []
 
             def tracked_read(path, **kwargs):
                 if path in report_paths:
@@ -608,14 +649,249 @@ class PublicApiDataTests(unittest.TestCase):
                     reads.append(path)
                 return value, checksum
 
-            with mock.patch("agdesign2.public_api_data._read_json_hashed", side_effect=tracked_read):
-                projected, hashes = _load_sources(human, "human", site, "https://openantigens.org")
+            def tracked_project(*args, **kwargs):
+                self.assertTrue(all(reference() is None for reference in projection_references), "A preceding public projection remains resident")
+                value = TrackedReport(real_project(*args, **kwargs))
+                projection_references.append(weakref.ref(value))
+                return value
+
+            with mock.patch("agdesign2.public_api_data._read_json_hashed", side_effect=tracked_read), mock.patch("agdesign2.public_api_data.project_public_target", new=tracked_project):
+                projected, hashes = _load_sources(human, "human", site, "https://openantigens.org", staging_dir=root / "public-projection-stage")
             self.assertEqual(len(projected), 4)
             self.assertEqual(set(reads), report_paths)
             self.assertEqual(len(reads), len(report_paths))
             self.assertTrue(all(reference() is None for reference in references))
+            self.assertTrue(all(reference() is None for reference in projection_references))
             self.assertEqual(sum(key.startswith("human:report:") for key in hashes), 4)
-            self.assertNotIn("private_unused_blob", canonical_bytes(projected).decode("utf-8"))
+            self.assertNotIn("private_unused_blob", canonical_bytes(list(projected)).decode("utf-8"))
+
+    def test_correct_hashes_cannot_authorize_private_downloads_or_forged_citations(self) -> None:
+        for role in ("private_download", "citation"):
+            with self.subTest(role=role), tempfile.TemporaryDirectory() as tmp:
+                bundle = self.build(Path(tmp))
+                root = json.loads((bundle / "manifest.json").read_bytes())
+                pointer = root["releases"][0]
+                release = json.loads((bundle / pointer["manifest_path"]).read_bytes())
+                species = release["species"]["human"]
+                content = b"PRIVATE_CANARY synthetic confidential input\n"
+                if role == "private_download":
+                    relative = f"releases/{release['release_id']}/human/downloads/private.sqlite"
+                    metadata = {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content), "media_type": "application/octet-stream", "schema": None, "encoding": None}
+                    release["files"][relative] = metadata
+                    species["downloads"].append({"name": "private.sqlite", "url": f"https://openantigens.org/data/releases/{release['release_id']}/human/private.sqlite", "path": relative, **metadata, "row_count": None, "license": "synthetic"})
+                else:
+                    download = next(row for row in species["downloads"] if row["name"] == "openantigens.bib")
+                    relative = download["path"]
+                    release["files"][relative].update({"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)})
+                    download.update({"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)})
+                (bundle / relative).write_bytes(content)
+                body = canonical_bytes(release) + b"\n"
+                (bundle / pointer["manifest_path"]).write_bytes(body)
+                pointer["sha256"] = hashlib.sha256(body).hexdigest()
+                body = canonical_bytes(root) + b"\n"
+                (bundle / "manifest.json").write_bytes(body)
+                (bundle / "manifest.sha256").write_text(hashlib.sha256(body).hexdigest() + "  manifest.json\n")
+                with self.assertRaises(PublicDataError):
+                    validate_public_api_bundle(bundle)
+
+    def test_schema_valid_unreachable_file_is_rejected_even_with_complete_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self.build(Path(tmp))
+            root = json.loads((bundle / "manifest.json").read_bytes())
+            pointer = root["releases"][0]
+            release = json.loads((bundle / pointer["manifest_path"]).read_bytes())
+            info = release["species"]["human"]
+            target = json.loads((bundle / next(iter(info["target_paths"].values()))).read_bytes())["data"]
+            original = target["reference_sequence_path"]
+            extra = f"releases/{release['release_id']}/human/sequences/{'f' * 64}.json"
+            content = (bundle / original).read_bytes()
+            (bundle / extra).write_bytes(content)
+            release["files"][extra] = copy.deepcopy(release["files"][original])
+            fallback = info["records_download"]
+            records = [json.loads(line) for line in gzip.decompress((bundle / fallback["path"]).read_bytes()).splitlines()]
+            records.append({"kind": "sequence", "path": extra, "payload": json.loads(content)})
+            content = gzip.compress(b"".join(canonical_bytes(row) + b"\n" for row in records), mtime=0)
+            (bundle / fallback["path"]).write_bytes(content)
+            metadata = {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+            release["files"][fallback["path"]].update(metadata)
+            for download in [*info["downloads"], fallback]:
+                if download["name"] == "records.jsonl.gz":
+                    download.update({**metadata, "row_count": len(records)})
+            body = canonical_bytes(release) + b"\n"
+            (bundle / pointer["manifest_path"]).write_bytes(body)
+            pointer["sha256"] = hashlib.sha256(body).hexdigest()
+            body = canonical_bytes(root) + b"\n"
+            (bundle / "manifest.json").write_bytes(body)
+            (bundle / "manifest.sha256").write_text(hashlib.sha256(body).hexdigest() + "  manifest.json\n")
+            with self.assertRaisesRegex(PublicDataError, "unreachable"):
+                validate_public_api_bundle(bundle)
+
+    def test_disease_source_spans_preserve_quoted_multiline_rows_and_detect_changes(self) -> None:
+        import csv
+        from agdesign2.public_api_data import _DiseaseRows
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "associations.tsv"
+            fields = ["entry_name", "disease_id", "disease_name", "score"]
+            rows = [
+                {"entry_name": "FIRST_HUMAN", "disease_id": "EFO_000001", "disease_name": "Synthetic condition\nwith a quoted continuation", "score": "0.5"},
+                {"entry_name": "FIRST_HUMAN", "disease_id": "EFO_000002", "disease_name": "Synthetic\tcondition", "score": "0.0"},
+                {"entry_name": "SECOND_HUMAN", "disease_id": "EFO_000003", "disease_name": "Synthetic condition", "score": ""},
+            ]
+            with path.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, fields, delimiter="\t", lineterminator="\n")
+                writer.writeheader()
+                writer.writerows(rows)
+                handle.write("\n")
+            indexed = _DiseaseRows(path)
+            self.assertEqual(indexed.sha256, hashlib.sha256(path.read_bytes()).hexdigest())
+            self.assertEqual(indexed.get("FIRST_HUMAN"), rows[:2])
+            self.assertEqual(indexed.get("SECOND_HUMAN"), rows[2:])
+            self.assertEqual(indexed.get("ABSENT", []), [])
+            before = path.stat()
+            content = path.read_bytes().replace(b"EFO_000001", b"EFO_000009")
+            path.write_bytes(content)
+            os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+            with self.assertRaisesRegex(PublicDataError, "rows changed"):
+                indexed.get("FIRST_HUMAN")
+
+    def test_disease_source_rejects_noncontiguous_target_groups(self) -> None:
+        from agdesign2.public_api_data import _DiseaseRows
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "associations.tsv"
+            path.write_text("entry_name\tdisease_id\nFIRST\tEFO_000001\nSECOND\tEFO_000002\nFIRST\tEFO_000003\n")
+            with self.assertRaisesRegex(PublicDataError, "grouped by target"):
+                _DiseaseRows(path)
+
+    def test_compact_search_keeps_recorded_sequence_and_isoform_accessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            human, mouse, site = source_fixture(root)
+            human_report_path = human.parent / "report.json"
+            human_report = json.loads(human_report_path.read_bytes())
+            human_report["target"]["canonical_isoform_id"] = "P00001-1"
+            human_report_path.write_text(json.dumps(human_report))
+            mouse_report_path = mouse.parent / "report.json"
+            originals = {"human": human_report_path.read_bytes(), "mouse": mouse_report_path.read_bytes()}
+            build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="recorded-search-accessions")
+            release = self.release(root / "bundle")
+            for species, queries in (("human", ("P00001", "P00001-1")), ("mouse", ("P00002", "NP_000001.1"))):
+                info = release["species"][species]
+                index = json.loads((root / "bundle" / info["index_path"]).read_bytes())["data"]
+                self.assertEqual(len(index), 1)
+                for query in queries:
+                    self.assertIn(query.lower(), index[0]["search_text"])
+                target = json.loads((root / "bundle" / index[0]["summary_path"]).read_bytes())["data"]
+                summary = target["summary"]
+                self.assertEqual(summary["search_text"], index[0]["search_text"])
+                self.assertEqual(summary["identifier_accession"], "P00001" if species == "human" else "P00002")
+                self.assertEqual(summary["sequence_accession"], "P00001" if species == "human" else "NP_000001.1")
+                reference = json.loads((root / "bundle" / target["reference_sequence_path"]).read_bytes())["data"]
+                original_sequence = json.loads(originals[species])["target"]["sequence"]
+                self.assertEqual(reference["sequence"], original_sequence)
+                self.assertEqual(reference["sequence_sha256"], hashlib.sha256(original_sequence.encode("ascii")).hexdigest())
+                self.assertEqual(release["provenance"]["input_sha256"][f"{species}:report:0"], hashlib.sha256(originals[species]).hexdigest())
+                fallback = [json.loads(line) for line in gzip.decompress((root / "bundle" / info["records_download"]["path"]).read_bytes()).splitlines()]
+                stored_reference = next(row["payload"]["data"] for row in fallback if row["path"] == target["reference_sequence_path"])
+                self.assertEqual(stored_reference, reference)
+            self.assertEqual(human_report_path.read_bytes(), originals["human"])
+            self.assertEqual(mouse_report_path.read_bytes(), originals["mouse"])
+
+    def test_disease_projection_matches_first_100_source_rows_with_explicit_coverage(self) -> None:
+        import csv
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            human, mouse, site = source_fixture(root)
+            sources = {path: path.read_bytes() for path in (human.parent / "report.json", mouse.parent / "report.json")}
+            rows = [{"entry_name": "SYNTHETIC_HUMAN", "disease_id": f"EFO_SYNTHETIC_{n:04d}", "disease_name": f"Synthetic association {n}", "score": ((n * 17 + 90) % 101) / 100, "direct_score": "", "indirect_score": ((n * 17 + 90) % 101) / 100, "open_targets_url": f"https://platform.opentargets.org/disease/EFO_SYNTHETIC_{n:04d}"} for n in range(107)]
+            source = site / "open_targets_disease_associations.tsv"
+            with source.open("w", encoding="utf-8", newline="") as handle:
+                writer = csv.DictWriter(handle, tuple(rows[0]), delimiter="\t", lineterminator="\n")
+                writer.writeheader()
+                writer.writerows(rows)
+            original = source.read_bytes()
+            for species in ("human", "mouse"):
+                metadata = site / ("mouse" if species == "mouse" else "") / "portal_metadata.json"
+                metadata.write_text(json.dumps({"target_count": 1, "software_version": "fixture-version", "portal_build_date": "2026-10-16"}))
+            build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="portal-top-100")
+            release = self.release(root / "bundle")
+            info = release["species"]["human"]
+            target = json.loads((root / "bundle" / next(iter(info["target_paths"].values()))).read_bytes())["data"]
+            coverage = target["summary"]["disease_coverage"]
+            self.assertEqual(coverage, {"state": "available", "selection": "portal_top_100", "source_count": 107, "projected_count": 100, "limit": 100, "source_reference": {"state": "live", "url": "https://openantigens.org/open_targets_disease_associations.tsv", "sha256": hashlib.sha256(original).hexdigest()}})
+            evidence = []
+            for relative in target["sections"]["disease"]["pages"]:
+                page = json.loads((root / "bundle" / relative).read_bytes())["data"]
+                self.assertEqual(page["coverage"], coverage)
+                evidence.extend(page["items"])
+            self.assertEqual([row["disease_id"] for row in evidence], [row["disease_id"] for row in rows[:100]])
+            self.assertEqual([row["score"] for row in evidence], [row["score"] for row in rows[:100]])
+            self.assertEqual(target["summary"]["disease_ids"], sorted(row["disease_id"] for row in rows[:100]))
+            self.assertEqual(release["provenance"]["input_sha256"]["human:disease_tsv"], hashlib.sha256(original).hexdigest())
+            self.assertEqual(release["provenance"]["projection_methods"]["disease"], {"selection": "portal_top_100", "species": "human", "limit": 100, "order": "published_source_order"})
+            self.assertEqual(release["provenance"]["source_versions"]["human_portal_software"], "fixture-version")
+            self.assertIsNone(release["provenance"]["source_versions"]["open_targets"])
+            self.assertEqual(release["provenance"]["source_dates"]["human_portal_build_date"], "2026-10-16")
+            self.assertEqual(source.read_bytes(), original)
+            for path, content in sources.items():
+                self.assertEqual(path.read_bytes(), content)
+            self.assertFalse(any("open_targets_disease_associations.tsv" in path for path in release["files"]))
+
+    def test_unknown_disease_query_is_preserved_and_mouse_coverage_is_not_applicable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            human, mouse, site = source_fixture(root)
+            build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="unknown-disease-query")
+            release = self.release(root / "bundle")
+            for species, info in release["species"].items():
+                target = json.loads((root / "bundle" / next(iter(info["target_paths"].values()))).read_bytes())["data"]
+                coverage = target["summary"]["disease_coverage"]
+                self.assertEqual(coverage["state"], "unknown" if species == "human" else "not_applicable")
+                self.assertIsNone(coverage["source_count"])
+                self.assertEqual(coverage["projected_count"], 0)
+                self.assertEqual(coverage["source_reference"], {"state": "unknown" if species == "human" else "not_applicable", "url": None, "sha256": None})
+            (site / "open_targets_disease_associations.tsv").write_text("entry_name\tdisease_id\tdisease_name\tscore\n")
+            build_public_api_bundle(human, mouse, root / "empty-source-bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="recorded-empty-source")
+            empty = self.release(root / "empty-source-bundle")
+            info = empty["species"]["human"]
+            target = json.loads((root / "empty-source-bundle" / next(iter(info["target_paths"].values()))).read_bytes())["data"]
+            self.assertEqual(target["summary"]["disease_coverage"]["source_count"], 0)
+            self.assertEqual(target["summary"]["disease_coverage"]["state"], "unknown")
+            self.assertEqual(target["sections"]["disease"]["state"], "unknown")
+
+    def test_static_bulk_limit_reports_role_bytes_and_preserves_source_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            human, mouse, site = source_fixture(root)
+            metadata_paths = [site / "portal_metadata.json", site / "mouse/portal_metadata.json"]
+            original = [path.read_bytes() for path in metadata_paths]
+            with mock.patch("agdesign2.public_api_data.EXTERNAL_DOWNLOAD_LIMIT", 256):
+                with self.assertRaisesRegex(PublicDataError, r"Public download role index\.jsonl has [0-9]+ bytes; storage limit is 256 bytes") as error:
+                    build_public_api_bundle(human, mouse, root / "bundle", public_site_dir=site, software_commit="0" * 40, snapshot_id="static-bulk-budget")
+            self.assertNotIn(str(root), str(error.exception))
+            self.assertEqual([path.read_bytes() for path in metadata_paths], original)
+
+    def test_schema_metadata_keeps_one_mib_limit_despite_external_bulk_allowance(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = self.build(Path(tmp))
+            root = json.loads((bundle / "manifest.json").read_bytes())
+            pointer = root["releases"][0]
+            release = json.loads((bundle / pointer["manifest_path"]).read_bytes())
+            relative = next(row["path"] for row in release["species"]["human"]["downloads"] if row["name"] == "schema.json")
+            content = (bundle / relative).read_bytes().ljust(1024 * 1024 + 1, b" ")
+            (bundle / relative).write_bytes(content)
+            metadata = {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content)}
+            release["files"][relative].update(metadata)
+            for download in release["species"]["human"]["downloads"]:
+                if download["name"] == "schema.json":
+                    download.update(metadata)
+            body = canonical_bytes(release) + b"\n"
+            (bundle / pointer["manifest_path"]).write_bytes(body)
+            pointer["sha256"] = hashlib.sha256(body).hexdigest()
+            body = canonical_bytes(root) + b"\n"
+            (bundle / "manifest.json").write_bytes(body)
+            (bundle / "manifest.sha256").write_text(hashlib.sha256(body).hexdigest() + "  manifest.json\n")
+            with self.assertRaisesRegex(PublicDataError, r"schema\.json has 1048577 bytes; storage limit is 1048576 bytes"):
+                validate_public_api_bundle(bundle)
 
 
 if __name__ == "__main__":

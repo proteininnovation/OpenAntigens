@@ -2,6 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openantigens.org/schemas/public-api-v1.json",
   "x-openantigens-fasta-version": 2,
+  "x-openantigens-index-version": 2,
+  "x-openantigens-disease-selection": "portal_top_100",
   "$defs": {
     "region": {
       "type": "object",
@@ -1764,6 +1766,92 @@
       ],
       "additionalProperties": false
     },
+    "disease_coverage": {
+      "type": "object",
+      "properties": {
+        "state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unknown",
+            "not_applicable"
+          ]
+        },
+        "selection": {
+          "const": "portal_top_100"
+        },
+        "source_count": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Count of rows for this target in the recorded source file. Zero does not prove that a source query ran."
+        },
+        "projected_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "limit": {
+          "const": 100
+        },
+        "source_reference": {
+          "type": "object",
+          "properties": {
+            "state": {
+              "type": "string",
+              "enum": [
+                "live",
+                "unknown",
+                "not_applicable"
+              ]
+            },
+            "url": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 16384
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "sha256": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [
+            "state",
+            "url",
+            "sha256"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "state",
+        "selection",
+        "source_count",
+        "projected_count",
+        "limit",
+        "source_reference"
+      ],
+      "additionalProperties": false
+    },
     "metrics": {
       "type": "object",
       "properties": {
@@ -2367,6 +2455,9 @@
             ],
             "additionalProperties": false
           }
+        },
+        "disease_coverage": {
+          "$ref": "#/$defs/disease_coverage"
         }
       },
       "required": [
@@ -2401,7 +2492,102 @@
         "search_text",
         "canonical_isoform_id",
         "portal_construct_count",
-        "unsupported_variants"
+        "unsupported_variants",
+        "disease_coverage"
+      ],
+      "additionalProperties": false
+    },
+    "search_row": {
+      "type": "object",
+      "properties": {
+        "target_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 256
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "record_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "species": {
+          "type": "string",
+          "enum": [
+            "human",
+            "mouse"
+          ]
+        },
+        "taxon_id": {
+          "type": "integer",
+          "enum": [
+            9606,
+            10090
+          ]
+        },
+        "search_text": {
+          "type": "string",
+          "maxLength": 16384
+        },
+        "track": {
+          "type": "string",
+          "enum": [
+            "secreted",
+            "gpi",
+            "single_pass",
+            "multipass",
+            "other",
+            "unknown"
+          ]
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "ok",
+            "error",
+            "pending",
+            "running",
+            "started",
+            "skipped_existing",
+            "unknown"
+          ]
+        },
+        "structure_state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "unknown"
+          ]
+        },
+        "construct_state": {
+          "type": "string",
+          "enum": [
+            "available",
+            "unavailable",
+            "unknown"
+          ]
+        },
+        "summary_path": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "target_id",
+        "record_id",
+        "species",
+        "taxon_id",
+        "search_text",
+        "track",
+        "status",
+        "structure_state",
+        "construct_state",
+        "summary_path"
       ],
       "additionalProperties": false
     },
@@ -3089,6 +3275,39 @@
             "type": "string",
             "maxLength": 16384
           }
+        },
+        "projection_methods": {
+          "type": "object",
+          "properties": {
+            "disease": {
+              "type": "object",
+              "properties": {
+                "selection": {
+                  "const": "portal_top_100"
+                },
+                "species": {
+                  "const": "human"
+                },
+                "limit": {
+                  "const": 100
+                },
+                "order": {
+                  "const": "published_source_order"
+                }
+              },
+              "required": [
+                "selection",
+                "species",
+                "limit",
+                "order"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "disease"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
@@ -3547,7 +3766,7 @@
         "data": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/summary"
+            "$ref": "#/$defs/search_row"
           }
         }
       },
@@ -4443,6 +4662,9 @@
               "items": {
                 "$ref": "#/$defs/disease"
               }
+            },
+            "coverage": {
+              "$ref": "#/$defs/disease_coverage"
             }
           },
           "required": [
@@ -4450,7 +4672,8 @@
             "section",
             "state",
             "reason",
-            "items"
+            "items",
+            "coverage"
           ],
           "additionalProperties": false
         }

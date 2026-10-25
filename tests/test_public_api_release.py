@@ -14,6 +14,8 @@ import tempfile
 import unittest
 from unittest.mock import patch
 from contextlib import redirect_stdout
+from email.message import Message
+from types import SimpleNamespace
 
 from agdesign2.public_api_data import build_public_api_bundle
 from agdesign2.public_api_release import SOURCE_FILES, build_api_service_release
@@ -149,6 +151,57 @@ class PublicApiReleaseTests(unittest.TestCase):
             for name, descriptor in record["files"].items():
                 assert hashlib.sha256(archive.read(name)).hexdigest() == descriptor["sha256"]
 
+    def test_physical_transport_is_sealed_and_preserves_logical_member_bytes(self):
+        from agdesign2.public_api_transport import decode_part
+        output = self.tmp_path / "packed.zip"
+        artifact = package(self.release, output)
+        root = json.loads((self.release / "bundle/manifest.json").read_text())
+        manifest = json.loads((self.release / "bundle" / root["releases"][0]["manifest_path"]).read_text())
+        with zipfile.ZipFile(output) as archive:
+            build = json.loads(archive.read("service-build.json"))
+            assert build["data_transport"] == artifact["data_transport"]
+            assert build["data_transport"]["root_manifest_sha256"] == hashlib.sha256(archive.read("data/manifest.json")).hexdigest()
+            transport_bytes = archive.read("data/transport-index.json")
+            assert build["data_transport"]["transport_index_sha256"] == hashlib.sha256(transport_bytes).hexdigest()
+            transport = json.loads(transport_bytes)
+            for parts in transport["targets"].values():
+                for descriptor in parts:
+                    members = decode_part(archive.read("data/" + descriptor["path"]), descriptor, manifest["files"])
+                    for name, content in members.items():
+                        assert content == (self.release / "bundle" / name).read_bytes()
+            assert archive.read("data/" + root["releases"][0]["manifest_path"]) == (self.release / "bundle" / root["releases"][0]["manifest_path"]).read_bytes()
+            excluded = {"index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"}
+            assert not any("/downloads/" in name and Path(name).name in excluded for name in archive.namelist())
+            data_entries = [info for info in archive.infolist() if info.filename.startswith("data/")]
+            assert artifact["physical_data_file_count"] == len(data_entries)
+            assert artifact["physical_data_bytes"] == sum(info.file_size for info in data_entries)
+        assert artifact["physical_data_file_count"] < artifact["logical_data_file_count"]
+        assert artifact["external_bulk_download_verification"]["runtime"] == "metadata_only_external_static_files"
+
+    def test_changed_physical_transport_is_rejected_before_zip(self):
+        from agdesign2 import public_api_transport
+        real_build = public_api_transport.build_runtime_data
+        before = snapshot(self.release)
+        for defect in ("part", "extra", "seal", "private seal field"):
+            with self.subTest(defect=defect):
+                def tamper(source, destination, **kwargs):
+                    seal = real_build(source, destination, **kwargs)
+                    if defect == "part":
+                        path = next(destination.glob("packs/*/*/*.json.gz"))
+                        path.write_bytes(path.read_bytes() + b"PRIVATE_CANARY")
+                    elif defect == "extra":
+                        (destination / "private.sqlite").write_bytes(b"PRIVATE_CANARY")
+                    elif defect == "seal":
+                        seal["root_manifest_sha256"] = "f" * 64
+                    else:
+                        seal["source_directory"] = "/Users/PRIVATE_CANARY"
+                    return seal
+                with patch.object(public_api_transport, "build_runtime_data", tamper):
+                    with self.assertRaises(ValueError):
+                        package(self.release, self.tmp_path / "corrupt-physical.zip")
+                assert not (self.tmp_path / "corrupt-physical.zip").exists()
+                assert snapshot(self.release) == before
+
     def test_symlinks_rejected_and_inputs_preserved(self):
         release, tmp_path = self.release, self.tmp_path
         for location in ("bundle", "service", "site"):
@@ -175,7 +228,7 @@ class PublicApiReleaseTests(unittest.TestCase):
 
     def test_large_file_count_uses_zip64_and_reports_requirement(self):
         output = self.tmp_path / "many-files.zip"
-        with patch.object(zipfile, "ZIP_FILECOUNT_LIMIT", 40):
+        with patch.object(zipfile, "ZIP_FILECOUNT_LIMIT", 20):
             artifact = package(self.release, output)
         assert artifact["zip64_required"] is True
         with zipfile.ZipFile(output) as archive:
@@ -191,6 +244,7 @@ class PublicApiReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             package(release, tmp_path / "private.zip")
         assert snapshot(release) == before
+
         private.unlink()
         root = json.loads((release / "bundle/manifest.json").read_text())
         path = release / "bundle" / root["releases"][0]["manifest_path"]
@@ -201,6 +255,93 @@ class PublicApiReleaseTests(unittest.TestCase):
         assert snapshot(release) == before
 
 
+    def test_packager_independently_rejects_manifest_listed_private_database(self):
+        from agdesign2 import public_api_data
+        bundle = self.release / "bundle"
+        root = json.loads((bundle / "manifest.json").read_text())
+        manifest = json.loads((bundle / root["releases"][0]["manifest_path"]).read_text())
+        release_id = root["current_release_id"]
+        name = f"releases/{release_id}/human/downloads/private.sqlite"
+        content = b"PRIVATE_CANARY synthetic raw confidential input\n"
+        (bundle / name).write_bytes(content)
+        descriptor = {"sha256": hashlib.sha256(content).hexdigest(), "bytes": len(content), "media_type": "application/octet-stream", "encoding": None, "schema": None}
+        manifest["files"][name] = descriptor
+        manifest["species"]["human"]["downloads"].append({"name": "private.sqlite", "url": f"https://openantigens.org/data/releases/{release_id}/human/private.sqlite", "path": name, **descriptor, "row_count": None, "license": "synthetic test"})
+        (self.release / f"site/data/releases/{release_id}/human/private.sqlite").write_bytes(content)
+        replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+        before = snapshot(self.release)
+        with patch.object(public_api_data, "validate_public_api_bundle", return_value=root):
+            with self.assertRaises(ValueError):
+                package(self.release, self.tmp_path / "private-database.zip")
+        assert snapshot(self.release) == before and not (self.tmp_path / "private-database.zip").exists()
+
+    def test_packager_scans_untyped_canary_masquerading_as_approved_exports(self):
+        from agdesign2 import public_api_data
+        bundle = self.release / "bundle"
+        for download_name in ("openantigens.bib", "index.tsv"):
+            with self.subTest(download=download_name):
+                root = json.loads((bundle / "manifest.json").read_text())
+                manifest = json.loads((bundle / root["releases"][0]["manifest_path"]).read_text())
+                item = next(row for row in manifest["species"]["human"]["downloads"] if row["name"] == download_name)
+                path = bundle / item["path"]
+                original = path.read_bytes()
+                content = original + b"\nPRIVATE_CANARY synthetic untyped export\n"
+                path.write_bytes(content)
+                item.update(bytes=len(content), sha256=hashlib.sha256(content).hexdigest())
+                manifest["files"][item["path"]].update(bytes=item["bytes"], sha256=item["sha256"])
+                (self.release / f"site/data/releases/{root['current_release_id']}/human/{download_name}").write_bytes(content)
+                replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+                before = snapshot(self.release)
+                with patch.object(public_api_data, "validate_public_api_bundle", return_value=root):
+                    with self.assertRaises(ValueError):
+                        package(self.release, self.tmp_path / "masked-canary.zip")
+                assert snapshot(self.release) == before and not (self.tmp_path / "masked-canary.zip").exists()
+                path.write_bytes(original)
+                item.update(bytes=len(original), sha256=hashlib.sha256(original).hexdigest())
+                manifest["files"][item["path"]].update(bytes=item["bytes"], sha256=item["sha256"])
+                (self.release / f"site/data/releases/{root['current_release_id']}/human/{download_name}").write_bytes(original)
+                replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+
+    def test_packager_independently_rejects_unreachable_typed_storage(self):
+        from agdesign2 import public_api_data
+        bundle = self.release / "bundle"
+        root = json.loads((bundle / "manifest.json").read_text())
+        manifest = json.loads((bundle / root["releases"][0]["manifest_path"]).read_text())
+        source = next(name for name, metadata in manifest["files"].items() if metadata["schema"] == "sequence_shard")
+        name = f"releases/{root['current_release_id']}/human/sequences/{'f' * 64}.json"
+        (bundle / name).write_bytes((bundle / source).read_bytes())
+        manifest["files"][name] = dict(manifest["files"][source])
+        replace_release_manifest(bundle, self.release / "site", root, json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n")
+        before = snapshot(self.release)
+        with patch.object(public_api_data, "validate_public_api_bundle", return_value=root):
+            with self.assertRaises(ValueError):
+                package(self.release, self.tmp_path / "unreachable.zip")
+        assert snapshot(self.release) == before and not (self.tmp_path / "unreachable.zip").exists()
+
+    def test_original_website_disease_tsv_stays_outside_app_bundle(self):
+        original = self.release / "site/open_targets_disease_associations.tsv"
+        original.write_text("ORIGINAL_WEBSITE_DISEASE_TSV_CANARY\n")
+        before = snapshot(self.release)
+        output = self.tmp_path / "projection-only.zip"
+        artifact = package(self.release, output)
+        assert not any("open_targets_disease_associations.tsv" in name for name in artifact["files"])
+        with zipfile.ZipFile(output) as archive:
+            assert not any(b"ORIGINAL_WEBSITE_DISEASE_TSV_CANARY" in archive.read(name) for name in archive.namelist())
+        assert snapshot(self.release) == before
+
+    def test_external_bulk_limits_are_distinct_from_runtime_and_tiny_references(self):
+        from agdesign2.public_api_release import _public_file_limit
+        prefix = "releases/" + "a" * 64 + "/human/downloads/"
+        for name in ("index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"):
+            with self.subTest(role=name):
+                assert _public_file_limit(prefix + name, "application/x-ndjson") == 1024 ** 3
+        for name in ("schema.json", "citation.json", "openantigens.bib", "openantigens.ris"):
+            with self.subTest(role=name):
+                assert _public_file_limit(prefix + name, "application/json") == 1024 ** 2
+        with self.assertRaises(ValueError):
+            _public_file_limit(prefix + "open_targets_disease_associations.tsv", "text/tab-separated-values")
+        assert _public_file_limit("releases/a/human/targets/b.json", "application/json") == 8 * 1024 ** 2
+        assert _public_file_limit("releases/a/human/sequences/b.json", "application/json") == 1024 ** 2
     def test_size_failure_and_dry_run_create_no_outputs(self):
         release, tmp_path = self.release, self.tmp_path
         for budget in ({"max_zip_bytes": 100}, {"max_expanded_bytes": 100}, {"max_zip_bytes": 100_000_001}):
@@ -241,7 +382,7 @@ class PublicApiReleaseTests(unittest.TestCase):
         bundle = self.release / "bundle"
         root = json.loads((bundle / "manifest.json").read_text())
         path = bundle / root["releases"][0]["manifest_path"]
-        replace_release_manifest(bundle, self.release / "site", root, path.read_bytes().ljust(64 * 1024 * 1024 + 1, b" "))
+        replace_release_manifest(bundle, self.release / "site", root, path.read_bytes().ljust(96 * 1024 * 1024 + 1, b" "))
         before = snapshot(self.release)
         with self.assertRaises(ValueError):
             package(self.release, self.tmp_path / "release-too-large.zip")
@@ -400,7 +541,7 @@ class PublicApiReleaseTests(unittest.TestCase):
         def fail(*args, **kwargs):
             raise ValueError("synthetic release mismatch")
         with patch.object(smoke, "check_api_service", fail):
-            assert smoke.main(["--base-url", "https://api.example.org", "--release-id", "a" * 64, "--activate-discovery-local-site", str(site)]) == 2
+            assert smoke.main(["--base-url", "https://api.example.org", "--release-id", "a" * 64, "--human-query", "SYNTHETIC", "--mouse-query", "SYNTHETIC", "--activate-discovery-local-site", str(site)]) == 2
         assert snapshot(site) == before
 
     def test_interrupted_discovery_write_restores_both_originals(self):
@@ -432,7 +573,7 @@ class PublicApiReleaseTests(unittest.TestCase):
         smoke = load_script("check_api_service")
         for url in ("https://token@example.org", "https://example.org/?key=secret", "http://example.org", "https://example.org/mcp"):
             with self.assertRaises(ValueError):
-                smoke.check_api_service(url, "a" * 64)
+                smoke.check_api_service(url, "a" * 64, human_query="SYNTHETIC", mouse_query="SYNTHETIC")
 
     def test_maintenance_metadata_hides_current_and_retained_discovery(self):
         smoke = load_script("check_api_service")
@@ -460,10 +601,72 @@ class PublicApiReleaseTests(unittest.TestCase):
                 return 200, {"status": "ready"}, headers
             if path == "/v1/releases/current":
                 return 503, {"error": {"code": "publication_in_progress"}}, headers
-            return 200, {"release_id": "a" * 64, "schema_version": 1, "discovery_state": "publication_in_progress", "current_release_id": "a" * 64}, headers
+            manifest = {"url": f"https://openantigens.org/data/releases/{'a' * 64}/manifest.json", "sha256": "b" * 64}
+            provenance = {"software_commit": "fixture", "snapshot_id": "fixture", "source_versions": {}, "source_dates": {}, "notes": [], "input_hashes": {"count": 10_001, "manifest_url": manifest["url"], "manifest_sha256": manifest["sha256"], "json_pointer": "/provenance/input_sha256"}}
+            return 200, {"release_id": "a" * 64, "schema_version": 1, "manifest": manifest, "provenance": provenance, "discovery_state": "publication_in_progress", "current_release_id": "a" * 64}, headers
         with patch.object(smoke, "_request", response):
-            assert smoke.main(["--base-url", "https://api.example.org", "--release-id", "a" * 64, "--expect-maintenance", "--activate-discovery-local-site", str(site)]) == 2
+            assert smoke.main(["--base-url", "https://api.example.org", "--release-id", "a" * 64, "--human-query", "SYNTHETIC", "--mouse-query", "SYNTHETIC", "--expect-maintenance", "--activate-discovery-local-site", str(site)]) == 2
         assert snapshot(site) == before
+
+    def test_smoke_provenance_uses_immutable_reference_without_raw_input_map(self):
+        smoke = load_script("check_api_service")
+        release_id = "a" * 64
+        manifest = {"url": f"https://openantigens.org/data/releases/{release_id}/manifest.json", "sha256": "b" * 64}
+        provenance = {"software_commit": "fixture", "snapshot_id": "fixture", "source_versions": {}, "source_dates": {}, "notes": [], "input_hashes": {"count": 10_001, "manifest_url": manifest["url"], "manifest_sha256": manifest["sha256"], "json_pointer": "/provenance/input_sha256"}}
+        response = {"release_id": release_id, "schema_version": 1, "manifest": manifest, "provenance": provenance, "data": []}
+        assert smoke._envelope(response, release_id) is response
+        with self.assertRaises(ValueError):
+            smoke._envelope({**response, "provenance": {**provenance, "input_sha256": {"private": "c" * 64}}}, release_id)
+        with self.assertRaises(ValueError):
+            smoke._envelope({**response, "provenance": {**provenance, "input_hashes": {**provenance["input_hashes"], "manifest_sha256": "c" * 64}}}, release_id)
+
+    def test_smoke_paces_and_bounds_rate_limit_retries(self):
+        smoke = load_script("check_api_service")
+        class Response:
+            def __init__(self, status, retry=None):
+                self.status = status
+                self.headers = Message()
+                self.headers["Content-Type"] = "application/json"
+                if retry:
+                    self.headers["Retry-After"] = retry
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return None
+            def read(self, limit):
+                return b"{}"
+        cases = (
+            ("pace", [Response(200)], 8, 0.0, False, 9, 3.0),
+            ("retry", [Response(429, "2"), Response(200)], 0, 0.0, False, 2, 2.0),
+            ("attempt cap", [Response(429, "1")] * 3, 0, 0.0, True, 3, 2.0),
+            ("wait cap", [Response(429, "2")], 0, 29.0, True, 1, 29.0),
+            ("read cap", [], 20, 0.0, True, 20, 0.0),
+        )
+        for name, replies, initial_reads, initial_wait, fails, reads, waits in cases:
+            with self.subTest(case=name):
+                clock = [0.0]
+                responses = iter(replies)
+                opener = SimpleNamespace(open=lambda *args, **kwargs: next(responses))
+                budget = {"started_at": 0.0, "requests": initial_reads, "wait_seconds": initial_wait}
+                def advance(seconds):
+                    clock[0] += seconds
+                with patch.object(smoke.time, "monotonic", lambda: clock[0]), patch.object(smoke.time, "sleep", advance):
+                    if fails:
+                        with self.assertRaises(ValueError):
+                            smoke._request(opener, "https://api.example.org", "/readyz", budget=budget)
+                    else:
+                        assert smoke._request(opener, "https://api.example.org", "/readyz", budget=budget)[0] == 200
+                assert budget["requests"] == reads and budget["wait_seconds"] == waits
+
+    def test_smoke_references_exclude_bulk_download_metadata(self):
+        smoke = load_script("check_api_service")
+        root = json.loads((self.release / "bundle/manifest.json").read_text())
+        manifest = json.loads((self.release / "bundle" / root["releases"][0]["manifest_path"]).read_text())
+        metadata = {"species": {species: {"taxon_id": value["taxon_id"], "capabilities": value["capabilities"], "references": [item for item in value["downloads"] if item["name"] in smoke.REFERENCE_ROLES]} for species, value in manifest["species"].items()}}
+        smoke._references(metadata, root["current_release_id"])
+        metadata["species"]["human"]["references"].append(manifest["species"]["human"]["records_download"])
+        with self.assertRaises(ValueError):
+            smoke._references(metadata, root["current_release_id"])
 
 
 if __name__ == "__main__":

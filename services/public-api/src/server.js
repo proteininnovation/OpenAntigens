@@ -1,19 +1,28 @@
 import { createServer } from "node:http";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
+import { lstat, open } from "node:fs/promises";
+import { constants } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { Provider, fasta } from "./provider.js";
 import { makeMcpHandler } from "./mcp.js";
 import { ApiError, bad, LIMITS } from "./contracts.js";
 import { openapiFor } from "./openapi.js";
+import { makeAnalytics } from "./analytics.js";
+import { makeClientResolver } from "./client-identity.js";
 const hash = (b) => `"${createHash("sha256").update(b).digest("hex")}"`;
 const defaults = {
   hosts: ["api.openantigens.org", "localhost", "127.0.0.1", "[::1]"],
   origins: ["https://openantigens.org", "https://www.openantigens.org"],
-  clientRate: 60,
-  globalRate: 300,
-  concurrency: 8,
-  handlerMs: 5000,
+  clientRate: LIMITS.clientRate,
+  clientBurst: LIMITS.clientBurst,
+  globalRate: LIMITS.globalRate,
+  globalBurst: LIMITS.globalBurst,
+  concurrency: LIMITS.concurrency,
+  clientConcurrency: LIMITS.clientConcurrency,
+  handlerMs: LIMITS.handlerMs,
+  now: () => performance.now(),
 };
 const allowHeaders = [
   "content-type",
@@ -50,17 +59,94 @@ function accepts(req, type) {
 }
 export function makeServer(provider, options = {}) {
   const config = { ...defaults, ...options };
-  const mcp = makeMcpHandler(provider);
+  const resolveClient = makeClientResolver({
+    trustedProxyPeers: config.trustedProxyPeers ?? [],
+    proxyHopCount: config.proxyHopCount ?? 0,
+    identityVerified: config.identityVerified ?? false,
+  });
+  const requestContext = new AsyncLocalStorage();
+  const mcp = makeMcpHandler(provider, (metadata) => {
+    const state = requestContext.getStore();
+    if (state) Object.assign(state, metadata);
+  });
   let active = 0;
-  let global = { start: Date.now(), count: 0 };
+  const global = { tokens: config.globalBurst, updated: config.now() };
   const clients = new Map();
+  const refill = (bucket, rate, burst, now) => {
+    bucket.tokens = Math.min(
+      burst,
+      bucket.tokens + (Math.max(0, now - bucket.updated) * rate) / 60000,
+    );
+    bucket.updated = now;
+  };
   const server = createServer(
     { maxHeaderSize: 8192, requestTimeout: 6000, headersTimeout: 6000 },
     async (req, res) => {
       const id = randomUUID();
+      const started = performance.now();
+      const identity = resolveClient(req);
+      const traffic = {
+        operation: "unknown",
+        species: "none",
+        transport: req.url?.split("?")[0] === "/mcp" ? "mcp" : "api",
+        error_code: "none",
+      };
+      let recorded = false,
+        bytes = 0;
+      const measure = (chunk) =>
+        typeof chunk === "string"
+          ? Buffer.byteLength(chunk)
+          : (chunk?.byteLength ?? 0);
+      const write = res.write.bind(res),
+        end = res.end.bind(res);
+      res.write = (chunk, ...args) => {
+        bytes += measure(chunk);
+        return write(chunk, ...args);
+      };
+      res.end = (chunk, ...args) => {
+        bytes += measure(chunk);
+        return end(chunk, ...args);
+      };
+
       let timer;
       let admitted = false;
+      let client;
+      let retryAfter;
       const abort = new AbortController();
+      const record = (outcome) => {
+        if (recorded) return;
+        recorded = true;
+        try {
+          config.analytics?.record(
+            {
+              ...traffic,
+              request_id: id,
+              method: req.method,
+              status: res.headersSent ? res.statusCode : 0,
+              outcome,
+              error_code:
+                outcome === "aborted" ? "request_aborted" : traffic.error_code,
+              duration_ms: Math.max(0, Math.round(performance.now() - started)),
+              bytes,
+              admitted,
+            },
+            {
+              ip: identity.ip,
+              userAgent:
+                typeof req.headers["user-agent"] === "string"
+                  ? req.headers["user-agent"]
+                  : "",
+              trusted: identity.trusted,
+            },
+          );
+        } catch {
+          process.stderr.write("public_api analytics_record_failed\n");
+        }
+      };
+      res.once("finish", () => record("finished"));
+      res.once("close", () => {
+        if (!res.writableFinished) record("aborted");
+      });
       res.once("close", () => {
         if (!res.writableEnded) abort.abort();
       });
@@ -74,6 +160,7 @@ export function makeServer(provider, options = {}) {
           immutable = false,
           type = "application/json; charset=utf-8",
           budget = LIMITS.json,
+          context = data,
         } = {},
       ) => {
         if (res.destroyed || res.writableEnded) return;
@@ -85,7 +172,20 @@ export function makeServer(provider, options = {}) {
             413,
             "result_too_large",
             "Use the complete released records download.",
-            { download: provider.fallback(data?.release_id, data?.species) },
+            {
+              download: provider.fallback(
+                context?.release_id,
+                context?.species,
+              ),
+              ...(typeof context?.data?.sequence === "string"
+                ? {
+                    record_selector: {
+                      target_id: context.data.target_id,
+                      construct_id: context.data.construct_id,
+                    },
+                  }
+                : {}),
+            },
           );
         res.statusCode = status;
         res.setHeader("Content-Type", type);
@@ -117,12 +217,13 @@ export function makeServer(provider, options = {}) {
         res.removeHeader("Content-Disposition");
         res.removeHeader("Link");
         const known = error instanceof ApiError;
+        traffic.error_code = known ? error.code : "unavailable";
         const status = known ? error.status : 503;
         if (
           status === 429 ||
           (known && error.code === "publication_in_progress")
         )
-          res.setHeader("Retry-After", "60");
+          res.setHeader("Retry-After", String(retryAfter ?? 60));
         res.setHeader("Cache-Control", "no-store");
         send(status, {
           error: {
@@ -191,6 +292,37 @@ export function makeServer(provider, options = {}) {
           );
         }
         const url = new URL(req.url, `http://${req.headers.host}`);
+        if (url.pathname !== "/mcp") {
+          const parts = url.pathname.split("/").slice(1);
+          traffic.operation =
+            {
+              "/healthz": "health",
+              "/readyz": "ready",
+              "/openapi.json": "openapi",
+            }[url.pathname] ?? "unknown";
+          if (parts[0] === "v1" && parts[1] === "releases") {
+            if (parts.length === 2 || parts.length === 3)
+              traffic.operation = "get_release";
+            if (["human", "mouse"].includes(parts[3]))
+              traffic.species = parts[3];
+            if (parts[4] === "targets") {
+              if (parts.length === 5) traffic.operation = "search_targets";
+              else if (parts.length === 6) traffic.operation = "get_target";
+              else if (parts[6] === "sections" && parts.length === 8)
+                traffic.operation = "get_section";
+              else if (parts[6] === "constructs" && parts.length === 7)
+                traffic.operation = "list_constructs";
+              else if (
+                (parts[6] === "sequence" && parts.length === 7) ||
+                (parts[6] === "constructs" &&
+                  parts[8] === "sequence" &&
+                  parts.length === 9)
+              )
+                traffic.operation = "get_sequence";
+            }
+          }
+        }
+
         if (
           req.headers["content-encoding"] &&
           req.headers["content-encoding"] !== "identity"
@@ -222,35 +354,56 @@ export function makeServer(provider, options = {}) {
           res.end();
           return;
         }
-        const now = Date.now();
-        if (now - global.start >= 60000) {
-          global = { start: now, count: 0 };
-          for (const [key, b] of clients)
-            if (now - b.start >= 60000) clients.delete(key);
-        }
-        const key = req.socket.remoteAddress ?? "unknown";
-        let bucket = clients.get(key);
-        if (!bucket || now - bucket.start >= 60000) {
-          if (clients.size >= 10000 && !clients.has(key))
+        const now = config.now();
+        refill(global, config.globalRate, config.globalBurst, now);
+        // Socket peers are the client identity until a trusted proxy is configured.
+        const key = identity.rateKey;
+        client = clients.get(key);
+        if (!client) {
+          if (clients.size >= 10000) {
+            for (const [address, bucket] of clients)
+              if (!bucket.active && now - bucket.updated >= 60000)
+                clients.delete(address);
+          }
+          if (clients.size >= 10000) {
+            retryAfter = 1;
             throw new ApiError(
               429,
               "rate_limited",
-              "The request rate limit is reached.",
+              "The request admission limit is reached.",
             );
-          bucket = { start: now, count: 0 };
-          clients.set(key, bucket);
+          }
+          client = { tokens: config.clientBurst, updated: now, active: 0 };
+          clients.set(key, client);
         }
+        refill(client, config.clientRate, config.clientBurst, now);
         if (
-          ++bucket.count > config.clientRate ||
-          ++global.count > config.globalRate ||
-          active >= config.concurrency
-        )
+          client.tokens < 1 ||
+          global.tokens < 1 ||
+          active >= config.concurrency ||
+          client.active >= config.clientConcurrency
+        ) {
+          retryAfter = Math.max(
+            1,
+            Math.ceil(
+              Math.round(((1 - client.tokens) * 60000) / config.clientRate) /
+                1000,
+            ),
+            Math.ceil(
+              Math.round(((1 - global.tokens) * 60000) / config.globalRate) /
+                1000,
+            ),
+          );
           throw new ApiError(
             429,
             "rate_limited",
             "The request admission limit is reached.",
           );
+        }
+        client.tokens--;
+        global.tokens--;
         active++;
+        client.active++;
         admitted = true;
         timer = setTimeout(() => {
           fail(
@@ -286,7 +439,7 @@ export function makeServer(provider, options = {}) {
               "unavailable",
               "The validated release bundle is unavailable.",
             );
-          await mcp(req, res);
+          await requestContext.run(traffic, () => mcp(req, res));
           return;
         }
         if (!["GET", "HEAD"].includes(req.method)) {
@@ -358,10 +511,7 @@ export function makeServer(provider, options = {}) {
           const [, , release_id, species, resource, target_id, ...rest] = parts;
           const base = { release_id, species };
           immutable = true;
-          if (resource === "downloads" && parts.length === 5) {
-            argumentsFrom(url, []);
-            value = await read("get_downloads", base);
-          } else if (resource === "targets" && parts.length === 5)
+          if (resource === "targets" && parts.length === 5)
             value = await read("search_targets", {
               ...base,
               ...argumentsFrom(url, [
@@ -454,12 +604,16 @@ export function makeServer(provider, options = {}) {
           immutable,
           type: `${type}; charset=utf-8`,
           budget: isSequence ? LIMITS.sequence : LIMITS.json,
+          context: value,
         });
       } catch (error) {
         fail(error);
       } finally {
         clearTimeout(timer);
-        if (admitted) active--;
+        if (admitted) {
+          active--;
+          client.active--;
+        }
       }
     },
   );
@@ -467,11 +621,66 @@ export function makeServer(provider, options = {}) {
   server.timeout = config.handlerMs + 1000;
   return server;
 }
+export async function readBuildPins(
+  path = new URL("../service-build.json", import.meta.url),
+) {
+  let stat;
+  try {
+    stat = await lstat(path);
+  } catch (error) {
+    if (error.code === "ENOENT") return {};
+    throw error;
+  }
+  if (stat.isSymbolicLink() || !stat.isFile() || stat.size > 65536)
+    throw new Error("Invalid service build seal");
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  let value;
+  try {
+    const current = await handle.stat();
+    if (
+      current.size !== stat.size ||
+      current.ino !== stat.ino ||
+      current.dev !== stat.dev
+    )
+      throw new Error("Invalid service build seal");
+    const bytes = Buffer.alloc(current.size);
+    const { bytesRead } = await handle.read(bytes);
+    if (bytesRead !== bytes.length)
+      throw new Error("Invalid service build seal");
+    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  } finally {
+    await handle.close();
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid service build seal");
+  if (!Object.hasOwn(value, "data_transport")) return {};
+  const seal = value.data_transport;
+  if (
+    !seal ||
+    seal.format !== "openantigens-target-gzip-v1" ||
+    !/^[a-f0-9]{64}$/.test(seal.root_manifest_sha256 ?? "") ||
+    !/^[a-f0-9]{64}$/.test(seal.transport_index_sha256 ?? "")
+  )
+    throw new Error("Invalid service build seal");
+  return {
+    expectedRootSha256: seal.root_manifest_sha256,
+    expectedTransportSha256: seal.transport_index_sha256,
+  };
+}
+export function publicationState(value) {
+  if (value === undefined || value === "" || value === "active")
+    return "active";
+  if (value === "maintenance") return value;
+  throw new Error("Invalid publication state configuration.");
+}
 export async function start() {
+  const state = publicationState(process.env.OPENANTIGENS_PUBLICATION_STATE);
+  const pins = await readBuildPins();
   const provider = new Provider(
     process.env.OPENANTIGENS_DATA_DIR ?? resolve("data"),
+    pins,
   );
-  provider.publicationState = process.env.OPENANTIGENS_PUBLICATION_STATE;
+  provider.publicationState = state;
   try {
     await provider.initialize();
   } catch {
@@ -484,7 +693,20 @@ export async function start() {
           .map((v) => v.trim())
           .filter(Boolean)
       : fallback;
+  const identityVerified =
+    process.env.OPENANTIGENS_CLIENT_IDENTITY_VERIFIED === "1";
+  const analytics = makeAnalytics({
+    clientSecret: process.env.OPENANTIGENS_ANALYTICS_CLIENT_SECRET,
+    plausible: {
+      enabled: process.env.OPENANTIGENS_ANALYTICS_PLAUSIBLE === "1",
+      identityVerified,
+    },
+  });
   const server = makeServer(provider, {
+    analytics,
+    identityVerified,
+    trustedProxyPeers: csv("OPENANTIGENS_TRUSTED_PROXY_PEERS", []),
+    proxyHopCount: Number(process.env.OPENANTIGENS_PROXY_HOPS ?? 0),
     hosts: csv("OPENANTIGENS_ALLOWED_HOSTS", defaults.hosts),
     origins: csv("OPENANTIGENS_ALLOWED_ORIGINS", defaults.origins),
   });
@@ -497,7 +719,14 @@ export async function start() {
     ),
   );
   const stop = () => {
-    server.close();
+    server.close(() => {
+      analytics.flush();
+      analytics
+        .settled()
+        .catch(() =>
+          process.stderr.write("public_api analytics_flush_failed\n"),
+        );
+    });
     setTimeout(() => server.closeAllConnections(), 5000).unref();
   };
   process.once("SIGTERM", stop);

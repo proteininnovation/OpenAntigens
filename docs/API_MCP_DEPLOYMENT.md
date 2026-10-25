@@ -4,6 +4,18 @@ Build the Node service from a frozen, validated public data bundle. Keep the cod
 build ID separate from the data release ID. A code update can preserve the same
 human and mouse scientific release.
 
+The public API projection includes up to 100 human disease associations per
+target in the published website's source order. Evidence metadata reports the
+projected count, full recorded source count and selection coverage. The complete
+projection download covers these selected public records. The website's
+original full disease-association TSV remains a separate static download
+outside the app bundle. Interactive searches use gene names and accessions;
+disease-ID filtering is outside this bounded projection's query contract.
+Check `summary.disease_coverage` and disease-page `coverage`: the selection is
+`portal_top_100`, with separate `projected_count` and `source_count` values.
+Unknown source counts stay null. `source_reference` labels the original TSV
+link as live and records its checksum; that URL can advance with the website.
+
 Read the [public-safe host verification summary](API_MCP_HOST_VERIFICATION.md) for endpoint checks and remaining launch gates. Account-specific evidence stays in the ignored local folder; local package and smoke results cover the prepared service only.
 
 ## Prepare the local artifact
@@ -53,7 +65,32 @@ JSON; local paths stay outside the deployed ZIP and public provenance. A dry
 run reports `artifact_record: null` because it writes no review record.
 
 The ZIP contains the allowlisted Node source, package manifest and lock,
-`LICENSE`, `DATA_LICENSE.md`, `service-build.json`, and manifest-listed public data.
+`LICENSE`, `DATA_LICENSE.md`, `service-build.json`, and sealed physical runtime
+data. Before packing, the builder validates every logical public shard and all
+eleven approved static download roles. Manifest membership alone authorizes no
+extra file. The packager independently checks each role, path, media type,
+encoding and reference, scans public text, and checks citation exports against
+their frozen source.
+
+Runtime packing groups related target JSON shards into bounded gzip containers
+that retain each original logical path and exact bytes. Public manifests,
+release IDs, schemas and checksums remain unchanged. The app keeps indexes,
+manifests and the four small schema/citation references as ordinary files.
+The seven website bulk roles (JSONL, TSV, FASTA and complete-record gzip files)
+stay in static publication and source staging; their bytes stay outside the
+app ZIP. Complete export-byte parity is verified at staging. Runtime metadata
+does not establish remote static-download byte parity.
+Each of those seven external projection exports has a separate 1 GiB
+engineering limit, checked with streamed staging hashes and export parity.
+The four small schema/citation files remain limited to 1 MiB each. This external
+file limit is separate from query-memory bounds and the physical app budgets;
+measure static storage and transfer capacity for the actual release. The
+original full disease TSV is outside these eleven projection download roles.
+
+`service-build.json` records the independent code build ID and a `data_transport`
+seal with the source root-manifest SHA-256 and transport-index SHA-256. Startup
+requires those pins for packed data. Keep the generated seal with the exact
+runtime directory; packed mode uses bounded reads and creates no extracted files.
 The builder verifies the canonical origin, both species, canonical release IDs,
 manifest checksums, every retained file, complete-record downloads, and matching
 final static copies. It rejects symlinks, unexpected data files, unsafe paths,
@@ -63,18 +100,23 @@ The hard ZIP ceiling is **less than 100,000,000 bytes**. Defaults reserve 20% of
 100,000,000-byte compressed budget and a 500,000,000-byte expanded budget. These
 are local engineering limits. Check actual subscription limits, expanded disk,
 inodes, build and runtime memory, process count, and startup time before
-publication. The artifact records measured compressed and expanded sizes,
+publication. The artifact records measured physical compressed and expanded sizes,
 per-file hashes, remaining local headroom, and host checks that still require
 evidence. It also measures the retained static download copies and the minimum
 combined app/download storage. Reserve capacity for the rest of both portals,
 installed Node dependencies, logs and the previous rollback artifacts separately.
+Separate `logical_data_*` and `physical_data_*` measurements distinguish the
+validated scientific dataset from its deployment representation.
 If the measured file count requires ZIP64, verify the host's extractor supports
 that archive before upload.
 The packager also enforces the service's startup read limits: a 1 MiB root
-manifest, 64 MiB release manifests, 32 MiB per species index, and 64 MiB of
+manifest, 96 MiB release manifests, 32 MiB per species index, and 64 MiB of
 compact indexes across all retained species and releases. Target shards remain
 limited to 8 MiB, and evidence, construct, sequence and schema shards to 1 MiB.
-The manifest and aggregate-index limits are engineering trial bounds. Measure
+The measured full-catalogue file-map lower bound of 71,707,842 bytes exceeds the
+earlier 64 MiB manifest bound. The 96 MiB manifest limit and 64 MiB aggregate
+index limit are engineering trial bounds. The transport index and each decoded container
+are limited to 16 MiB; each compressed container is limited to 17 MiB. Measure
 the selected full catalogue's actual ZIP, expanded files, startup and peak
 memory before approving a package for the selected host. A package that exceeds
 these bounds needs a measured data/runtime design change before publication.
@@ -97,11 +139,19 @@ Use the bounded Python checker for a selected service and literal release:
 ```sh
 python scripts/check_api_service.py \
   --base-url https://api.openantigens.org \
-  --release-id YOUR_64_CHARACTER_RELEASE_ID
+  --release-id YOUR_64_CHARACTER_RELEASE_ID \
+  --human-query EGFR \
+  --mouse-query Egfr
 ```
 
-It makes sixteen sequential HTTP and MCP wire reads, checks both species, and
-compares metadata, records and download descriptions across both interfaces.
+Choose explicit target queries from the selected release. The checker makes
+twelve logical HTTP and MCP reads, checks both species, and compares metadata
+and records across both interfaces. Release references contain only the schema
+and three citation formats; the service exposes five tools and no bulk download
+discovery route or tool.
+Provenance includes the source commit and snapshot plus a counted, checksummed
+reference to the immutable manifest's input-hash map; the checker verifies that
+reference while the full map remains in the stored release manifest.
 For a local service, use `http://127.0.0.1:<port>` and set
 `OPENANTIGENS_HOST=127.0.0.1` when starting the service. Remote checks require
 HTTPS. The checker accepts no credentials and follows no redirects. Add
@@ -109,9 +159,11 @@ HTTPS. The checker accepts no credentials and follows no redirects. Add
 while literal-release reads remain available. Pinned metadata then omits the
 current ID and retained list. Use `--retained-release-id` for a caller-known
 previous release: the checker probes its literal metadata and both species
-through HTTP and MCP, for a maximum of twenty-two reads. Active discovery must
-match the expected retained set; maintenance checks use the supplied IDs.
-Download contents and load tests need separate checks.
+through HTTP and MCP, for eighteen logical reads. Active discovery must match
+the expected retained set; maintenance checks use the supplied IDs. Checks pace
+requests for the default 20/minute peer limit and burst of eight. They honor
+numeric `Retry-After`, with at most three attempts per read, twenty attempts in
+total, and thirty seconds of cumulative waiting. Load tests need separate checks.
 
 ## Configure the managed Node app
 
@@ -130,6 +182,21 @@ The source uses plain JavaScript, so it needs no transpilation. Set
 allowed hostnames and origins explicitly for the selected domain and preview.
 Keep account credentials and static-site SSH keys outside the app. Check the
 runtime environment and TLS/proxy behavior using the selected host's controls.
+
+The service writes sanitized request records to standard output by default,
+including refusals and aborts. Archive the complete intended log interval and
+use the separate [local traffic report workflow](API_MCP_ANALYTICS.md). The
+report script stays outside the deployed ZIP. Plausible export stays off until
+the owner approves it and verifies the plan, goals and trusted client identity.
+Its bot filtering and coverage are separate from the local request counts.
+
+Keep forwarded-client identity disabled until the actual ingress path is
+verified. The supported configuration uses
+`OPENANTIGENS_CLIENT_IDENTITY_VERIFIED=1`, an exact IP allowlist in
+`OPENANTIGENS_TRUSTED_PROXY_PEERS`, and `OPENANTIGENS_PROXY_HOPS` from 1 to 8.
+Confirm the trusted peers, appended header chain and absence of an ingress
+bypass before enabling it. Untrusted or malformed forwarding falls back to the
+socket peer for admission and supplies no verified analytics identity.
 
 Confirm the account's available app slot, tier, deployment method, capacity and
 cost before creating an app. Reuse the **same app ID** for preview, publication,

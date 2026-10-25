@@ -4,9 +4,11 @@ import { createGunzip } from "node:zlib";
 import { resolve, relative, sep } from "node:path";
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { createStorage } from "./storage.js";
 import {
   outputSchema,
   provenanceOutputSchema,
+  DOWNLOAD_ROLES,
   rootSchema,
   ApiError,
   bad,
@@ -52,6 +54,22 @@ const semanticNumbers = (value) => {
   return value;
 };
 const semantic = (value) => canonical(semanticNumbers(value));
+const searchRow = (summary, path) => ({
+  ...Object.fromEntries(
+    [
+      "target_id",
+      "record_id",
+      "species",
+      "taxon_id",
+      "search_text",
+      "track",
+      "status",
+      "structure_state",
+      "construct_state",
+    ].map((key) => [key, summary[key]]),
+  ),
+  summary_path: path,
+});
 const notFound = () => {
   throw new ApiError(
     404,
@@ -60,13 +78,156 @@ const notFound = () => {
   );
 };
 export class Provider {
-  constructor(directory) {
+  constructor(directory, options = {}) {
     this.directory = resolve(directory);
+    this.options = options;
     this.ready = false;
     this.releases = new Map();
     this.retired = new Map();
   }
-  async readSafe(path, max, expected, collect = true) {
+  approvedFiles(manifest) {
+    const roles = new Map(),
+      cache = new Map();
+    const role = (
+      species,
+      kind,
+      schema,
+      media_type = "application/json",
+      encoding = null,
+      bound = LIMITS.shard,
+    ) => {
+      const key = `${species}:${kind}:${schema}:${media_type}:${encoding}:${bound}`;
+      if (!cache.has(key))
+        cache.set(key, { species, kind, schema, media_type, encoding, bound });
+      return cache.get(key);
+    };
+    const rid = manifest.release_id;
+    for (const [path, file] of Object.entries(manifest.files)) {
+      const parts = path.split("/");
+      let expected;
+      if (
+        parts[0] === "releases" &&
+        parts[1] === rid &&
+        ["human", "mouse"].includes(parts[2])
+      ) {
+        const species = parts[2];
+        if (parts.length === 4 && parts[3] === "index.json")
+          expected = role(
+            species,
+            "storage",
+            "index",
+            "application/json",
+            null,
+            LIMITS.index,
+          );
+        else if (
+          parts.length === 5 &&
+          parts[3] === "downloads" &&
+          Object.hasOwn(DOWNLOAD_ROLES, parts[4])
+        ) {
+          const [media, schema, encoding] = DOWNLOAD_ROLES[parts[4]];
+          expected = role(
+            species,
+            parts[4] === "schema.json" ? "schema" : "download",
+            schema,
+            media,
+            encoding,
+            [
+              "schema.json",
+              "citation.json",
+              "openantigens.bib",
+              "openantigens.ris",
+            ].includes(parts[4])
+              ? LIMITS.shard
+              : LIMITS.externalDownload,
+          );
+        } else if (
+          parts.length === 5 &&
+          parts[3] === "targets" &&
+          /^[a-f0-9]{64}\.json$/.test(parts[4])
+        )
+          expected = role(
+            species,
+            "storage",
+            "target_shard",
+            "application/json",
+            null,
+            LIMITS.target,
+          );
+        else if (
+          parts.length === 6 &&
+          parts[3] === "sections" &&
+          hex.test(parts[4])
+        ) {
+          const match = /^([a-z]+)-(0|[1-9][0-9]*)\.json$/.exec(parts[5]);
+          if (match && SECTIONS.includes(match[1]))
+            expected = role(species, "storage", `section_${match[1]}`);
+        } else if (
+          parts.length === 5 &&
+          parts[3] === "constructs" &&
+          /^[a-f0-9]{64}-(0|[1-9][0-9]*)\.json$/.test(parts[4])
+        )
+          expected = role(species, "storage", "construct_page");
+        else if (
+          parts.length === 5 &&
+          parts[3] === "sequences" &&
+          /^[a-f0-9]{64}(-reference)?\.json$/.test(parts[4])
+        )
+          expected = role(species, "storage", "sequence_shard");
+      }
+      if (
+        !expected ||
+        file.media_type !== expected.media_type ||
+        file.schema !== expected.schema ||
+        file.encoding !== expected.encoding
+      )
+        throw new Error("Unapproved artifact role");
+      if (Number.isSafeInteger(file.bytes) && file.bytes > expected.bound) {
+        const name =
+          expected.kind === "storage" ? expected.schema : parts.at(-1);
+        throw new Error(
+          `Bundle size: role=${name} actual=${file.bytes} limit=${expected.bound}`,
+        );
+      }
+      roles.set(path, expected);
+    }
+    for (const species of ["human", "mouse"]) {
+      const downloads = manifest.species[species].downloads;
+      if (
+        downloads.length !== Object.keys(DOWNLOAD_ROLES).length ||
+        new Set(downloads.map((item) => item.name)).size !== downloads.length
+      )
+        throw new Error("Download role coverage");
+      for (const download of downloads) {
+        const [media, schema, encoding] = DOWNLOAD_ROLES[download.name] ?? [];
+        const path = `releases/${rid}/${species}/downloads/${download.name}`;
+        const file = manifest.files[path];
+        if (
+          download.path !== path ||
+          !file ||
+          download.media_type !== media ||
+          download.schema !== schema ||
+          download.encoding !== encoding ||
+          canonical(file) !==
+            canonical(
+              Object.fromEntries(
+                ["bytes", "sha256", "media_type", "schema", "encoding"].map(
+                  (key) => [key, download[key]],
+                ),
+              ),
+            )
+        )
+          throw new Error("Download role disagreement");
+      }
+    }
+    return roles;
+  }
+  readSafe(path, max, expected, collect = true, targetPath) {
+    return this.storage
+      ? this.storage.read(path, max, expected, collect, targetPath)
+      : this.readPhysical(path, max, expected, collect);
+  }
+  async readPhysical(path, max, expected, collect = true) {
     if (!safePath(path)) throw new Error("Invalid bundle path");
     let current = this.directory;
     for (const part of path.split("/")) {
@@ -92,32 +253,54 @@ export class Provider {
         (expected && stat.size !== expected.bytes)
       )
         throw new Error("Bundle size");
-      const chunks = [];
+      const collected = collect ? Buffer.alloc(stat.size) : null;
       const checksum = createHash("sha256");
       let length = 0;
       for (;;) {
-        const chunk = Buffer.alloc(Math.min(65536, max - length + 1));
+        const chunk =
+          collected && length < stat.size
+            ? collected.subarray(length, Math.min(length + 65536, stat.size))
+            : Buffer.alloc(collect ? 1 : Math.min(65536, max - length + 1));
         const { bytesRead } = await handle.read(chunk);
         if (!bytesRead) break;
         length += bytesRead;
-        if (length > max || (expected && length > expected.bytes))
+        if (
+          length > stat.size ||
+          length > max ||
+          (expected && length > expected.bytes)
+        )
           throw new Error("Bundle size");
         const bytes = chunk.subarray(0, bytesRead);
         checksum.update(bytes);
-        if (collect) chunks.push(bytes);
       }
       if (
-        expected &&
-        (length !== expected.bytes ||
-          checksum.digest("hex") !== expected.sha256)
+        length !== stat.size ||
+        (expected &&
+          (length !== expected.bytes ||
+            checksum.digest("hex") !== expected.sha256))
       )
         throw new Error("Bundle checksum");
-      return collect ? Buffer.concat(chunks, length) : null;
+      return collected;
     } finally {
       await handle.close();
     }
   }
   async initialize() {
+    this.ready = false;
+    this.directory = await realpath(this.directory);
+    this.storage = await createStorage(
+      this.directory,
+      this.options,
+      this.readPhysical.bind(this),
+    );
+    return this.storage.withContext(() => this.initializeData());
+  }
+  async readReleaseManifest(pointer) {
+    const bytes = await this.readSafe(pointer.manifest_path, LIMITS.manifest);
+    if (digest(bytes) !== pointer.sha256) throw new Error("Release checksum");
+    return parseJson(bytes);
+  }
+  async initializeData() {
     this.ready = false;
     this.releases.clear();
     this.retired.clear();
@@ -143,9 +326,7 @@ export class Provider {
         this.releases.has(pointer.release_id)
       )
         throw new Error("Release pointer");
-      const bytes = await this.readSafe(pointer.manifest_path, LIMITS.manifest);
-      if (digest(bytes) !== pointer.sha256) throw new Error("Release checksum");
-      const manifest = parseJson(bytes);
+      const manifest = await this.readReleaseManifest(pointer);
       if (
         manifest.schema_version !== 1 ||
         manifest.release_id !== pointer.release_id ||
@@ -158,6 +339,14 @@ export class Provider {
         digest(canonical(manifest.core)) !== pointer.release_id
       )
         throw new Error("Release identity");
+      if (
+        !manifest.files ||
+        typeof manifest.files !== "object" ||
+        Array.isArray(manifest.files)
+      )
+        throw new Error("File descriptor map");
+      const fileRoles = this.approvedFiles(manifest);
+      this.storage.registerManifest(manifest);
       const schemaPaths = Object.keys(manifest.files).filter(
         (path) => manifest.files[path].media_type === "application/schema+json",
       );
@@ -175,7 +364,10 @@ export class Provider {
           z.fromJSONSchema({ ...schemas, $ref: `#/$defs/${name}` }),
         ]),
       );
-      if (!validators.release_manifest?.safeParse(manifest).success)
+      if (
+        !validators.release_manifest?.safeParse({ ...manifest, files: {} })
+          .success
+      )
         throw new Error("Manifest schema");
       const info = {
         manifest,
@@ -186,35 +378,16 @@ export class Provider {
         sourceIndexes: {},
         targetRecords: new Map(),
         envelopeDigests: new Map(),
+        fileRoles,
+        reachable: new Set(),
+        legacyIndexDigests: {},
       };
-      for (const [path, file] of Object.entries(manifest.files)) {
-        if (
-          !hex.test(file.sha256) ||
-          !Number.isSafeInteger(file.bytes) ||
-          file.bytes < 0
-        )
-          throw new Error("File descriptor");
-        const bound = path.endsWith("/index.json")
-          ? LIMITS.index
-          : path.includes("/targets/")
-            ? LIMITS.target
-            : file.media_type === "application/json" &&
-                !path.includes("/schemas/")
-              ? LIMITS.shard
-              : 128 * 1024 * 1024;
-        if (
-          file.media_type === "application/schema+json" &&
-          file.sha256 !== manifest.files[schemaPaths[0]].sha256
-        )
-          throw new Error("Schema disagreement");
-        const parse =
-          file.media_type === "application/json" &&
-          file.schema &&
-          !path.includes("/schemas/") &&
-          !path.includes("/downloads/");
-        const content = await this.readSafe(path, bound, file, Boolean(parse));
-        if (parse) {
-          const envelope = parseJson(content);
+      const processStorage = (path, content) => {
+        const file = manifest.files[path];
+        if (!file || fileRoles.get(path)?.kind !== "storage")
+          throw new Error("Unapproved query member");
+        const envelope = parseJson(content);
+        if (!this.storage.packed)
           info.envelopeDigests.set(path, {
             sha256: semanticHash(envelope),
             species: envelope.species,
@@ -230,23 +403,44 @@ export class Provider {
                       : "section",
             bytes: file.bytes,
           });
-          if (file.schema === "target_shard") {
-            const key = `${envelope.species}:${envelope.data.summary.record_id}`;
-            if (info.targetRecords.has(key))
-              throw new Error("Duplicate target record");
-            info.targetRecords.set(key, path);
-          }
-          if (!validators[file.schema]?.safeParse(envelope).success)
-            throw new Error("Shard schema");
-          if (
-            envelope.schema_version !== 1 ||
-            envelope.release_id !== manifest.release_id ||
-            !["human", "mouse"].includes(envelope.species) ||
-            !Object.hasOwn(envelope, "data")
-          )
-            throw new Error("Data envelope");
+        if (file.schema === "target_shard") {
+          const key = `${envelope.species}:${envelope.data.summary.record_id}`;
+          if (info.targetRecords.has(key))
+            throw new Error("Duplicate target record");
+          info.targetRecords.set(key, path);
         }
+        if (!validators[file.schema]?.safeParse(envelope).success)
+          throw new Error("Shard schema");
+        if (
+          envelope.schema_version !== 1 ||
+          envelope.release_id !== manifest.release_id ||
+          !["human", "mouse"].includes(envelope.species) ||
+          !Object.hasOwn(envelope, "data")
+        )
+          throw new Error("Data envelope");
+      };
+      for (const [path, file] of Object.entries(manifest.files)) {
+        if (!validators.file?.safeParse(file).success)
+          throw new Error("File descriptor");
+        const role = fileRoles.get(path);
+        if (
+          file.media_type === "application/schema+json" &&
+          file.sha256 !== manifest.files[schemaPaths[0]].sha256
+        )
+          throw new Error("Schema disagreement");
+        if (this.storage.isExternal(path) || this.storage.isVirtual(path))
+          continue;
+        const content = await this.readSafe(
+          path,
+          role.bound,
+          file,
+          role.kind === "storage",
+        );
+        if (role.kind === "storage") processStorage(path, content);
       }
+      if (this.storage.packed)
+        for await (const { path, bytes } of this.storage.scanRelease(manifest))
+          processStorage(path, bytes);
       const downloadOrigins = new Set(
         Object.values(manifest.species).flatMap((s) =>
           s.downloads.map((d) => new URL(d.url).origin),
@@ -273,19 +467,52 @@ export class Provider {
           entry.capabilities.sections.some((s) => !SECTIONS.includes(s))
         )
           throw new Error("Species manifest");
-        const index = await this.json(info, entry.index_path, LIMITS.index);
-        totalIndexBytes += manifest.files[entry.index_path].bytes;
+        const rawIndex = await this.json(info, entry.index_path, LIMITS.index);
+        const version = schemas["x-openantigens-index-version"] ?? 1;
         if (
-          !Array.isArray(index) ||
-          index.some(
-            (row) =>
-              row.species !== species ||
-              row.taxon_id !== entry.taxon_id ||
-              typeof row.record_id !== "string" ||
-              (row.target_id && !entry.target_paths[row.target_id]),
-          )
+          ![1, 2].includes(version) ||
+          entry.index_path !==
+            `releases/${manifest.release_id}/${species}/index.json` ||
+          !Array.isArray(rawIndex)
         )
           throw new Error("Index schema");
+        totalIndexBytes += manifest.files[entry.index_path].bytes;
+        const digests = new Map();
+        const hadDiseaseIds =
+          version === 2 &&
+          Object.hasOwn(
+            schemas.$defs.search_row?.properties ?? {},
+            "disease_ids",
+          );
+        const index = rawIndex.map((row) => {
+          const path =
+            version === 2
+              ? row.summary_path
+              : info.targetRecords.get(`${species}:${row.record_id}`);
+          if (
+            !path ||
+            info.targetRecords.get(`${species}:${row.record_id}`) !== path ||
+            row.species !== species ||
+            row.taxon_id !== entry.taxon_id ||
+            !hex.test(row.record_id) ||
+            (row.target_id && entry.target_paths[row.target_id] !== path)
+          )
+            throw new Error("Index identity");
+          if (version === 1 || hadDiseaseIds)
+            digests.set(row.record_id, semanticHash(row));
+          return searchRow(row, path);
+        });
+        if (new Set(index.map((row) => row.record_id)).size !== index.length)
+          throw new Error("Duplicate index record");
+        if (
+          Object.keys(entry.target_paths).length !==
+          index.filter((row) => row.target_id).length
+        )
+          throw new Error("Resolved target catalogue disagreement");
+        info.legacyIndexDigests[species] =
+          version === 1 || hadDiseaseIds
+            ? { kind: version === 1 ? "full" : "compact_disease", digests }
+            : null;
         info.sourceIndexes[species] = index;
         info.indexes[species] = index.toSorted((a, b) =>
           (a.target_id ?? `~${a.record_id}`) <
@@ -308,44 +535,90 @@ export class Provider {
             url.protocol !== "https:" ||
             url.username ||
             url.password ||
-            !url.pathname.includes(`/data/releases/${manifest.release_id}/`) ||
+            download.url !==
+              `${url.origin}/data/releases/${manifest.release_id}/${species}/${download.name}` ||
             !file ||
             file.sha256 !== download.sha256 ||
             file.bytes !== download.bytes
           )
             throw new Error("Download manifest");
         }
-        for (const [id, path] of Object.entries(entry.target_paths)) {
-          if (!manifest.files[path]) throw new Error("Target mapping");
-          const target = await this.json(info, path, LIMITS.target);
+        info.reachable.add(entry.index_path);
+        for (const download of entry.downloads)
+          info.reachable.add(download.path);
+        for (const row of index) {
+          const key = digest(canonical(row.target_id ?? row.record_id));
+          const prefix = `releases/${manifest.release_id}/${species}`;
+          if (row.summary_path !== `${prefix}/targets/${key}.json`)
+            throw new Error("Target path identity");
+          const target = await this.json(info, row.summary_path, LIMITS.target);
           if (
-            target.summary.target_id !== id ||
-            target.summary.species !== species ||
-            !id.startsWith(`${entry.taxon_id}:`)
+            target.summary.target_id !== row.target_id ||
+            target.summary.record_id !== row.record_id ||
+            target.summary.species !== species
           )
             throw new Error("Target identity");
-          const refs = [
-            target.reference_sequence_path,
-            ...Object.values(target.construct_sequence_paths),
-            ...target.constructs.pages,
-            ...Object.values(target.sections).flatMap((d) => d.pages),
-          ].filter(Boolean);
-          if (refs.some((p) => !manifest.files[p]))
-            throw new Error("Target shard reference");
+          const add = (path, schema) => {
+            if (
+              !path ||
+              fileRoles.get(path)?.schema !== schema ||
+              fileRoles.get(path)?.species !== species
+            )
+              throw new Error("Target shard role");
+            info.reachable.add(path);
+          };
+          add(row.summary_path, "target_shard");
+          for (const [section, descriptor] of Object.entries(target.sections))
+            for (const [page, path] of descriptor.pages.entries()) {
+              if (path !== `${prefix}/sections/${key}/${section}-${page}.json`)
+                throw new Error("Section path identity");
+              add(path, `section_${section}`);
+            }
+          for (const [page, path] of target.constructs.pages.entries()) {
+            if (path !== `${prefix}/constructs/${key}-${page}.json`)
+              throw new Error("Construct path identity");
+            add(path, "construct_page");
+          }
+          if (target.reference_sequence_path) {
+            if (
+              target.reference_sequence_path !==
+              `${prefix}/sequences/${key}-reference.json`
+            )
+              throw new Error("Reference path identity");
+            add(target.reference_sequence_path, "sequence_shard");
+          }
+          for (const [cid, path] of Object.entries(
+            target.construct_sequence_paths,
+          ))
+            if (path) {
+              if (path !== `${prefix}/sequences/${cid}.json`)
+                throw new Error("Sequence path identity");
+              add(path, "sequence_shard");
+            }
         }
       }
+      if (
+        info.reachable.size !== fileRoles.size ||
+        [...fileRoles.keys()].some((path) => !info.reachable.has(path))
+      )
+        throw new Error("Unreachable artifact file");
       if (totalIndexBytes > LIMITS.indexes)
         throw new Error("Index memory budget");
       await this.verifySemanticIdentity(info);
-      for (const species of ["human", "mouse"])
-        await this.verifyRecordsDownload(info, species);
+      if (!this.storage.packed)
+        for (const species of ["human", "mouse"])
+          await this.verifyRecordsDownload(info, species);
       delete info.envelopeDigests;
       delete info.sourceIndexes;
       delete info.targetRecords;
+      delete info.fileRoles;
+      delete info.reachable;
+      delete info.legacyIndexDigests;
       this.releases.set(manifest.release_id, info);
     }
     if (!this.releases.has(root.current_release_id))
       throw new Error("Current release");
+    await this.storage.validateInventory(root);
     this.current = root.current_release_id;
     this.ready = true;
     return this;
@@ -439,13 +712,24 @@ export class Provider {
       let constructTotal = 0;
       write("[");
       for (let position = 0; position < indexes.length; position++) {
-        const summary = indexes[position];
-        status[summary.status] = (status[summary.status] ?? 0) + 1;
-        const path = info.targetRecords.get(`${species}:${summary.record_id}`);
-        if (!path) throw new Error("Missing projected target");
+        const row = indexes[position];
+        const path = row.summary_path;
         const target = await this.json(info, path, LIMITS.target);
-        if (canonical(target.summary) !== canonical(summary))
+        const summary = target.summary;
+        if (
+          canonical(searchRow(summary, path)) !== canonical(row) ||
+          (info.legacyIndexDigests[species] &&
+            semanticHash(
+              info.legacyIndexDigests[species].kind === "full"
+                ? summary
+                : {
+                    ...searchRow(summary, path),
+                    disease_ids: summary.disease_ids,
+                  },
+            ) !== info.legacyIndexDigests[species].digests.get(row.record_id))
+        )
           throw new Error("Index target disagreement");
+        status[summary.status] = (status[summary.status] ?? 0) + 1;
         if (position) write(",");
         write('{"construct_sequences":{');
         let first = true;
@@ -454,7 +738,7 @@ export class Provider {
           first = false;
           const sequencePath = target.construct_sequence_paths[cid];
           const sequence = sequencePath
-            ? await this.json(info, sequencePath)
+            ? await this.json(info, sequencePath, LIMITS.shard, path)
             : null;
           if (
             sequence &&
@@ -498,7 +782,11 @@ export class Provider {
           if (!first) write(",");
           first = false;
           const descriptor = target.sections[section];
-          write(`${canonical(section)}:{"items":[`);
+          const coverage =
+            section === "disease" ? summary.disease_coverage : undefined;
+          write(
+            `${canonical(section)}:{${coverage ? `"coverage":${semantic(coverage)},` : ""}"items":[`,
+          );
           let count = 0;
           for (const page of descriptor.pages) {
             const evidence = await this.json(info, page);
@@ -509,6 +797,11 @@ export class Provider {
               evidence.reason !== descriptor.reason
             )
               throw new Error("Evidence identity");
+            if (
+              coverage &&
+              canonical(evidence.coverage) !== canonical(coverage)
+            )
+              throw new Error("Disease coverage disagreement");
             for (const item of evidence.items) {
               if (count++) write(",");
               write(semantic(item));
@@ -544,11 +837,13 @@ export class Provider {
     if (canonical(assets) !== canonical(manifest.core.asset_sha256))
       throw new Error("Asset payload identity");
   }
-  async json(info, path, max = LIMITS.shard) {
+  async json(info, path, max = LIMITS.shard, targetPath) {
     try {
       const file = info.manifest.files[path];
       if (!file) throw new Error("Unlisted shard");
-      const result = parseJson(await this.readSafe(path, max, file));
+      const result = parseJson(
+        await this.readSafe(path, max, file, true, targetPath),
+      );
       return result.data;
     } catch (error) {
       this.ready = false;
@@ -593,6 +888,7 @@ export class Provider {
       source_dates,
       notes,
       input_sha256,
+      projection_methods,
     } = info.manifest.provenance;
     const manifest = this.manifestReference(info);
     return {
@@ -601,6 +897,7 @@ export class Provider {
       source_versions,
       source_dates,
       notes,
+      projection_methods: projection_methods ?? null,
       input_hashes: {
         count: Object.keys(input_sha256).length,
         manifest_url: manifest.url,
@@ -637,13 +934,25 @@ export class Provider {
             taxon_id: v.taxon_id,
             counts: v.counts,
             capabilities: v.capabilities,
-            downloads: v.downloads,
+            references: v.downloads.filter((download) =>
+              [
+                "schema.json",
+                "citation.json",
+                "openantigens.bib",
+                "openantigens.ris",
+              ].includes(download.name),
+            ),
           },
         ]),
       ),
     };
   }
-  async call(name, raw, signal) {
+  call(name, raw, signal) {
+    return this.storage
+      ? this.storage.withContext(() => this.callData(name, raw, signal))
+      : this.callData(name, raw, signal);
+  }
+  async callData(name, raw, signal) {
     signal?.throwIfAborted();
     const args = parseInput(name, raw);
     if (
@@ -671,30 +980,60 @@ export class Provider {
               releases: [...this.releases.values()].map((i) =>
                 this.releaseMetadata(i),
               ),
-              retired_releases: [...this.retired.values()],
+              retirement_history: {
+                known_retired_count: this.retired.size,
+                limit: 1000,
+                lookup_endpoint: "/v1/releases/{release_id}",
+              },
             },
       );
     const sm = info.manifest.species[species];
-    if (name === "get_downloads")
-      return this.envelope(info, species, sm.downloads);
     if (name === "search_targets") {
-      if (args.disease_id && !sm.capabilities.disease)
-        throw new ApiError(
-          400,
-          "unsupported_capability",
-          "Disease associations are not supported for this species and release.",
-        );
       const q = (args.q ?? "").toLocaleLowerCase("en").trim();
-      const rows = info.indexes[species].filter(
+      let rows = info.indexes[species].filter(
         (r) =>
           (!q || r.search_text?.toLocaleLowerCase("en").includes(q)) &&
           (!args.track || r.track === args.track) &&
           (!args.status || r.status === args.status) &&
           (!args.structure || r.structure_state === args.structure) &&
-          (!args.constructs || r.construct_state === args.constructs) &&
-          (!args.disease_id || r.disease_ids.includes(args.disease_id)),
+          (!args.constructs || r.construct_state === args.constructs),
       );
-      return this.page(info, species, rows, args, "targets");
+      const deadline = Date.now() + LIMITS.handlerMs;
+      const pagination = this.pagination(info, species, args, "targets");
+      if (pagination.position >= LIMITS.searchWindow)
+        bad("refine_query", "Refine the query to inspect further matches.");
+      const page = this.page(
+        info,
+        species,
+        rows.slice(0, LIMITS.searchWindow),
+        args,
+        "targets",
+        {
+          search_window: LIMITS.searchWindow,
+          refine_query: rows.length > LIMITS.searchWindow,
+        },
+      );
+      page.total = rows.length;
+      const selected = page.data;
+      page.data = [];
+      for (const row of selected) {
+        signal?.throwIfAborted();
+        if (Date.now() > deadline)
+          throw new ApiError(
+            503,
+            "handler_timeout",
+            "The request exceeded its time budget.",
+          );
+        const summary = (await this.json(info, row.summary_path, LIMITS.target))
+          .summary;
+        if (
+          summary.target_id !== row.target_id ||
+          summary.record_id !== row.record_id
+        )
+          throw new Error("Target identity");
+        page.data.push(summary);
+      }
+      return page;
     }
     if (!args.target_id.startsWith(`${sm.taxon_id}:`))
       bad(
@@ -731,8 +1070,14 @@ export class Provider {
         `section:${args.target_id}:${args.section}`,
         (data) => data.items,
         () => true,
-        { state: descriptor.state, reason: descriptor.reason },
-        args.section === "similarity" ? 50 : 100,
+        {
+          state: descriptor.state,
+          reason: descriptor.reason,
+          ...(args.section === "disease" && target.summary.disease_coverage
+            ? { coverage: target.summary.disease_coverage }
+            : {}),
+        },
+        LIMITS.maxPage,
         signal,
       );
     }
@@ -746,7 +1091,7 @@ export class Provider {
         (data) => data,
         (r) => !args.category || r.category === args.category,
         { state: target.constructs.state, reason: target.constructs.reason },
-        100,
+        LIMITS.maxPage,
         signal,
       );
     }
@@ -755,7 +1100,7 @@ export class Provider {
         ? target.construct_sequence_paths[args.construct_id]
         : target.reference_sequence_path;
       if (!path) notFound();
-      const sequence = await this.json(info, path);
+      const sequence = await this.json(info, path, LIMITS.shard, targetPath);
       if (
         sequence.target_id !== args.target_id ||
         sequence.construct_id !== (args.construct_id ?? null) ||
@@ -767,8 +1112,8 @@ export class Provider {
     }
     throw new Error("Unknown operation");
   }
-  pagination(info, species, args, scope, maximum = 100) {
-    const limit = args.limit ?? 25;
+  pagination(info, species, args, scope, maximum = LIMITS.maxPage) {
+    const limit = args.limit ?? LIMITS.defaultPage;
     if (limit > maximum) bad();
     const normalized = { ...args };
     delete normalized.cursor;
@@ -825,7 +1170,7 @@ export class Provider {
       },
     };
   }
-  page(info, species, rows, args, scope, extra = {}, maximum = 100) {
+  page(info, species, rows, args, scope, extra = {}, maximum = LIMITS.maxPage) {
     const p = this.pagination(info, species, args, scope, maximum);
     return p.finish(
       rows.slice(p.position, p.position + p.limit),
@@ -842,7 +1187,7 @@ export class Provider {
     records,
     include,
     extra = {},
-    maximum = 100,
+    maximum = LIMITS.maxPage,
     signal,
   ) {
     const p = this.pagination(info, species, args, scope, maximum);
@@ -884,8 +1229,6 @@ export class Provider {
     else if (name === "list_constructs")
       data = { type: "array", items: ref("construct") };
     else if (name === "get_sequence") data = ref("sequence");
-    else if (name === "get_downloads")
-      data = { type: "array", items: ref("download") };
     else if (name === "get_target") {
       const summary = structuredClone(defs.summary);
       summary.properties.sections = {
@@ -937,9 +1280,32 @@ export class Provider {
                     taxon_id: { type: "integer" },
                     counts: defs.species_manifest.properties.counts,
                     capabilities: defs.species_manifest.properties.capabilities,
-                    downloads: { type: "array", items: ref("download") },
+                    references: {
+                      type: "array",
+                      minItems: 4,
+                      maxItems: 4,
+                      items: {
+                        ...defs.download,
+                        properties: {
+                          ...defs.download.properties,
+                          name: {
+                            enum: [
+                              "schema.json",
+                              "citation.json",
+                              "openantigens.bib",
+                              "openantigens.ris",
+                            ],
+                          },
+                        },
+                      },
+                    },
                   },
-                  required: ["taxon_id", "counts", "capabilities", "downloads"],
+                  required: [
+                    "taxon_id",
+                    "counts",
+                    "capabilities",
+                    "references",
+                  ],
                   additionalProperties: false,
                 },
               ]),

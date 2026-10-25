@@ -48,14 +48,34 @@ export const LIMITS = Object.freeze({
   sequence: 1048576,
   index: 33554432,
   indexes: 67108864,
-  manifest: 67108864,
+  manifest: 100663296,
   target: 8388608,
   shard: 1048576,
-  defaultPage: 25,
-  maxPage: 100,
-  similarity: 50,
-  concurrency: 8,
+  externalDownload: 1073741824,
+  defaultPage: 5,
+  maxPage: 10,
+  similarity: 10,
+  searchWindow: 20,
+  clientRate: 20,
+  clientBurst: 8,
+  globalRate: 90,
+  globalBurst: 10,
+  concurrency: 2,
+  clientConcurrency: 1,
   handlerMs: 5000,
+});
+export const DOWNLOAD_ROLES = Object.freeze({
+  "index.jsonl": ["application/x-ndjson", "summary", null],
+  "index.tsv": ["text/tab-separated-values", null, null],
+  "constructs.jsonl": ["application/x-ndjson", "construct", null],
+  "constructs.tsv": ["text/tab-separated-values", null, null],
+  "constructs.fasta": ["text/x-fasta", null, null],
+  "reference.fasta": ["text/x-fasta", null, null],
+  "schema.json": ["application/schema+json", null, null],
+  "citation.json": ["application/json", "citation", null],
+  "openantigens.bib": ["application/x-bibtex", null, null],
+  "openantigens.ris": ["application/x-research-info-systems", null, null],
+  "records.jsonl.gz": ["application/x-ndjson", null, "gzip"],
 });
 const release = z.string().regex(/^[a-f0-9]{64}$/);
 const species = z.enum(["human", "mouse"]);
@@ -91,19 +111,25 @@ const target_id = z
   .regex(/^(9606|10090):(uniprot|refseq):[A-Za-z0-9_.-]+$/)
   .max(200);
 const page = {
-  limit: z.number().int().min(1).max(100).optional(),
+  limit: z.number().int().min(1).max(LIMITS.maxPage).optional(),
   cursor: z.string().max(2048).optional(),
 };
 const filters = {
   q: z
     .string()
-    .refine((v) => [...v].length <= 200)
-    .optional(),
+    .min(2)
+    .refine((value) => {
+      const query = value.trim();
+      return (
+        [...query].length >= 2 &&
+        [...query].length <= 200 &&
+        !/[?*]/u.test(query)
+      );
+    }),
   track: z.enum(TRACKS).optional(),
   status: z.enum(STATUSES).optional(),
   structure: z.enum(STATES).optional(),
   constructs: z.enum(STATES).optional(),
-  disease_id: z.string().min(1).max(128).optional(),
 };
 const base = { release_id: release, species };
 export const inputs = {
@@ -134,8 +160,35 @@ export const inputs = {
   get_sequence: z
     .object({ ...base, target_id, construct_id: release.optional() })
     .strict(),
-  get_downloads: z.object(base).strict(),
 };
+export const projectionMethodsSchema = z
+  .object({
+    disease: z
+      .object({
+        selection: z.literal("portal_top_100"),
+        species: z.literal("human"),
+        limit: z.literal(100),
+        order: z.literal("published_source_order"),
+      })
+      .strict(),
+  })
+  .strict();
+export const diseaseCoverageSchema = z
+  .object({
+    state: z.enum(["available", "unknown", "not_applicable"]),
+    selection: z.literal("portal_top_100"),
+    source_count: z.number().int().nonnegative().nullable(),
+    projected_count: z.number().int().min(0).max(100),
+    limit: z.literal(100),
+    source_reference: z
+      .object({
+        state: z.enum(["live", "unknown", "not_applicable"]),
+        url: z.string().max(1024).url().nullable(),
+        sha256: release.nullable(),
+      })
+      .strict(),
+  })
+  .strict();
 export const provenanceOutputSchema = z
   .object({
     software_commit: z.string().max(256),
@@ -143,6 +196,7 @@ export const provenanceOutputSchema = z
     source_versions: z.record(z.string(), z.string().max(16384).nullable()),
     source_dates: z.record(z.string(), z.string().max(16384).nullable()),
     notes: z.array(z.string().max(16384)),
+    projection_methods: projectionMethodsSchema.nullable(),
     input_hashes: z
       .object({
         count: z.number().int().nonnegative(),
@@ -165,11 +219,21 @@ export const outputSchema = z
     provenance: provenanceOutputSchema,
     next_cursor: z.string().nullable().optional(),
     total: z.number().int().nonnegative().optional(),
+    search_window: z.literal(20).optional(),
+    refine_query: z.boolean().optional(),
     state: z.string().optional(),
     reason: z.string().nullable().optional(),
+    coverage: diseaseCoverageSchema.optional(),
     current_release_id: release.optional(),
     releases: z.array(z.unknown()).optional(),
-    retired_releases: z.array(tombstoneSchema).max(1000).optional(),
+    retirement_history: z
+      .object({
+        known_retired_count: z.number().int().min(0).max(1000),
+        limit: z.literal(1000),
+        lookup_endpoint: z.literal("/v1/releases/{release_id}"),
+      })
+      .strict()
+      .optional(),
     discovery_state: z.enum(["active", "publication_in_progress"]).optional(),
   })
   .strict();
@@ -188,6 +252,7 @@ export function bad(
   throw new ApiError(400, code, message);
 }
 export function parseInput(name, args) {
+  if (!inputs[name]) bad();
   const result = inputs[name].safeParse(args);
   if (!result.success) bad();
   return result.data;

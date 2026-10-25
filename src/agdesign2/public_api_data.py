@@ -14,6 +14,7 @@ import math
 import os
 import re
 import shutil
+import stat
 import struct
 import tempfile
 from html.parser import HTMLParser
@@ -25,17 +26,33 @@ from jsonschema import Draft202012Validator
 
 from .public_api_schema import (
     CATEGORIES, DEFS, PUBLIC_SCHEMA, SCHEMA_VERSION, SECTIONS, SECTION_TYPES,
-    SPECIES, STATUSES, PublicDataError, validate_schema,
+    SEARCH_FIELDS, SPECIES, STATUSES, PublicDataError, validate_schema,
 )
 
 INDEX_LIMIT = 32 * 1024 * 1024
 INDEX_TOTAL_LIMIT = 64 * 1024 * 1024
-MANIFEST_LIMIT = 64 * 1024 * 1024
+MANIFEST_LIMIT = 96 * 1024 * 1024
 TARGET_LIMIT = 8 * 1024 * 1024
 SHARD_LIMIT = 1024 * 1024
+EXTERNAL_DOWNLOAD_LIMIT = 1024 * 1024 * 1024
 PAGE_SIZE = 25
 LICENSE = "CC BY 4.0 for OpenAntigens annotations; source data retain original terms."
 LICENSES = {"software": "Apache-2.0", "annotations": "CC BY 4.0", "third_party": "Third-party sequences, structures and annotations retain original source terms; see DATA_LICENSE.md."}
+PUBLIC_DOWNLOAD_ROLES = {
+    "index.jsonl": ("application/x-ndjson", "summary", None),
+    "index.tsv": ("text/tab-separated-values", None, None),
+    "constructs.jsonl": ("application/x-ndjson", "construct", None),
+    "constructs.tsv": ("text/tab-separated-values", None, None),
+    "constructs.fasta": ("text/x-fasta", None, None),
+    "reference.fasta": ("text/x-fasta", None, None),
+    "schema.json": ("application/schema+json", None, None),
+    "citation.json": ("application/json", "citation", None),
+    "openantigens.bib": ("application/x-bibtex", None, None),
+    "openantigens.ris": ("application/x-research-info-systems", None, None),
+    "records.jsonl.gz": ("application/x-ndjson", None, "gzip"),
+}
+# Static bulk bodies are omitted from the packed app, so this is not an API/RAM limit.
+EXTERNAL_DOWNLOAD_ROLES = frozenset({"index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "constructs.fasta", "reference.fasta", "records.jsonl.gz"})
 SOURCE_DOMAINS = frozenset({"www.uniprot.org", "rest.uniprot.org", "www.rcsb.org", "www.ebi.ac.uk", "alphafold.ebi.ac.uk", "www.ncbi.nlm.nih.gov", "platform.opentargets.org", "identifiers.org", "doi.org", "orcid.org", "www.genenames.org", "www.ensembl.org", "gpcrdb.org"})
 _PRIVATE_MARKERS = ("/Users/", "/private/", "/home/", "file://", "-----BEGIN PRIVATE KEY", "Authorization: Bearer", "PRIVATE_CANARY", "sk-proj-")
 
@@ -52,6 +69,17 @@ def semantic_hash(value: Any) -> str:
     """Portable payload digest: JSON numbers use their IEEE-754 bits, not float spelling."""
     checksum = hashlib.sha256()
     _semantic_update(checksum, value)
+    return checksum.hexdigest()
+
+
+def _semantic_records_hash(records: Iterable[dict[str, Any]]) -> str:
+    checksum = hashlib.sha256()
+    checksum.update(b"[")
+    for position, value in enumerate(records):
+        if position:
+            checksum.update(b",")
+        _semantic_update(checksum, value)
+    checksum.update(b"]")
     return checksum.hexdigest()
 
 
@@ -202,6 +230,40 @@ def _scan_public(value: Any) -> None:
         for key, child in value.items():
             _safe_text(key)
             _scan_public(child)
+
+
+def public_citation_downloads(citation: dict[str, Any]) -> dict[str, bytes]:
+    """Exact house-format citations from the frozen, allowlisted release citation."""
+    from .site_docs import citation_downloads
+    validate_schema("citation", citation)
+    _scan_public(citation)
+    return {name: text.encode("utf-8") for name, text in citation_downloads(citation).items()}
+
+
+def public_file_role(relative: str, info: dict[str, Any], release_id: str) -> str:
+    """A manifest entry must have a fixed public role, not only a valid checksum."""
+    match = re.fullmatch(r"releases/([a-f0-9]{64})/(human|mouse)/(.+)", relative)
+    if not match or match[1] != release_id:
+        raise PublicDataError("Public file has no approved release/species role")
+    tail = match[3]
+    if tail.startswith("downloads/"):
+        expected, role = PUBLIC_DOWNLOAD_ROLES.get(tail[len("downloads/"):]), "download"
+    elif tail == "index.json":
+        expected, role = ("application/json", "index", None), "index"
+    elif re.fullmatch(r"targets/[a-f0-9]{64}\.json", tail):
+        expected, role = ("application/json", "target_shard", None), "target"
+    elif re.fullmatch(r"constructs/[a-f0-9]{64}-(?:0|[1-9][0-9]*)\.json", tail):
+        expected, role = ("application/json", "construct_page", None), "constructs"
+    elif re.fullmatch(r"sequences/[a-f0-9]{64}(?:-reference)?\.json", tail):
+        expected, role = ("application/json", "sequence_shard", None), "sequence"
+    else:
+        section = re.fullmatch(r"sections/[a-f0-9]{64}/([a-z_]+)-(?:0|[1-9][0-9]*)\.json", tail)
+        if not section or section[1] not in SECTIONS:
+            raise PublicDataError("Public file has no approved artifact role")
+        expected, role = ("application/json", f"section_{section[1]}", None), "section"
+    if expected is None or (info.get("media_type"), info.get("schema"), info.get("encoding")) != expected:
+        raise PublicDataError("Public file media/schema/encoding does not match its approved role")
+    return role
 
 
 def _safe_path(root: Path, relative: str, *, exists: bool = True) -> Path:
@@ -482,7 +544,21 @@ def _constructs(report: dict[str, Any], summary: dict[str, Any]) -> tuple[list[d
     return [records[key] for key in sorted(records)], {key: sequences[key] for key in sorted(sequences)}
 
 
-def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], species: str, *, public_site_dir: str | Path | None = None, static_origin: str = "https://openantigens.org") -> dict[str, Any]:
+def _disease_coverage(rows: list[Any], species: str, public_site_dir: str | Path | None, static_origin: str, source_sha256: str | None) -> dict[str, Any]:
+    reference = {"state": "not_applicable" if species == "mouse" else "unknown", "url": None, "sha256": None}
+    if species == "human" and source_sha256 is not None:
+        if not re.fullmatch(r"[a-f0-9]{64}", source_sha256):
+            raise PublicDataError("Invalid frozen disease source checksum")
+        reference = {"state": "live", "url": static_origin.rstrip("/") + "/open_targets_disease_associations.tsv", "sha256": source_sha256}
+    elif species == "human" and public_site_dir is not None and (Path(public_site_dir) / "downloads.html").is_file():
+        _safe_path(Path(public_site_dir), "downloads.html")
+        reference = {"state": "live", "url": static_origin.rstrip("/") + "/downloads.html", "sha256": None}
+    result = {"state": "not_applicable" if species == "mouse" else "available" if rows else "unknown", "selection": "portal_top_100", "source_count": len(rows) if species == "human" and source_sha256 is not None else None, "projected_count": min(len(rows), 100) if species == "human" else 0, "limit": 100, "source_reference": reference}
+    validate_schema("disease_coverage", result)
+    return result
+
+
+def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], species: str, *, public_site_dir: str | Path | None = None, static_origin: str = "https://openantigens.org", disease_source_sha256: str | None = None) -> dict[str, Any]:
     """Project one frozen target; absent evidence stays explicitly unknown."""
     if species not in SPECIES or not isinstance(entry, dict) or (report is not None and not isinstance(report, dict)):
         raise PublicDataError("Invalid public target inputs")
@@ -528,6 +604,9 @@ def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], 
     summary["canonical_isoform_id"] = _safe_text(target.get("canonical_isoform_id"))
     summary["unsupported_variants"] = [{"name": _safe_text(row.get("name")), "classification": _safe_text(row.get("category")), "state": "unavailable", "reason": "Linker, cassette and replacement variants require an explicit variant export contract beyond v1."} for row in report.get("gpcr_engineering_variants") or []]
     raw_sections = {"topology": [topology] if topology else [], "domains": report.get("interpro_annotations") or [], "ptms": [], "orthologs": report.get("ectodomain_homology") or [], "paralogs": (report.get("family_context") or {}).get("members") or [], "family": [report["family_context"]] if report.get("family_context") else [], "assembly": [], "structures": [], "similarity": [], "literature": [], "disease": entry.get("open_targets_diseases") or [] if species == "human" else []}
+    if not isinstance(raw_sections["disease"], list):
+        raise PublicDataError("Invalid recorded disease evidence section")
+    summary["disease_coverage"] = _disease_coverage(raw_sections["disease"], species, public_site_dir, static_origin, disease_source_sha256)
     for key, kind in (("ptms", "feature"), ("furin_sites", "furin"), ("cysteine_analysis", "cysteine")):
         for record in report.get(key) or []:
             if kind == "cysteine":
@@ -578,7 +657,7 @@ def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], 
         if not isinstance(rows, list):
             raise PublicDataError("Invalid recorded evidence section")
         if section == "disease":
-            rows = [{**row, "source": "Open Targets"} for row in rows]
+            rows = [{**row, "source": "Open Targets"} for row in rows[:100]]
         projected = [_project(SECTION_TYPES[section], row) for row in rows]
         for row in projected:
             for key in ("query_url", "open_targets_url", "live_asset_url"):
@@ -595,6 +674,8 @@ def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], 
         if section == "disease" and species == "mouse":
             state, reason = "not_applicable", "Mouse disease associations are outside this release capability."
         sections[section] = {"state": state, "reason": reason, "items": projected}
+        if section == "disease":
+            sections[section]["coverage"] = summary["disease_coverage"]
         summary["section_availability"][section] = state
     summary["disease_ids"] = sorted({row["disease_id"] for row in sections["disease"]["items"] if row["disease_id"]})
     summary["family_names"] = sorted({name for row in sections["family"]["items"] for name in row["family_names"]})
@@ -608,7 +689,7 @@ def project_public_target(report: dict[str, Any] | None, entry: dict[str, Any], 
     summary["construct_count"] = len(constructs) if target_id and ("construct_details" in report or "construct_recommendations" in report) else declared_count
     summary["portal_construct_count"] = declared_count
     summary["construct_state"] = "available" if summary["construct_count"] else "unavailable" if summary["construct_count"] == 0 else "unknown"
-    search_parts = [summary[key] or "" for key in ("identifier_accession", "entry_name", "gene_symbol", "protein_name", "track_raw", "analyzed_topology")]
+    search_parts = [summary[key] or "" for key in ("identifier_accession", "sequence_accession", "canonical_isoform_id", "entry_name", "gene_symbol", "protein_name", "track_raw", "analyzed_topology")]
     summary["search_text"] = " ".join(search_parts + aliases + summary["family_names"]).lower()
     validate_schema("summary", summary)
     reference_hazards = _hazards(report, {"start": 1, "end": len(sequence)}) if sequence else None
@@ -640,14 +721,22 @@ def _write_json(root: Path, relative: str, value: Any) -> bytes:
 
 def _atomic_public_replace(root: Path, relative: str, content: bytes) -> None:
     path = _safe_path(root, relative)
+    original = path.stat(follow_symlinks=False)
+    if not stat.S_ISREG(original.st_mode):
+        raise PublicDataError("Public metadata destination must be a regular file")
+    mode = stat.S_IMODE(original.st_mode)
     descriptor, temporary = tempfile.mkstemp(prefix=".public-metadata-", suffix=".tmp", dir=path.parent)
     temp = Path(temporary)
     try:
         with os.fdopen(descriptor, "wb") as handle:
             handle.write(content)
             handle.flush()
+            os.fchmod(handle.fileno(), mode)
             os.fsync(handle.fileno())
         _safe_path(root, relative)
+        current = path.stat(follow_symlinks=False)
+        if not stat.S_ISREG(current.st_mode) or (current.st_dev, current.st_ino, stat.S_IMODE(current.st_mode)) != (original.st_dev, original.st_ino, mode):
+            raise PublicDataError("Public metadata identity or permissions changed during replacement")
         os.replace(temp, path)
     finally:
         if temp.exists():
@@ -728,7 +817,103 @@ def sequence_fasta(record: dict[str, Any], *, release_id: str, provenance_url: s
     return f">{primary} {header}\n" + "\n".join(sequence[i:i + 80] for i in range(0, len(sequence), 80)) + "\n"
 
 
-def _load_sources(summary_path: Path, species: str, public_site: Path, static_origin: str) -> tuple[list[dict[str, Any]], dict[str, str]]:
+class _ProjectionRows:
+    """Private build spool of already allowlisted records; no raw reports or resume state."""
+
+    def __init__(self, directory: Path):
+        self.directory = directory
+        self.directory.mkdir(parents=True, exist_ok=True)
+        self.entries: list[tuple[str, str, str, str]] = []
+
+    def append(self, record: dict[str, Any]) -> None:
+        summary = record["summary"]
+        name = summary["record_id"] + ".json"
+        content = canonical_bytes(record) + b"\n"
+        if len(content) > 64 * 1024 * 1024:
+            raise PublicDataError(f"Public projection record has {len(content)} bytes; private staging limit is {64 * 1024 * 1024} bytes")
+        _write(self.directory, name, content)
+        self.entries.append((summary["target_id"] or "", summary["record_id"], name, _sha(content)))
+
+    def __len__(self) -> int:
+        return len(self.entries)
+
+    def __iter__(self) -> Iterable[dict[str, Any]]:
+        for _, _, name, expected in self.entries:
+            value, checksum = _read_json_hashed(_safe_path(self.directory, name), maximum=64 * 1024 * 1024)
+            if checksum != expected:
+                raise PublicDataError("Public projection staging bytes changed during compilation")
+            yield value
+
+
+class _DiseaseRows:
+    """A frozen, target-grouped TSV index; only one target's source rows enter memory."""
+
+    def __init__(self, path: Path):
+        self.path = _safe_path(path.parent, path.name)
+        initial = self.path.stat()
+        self.spans: dict[str, tuple[int, int, str]] = {}
+        checksum = hashlib.sha256()
+        consumed: list[bytes] = []
+        current = None
+        group_start = group_end = 0
+        group_hash = hashlib.sha256()
+        with self.path.open("rb") as handle:
+            def lines() -> Iterable[str]:
+                for raw in handle:
+                    checksum.update(raw)
+                    consumed.append(raw)
+                    yield raw.decode("utf-8")
+
+            reader = csv.DictReader(lines(), delimiter="\t")
+            self.fields = reader.fieldnames
+            if not self.fields or "entry_name" not in self.fields or len(set(self.fields)) != len(self.fields):
+                raise PublicDataError("Frozen disease associations have an invalid header")
+            while True:
+                consumed.clear()
+                start = handle.tell()
+                try:
+                    row = next(reader)
+                except StopIteration:
+                    break
+                end = handle.tell()
+                key = str(row.get("entry_name") or "").upper()
+                if not key:
+                    raise PublicDataError("Frozen disease association lacks a target identity")
+                if key != current:
+                    if current is not None:
+                        self.spans[current] = (group_start, group_end, group_hash.hexdigest())
+                    if key in self.spans:
+                        raise PublicDataError("Frozen disease associations must be grouped by target")
+                    current, group_start, group_hash = key, start, hashlib.sha256()
+                group_hash.update(b"".join(consumed))
+                group_end = end
+            if current is not None:
+                self.spans[current] = (group_start, group_end, group_hash.hexdigest())
+        final = self.path.stat()
+        self.identity = (final.st_dev, final.st_ino, final.st_size, final.st_mtime_ns)
+        if self.identity != (initial.st_dev, initial.st_ino, initial.st_size, initial.st_mtime_ns):
+            raise PublicDataError("Frozen disease source changed during indexing")
+        self.sha256 = checksum.hexdigest()
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key not in self.spans:
+            return default
+        path = _safe_path(self.path.parent, self.path.name)
+        info = path.stat()
+        if (info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns) != self.identity:
+            raise PublicDataError("Frozen disease source changed during compilation")
+        start, end, expected = self.spans[key]
+        if end - start > 64 * 1024 * 1024:
+            raise PublicDataError("A frozen target disease source exceeds its bounded input budget")
+        with path.open("rb") as handle:
+            handle.seek(start)
+            raw = handle.read(end - start)
+        if len(raw) != end - start or _sha(raw) != expected:
+            raise PublicDataError("Frozen disease target rows changed during compilation")
+        return list(csv.DictReader(io.StringIO(raw.decode("utf-8"), newline=""), fieldnames=self.fields, delimiter="\t"))
+
+
+def _load_sources(summary_path: Path, species: str, public_site: Path, static_origin: str, *, staging_dir: Path | None = None) -> tuple[list[dict[str, Any]] | _ProjectionRows, dict[str, str]]:
     if summary_path.is_symlink() or not summary_path.is_file():
         raise PublicDataError("Missing or symlinked frozen summary")
     summary_rows, summary_hash = _read_json_hashed(summary_path)
@@ -745,16 +930,14 @@ def _load_sources(summary_path: Path, species: str, public_site: Path, static_or
     literature_links, literature_hash = _frozen_pubtator_links(portal_root, index)
     if literature_hash:
         hashes[f"{species}:portal_index_script"] = literature_hash
-    disease_by_entry: dict[str, list[dict[str, Any]]] = {}
+    disease_by_entry: dict[str, list[dict[str, Any]]] | _DiseaseRows = {}
     disease_tsv = portal_root / "open_targets_disease_associations.tsv"
     if species == "human" and disease_tsv.is_file():
         if disease_tsv.is_symlink():
             raise PublicDataError("Disease artifact cannot be a symlink")
-        hashes["human:disease_tsv"] = _sha(disease_tsv.read_bytes())
-        with disease_tsv.open(encoding="utf-8", newline="") as handle:
-            for row in csv.DictReader(handle, delimiter="\t"):
-                disease_by_entry.setdefault(str(row.get("entry_name") or "").upper(), []).append(row)
-    projected = []
+        disease_by_entry = _DiseaseRows(disease_tsv)
+        hashes["human:disease_tsv"] = disease_by_entry.sha256
+    projected = [] if staging_dir is None else _ProjectionRows(staging_dir / species)
     seen = set()
     root = summary_path.parent.resolve()
     for position, row in enumerate(summary_rows):
@@ -780,18 +963,28 @@ def _load_sources(summary_path: Path, species: str, public_site: Path, static_or
             entry = {**entry, "open_targets_diseases": disease_by_entry.get(key, [])}
         if key.lower() in literature_links:
             entry = {**entry, "pubtator_query_url": literature_links[key.lower()]}
-        projected.append(project_public_target(report, entry, species, public_site_dir=public_site, static_origin=static_origin))
+        projected.append(project_public_target(report, entry, species, public_site_dir=public_site, static_origin=static_origin, disease_source_sha256=hashes.get("human:disease_tsv")))
         del report
     if seen != set(index_by_entry):
         raise PublicDataError("Frozen summary and finalized portal catalogue differ")
-    projected.sort(key=lambda row: (row["summary"]["target_id"] or "", row["summary"]["record_id"]))
-    ids = [row["summary"]["target_id"] for row in projected if row["summary"]["target_id"]]
+    if isinstance(projected, _ProjectionRows):
+        projected.entries.sort()
+        ids = [key for key, _, _, _ in projected.entries if key]
+    else:
+        projected.sort(key=lambda row: (row["summary"]["target_id"] or "", row["summary"]["record_id"]))
+        ids = [row["summary"]["target_id"] for row in projected if row["summary"]["target_id"]]
     if len(ids) != len(set(ids)):
         raise PublicDataError("Duplicate species/accession public target identity")
     return projected, hashes
 
 
 def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: str | Path, output_dir: str | Path, *, public_site_dir: str | Path, software_commit: str, snapshot_id: str, previous_bundle_dir: str | Path | None = None, static_origin: str = "https://openantigens.org") -> Path:
+    """Compile through a bounded private public-record spool, removed on success or failure."""
+    with tempfile.TemporaryDirectory(prefix="openantigens-public-projection-") as staging:
+        return _build_public_api_bundle(human_summary_path, mouse_summary_path, output_dir, public_site_dir=public_site_dir, software_commit=software_commit, snapshot_id=snapshot_id, previous_bundle_dir=previous_bundle_dir, static_origin=static_origin, staging_dir=Path(staging))
+
+
+def _build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: str | Path, output_dir: str | Path, *, public_site_dir: str | Path, software_commit: str, snapshot_id: str, previous_bundle_dir: str | Path | None, static_origin: str, staging_dir: Path) -> Path:
     """Build current plus optional previous release; refuse existing output content."""
     if Path(output_dir).is_symlink() or Path(public_site_dir).is_symlink():
         raise PublicDataError("Public build roots cannot be symbolic links")
@@ -816,10 +1009,10 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
     _safe_text(snapshot_id)
     projected, inputs = {}, {}
     for species, summary in (("human", human_summary_path), ("mouse", mouse_summary_path)):
-        projected[species], hashes = _load_sources(Path(summary).resolve(), species, public_site, static_origin)
+        projected[species], hashes = _load_sources(Path(summary).resolve(), species, public_site, static_origin, staging_dir=staging_dir)
         inputs.update(hashes)
     citation = _project("citation", _read_json(Path(__file__).parent / "data/openantigens_citation.json"))
-    provenance = {"software_commit": software_commit, "snapshot_id": snapshot_id, "source_versions": {}, "source_dates": {}, "input_sha256": inputs, "notes": ["Historical source versions and retrieval dates are unknown unless recorded in the frozen input."]}
+    provenance = {"software_commit": software_commit, "snapshot_id": snapshot_id, "source_versions": {**{f"{species}_portal_software": _safe_text(metadata.get("software_version")) for species, (_, metadata) in prepared_metadata.items()}, "open_targets": None}, "source_dates": {**{f"{species}_portal_build_date": _safe_text(metadata.get("portal_build_date")) for species, (_, metadata) in prepared_metadata.items()}, "open_targets": None}, "input_sha256": inputs, "notes": ["Historical source versions and retrieval dates are unknown unless recorded in the frozen input."], "projection_methods": {"disease": {"selection": "portal_top_100", "species": "human", "limit": 100, "order": "published_source_order"}}}
     validate_schema("provenance", provenance)
     asset_hashes = {}
     for rows in projected.values():
@@ -827,7 +1020,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
             for asset in record["sections"]["structures"]["items"]:
                 if asset["sha256"] and asset["live_asset_url"]:
                     asset_hashes[urlsplit(asset["live_asset_url"]).path.lstrip("/")] = asset["sha256"]
-    core = {"schema_version": SCHEMA_VERSION, "provenance": provenance, "payload_sha256": {**{species: semantic_hash(rows) for species, rows in projected.items()}, "schema": semantic_hash(PUBLIC_SCHEMA), "citation": semantic_hash(citation)}, "asset_sha256": asset_hashes}
+    core = {"schema_version": SCHEMA_VERSION, "provenance": provenance, "payload_sha256": {**{species: _semantic_records_hash(rows) for species, rows in projected.items()}, "schema": semantic_hash(PUBLIC_SCHEMA), "citation": semantic_hash(citation)}, "asset_sha256": asset_hashes}
     release_id = _hash(core)
     prefix = f"releases/{release_id}"
     files: dict[str, Any] = {}
@@ -839,7 +1032,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
         _scan_public(value)
         content = canonical_bytes(value) + b"\n"
         if len(content) > limit:
-            raise PublicDataError("Public shard exceeds its storage budget")
+            raise PublicDataError(f"Public {schema} shard has {len(content)} bytes; storage limit is {limit} bytes")
         _write(output, relative, content)
         files[relative] = _file_meta(content, "application/json", schema)
 
@@ -847,10 +1040,13 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
         species_prefix = f"{prefix}/{species}"
         shard_paths: list[tuple[str, str]] = []
         target_paths: dict[str, str] = {}
-        all_constructs, all_sequences = [], []
-        summaries = [row["summary"] for row in rows]
+        construct_count = reference_count = construct_sequence_count = 0
         index_path = f"{species_prefix}/index.json"
-        write_json(index_path, _envelope(release_id, species, summaries), "index", INDEX_LIMIT)
+        search_rows = []
+        for row in rows:
+            summary = row["summary"]
+            search_rows.append({**{field: summary[field] for field in SEARCH_FIELDS}, "summary_path": f"{species_prefix}/targets/{_hash(summary['target_id'] or summary['record_id'])}.json"})
+        write_json(index_path, _envelope(release_id, species, search_rows), "index", INDEX_LIMIT)
         shard_paths.append(("index", index_path))
         for projected_target in rows:
             summary = projected_target["summary"]
@@ -860,7 +1056,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
             descriptors = {}
             for section, evidence in projected_target["sections"].items():
                 descriptor = {"state": evidence["state"], "reason": evidence["reason"], "total": len(evidence["items"]), "pages": []}
-                make = lambda items, section=section, evidence=evidence: _envelope(release_id, species, {"target_id": target_id, "section": section, "state": evidence["state"], "reason": evidence["reason"], "items": items})
+                make = lambda items, section=section, evidence=evidence: _envelope(release_id, species, {"target_id": target_id, "section": section, "state": evidence["state"], "reason": evidence["reason"], "items": items, **({"coverage": evidence["coverage"]} if section == "disease" else {})})
                 for page_number, page in enumerate(_page_records(evidence["items"], make)):
                     path = f"{species_prefix}/sections/{key}/{section}-{page_number}.json"
                     write_json(path, make(page), f"section_{section}")
@@ -877,7 +1073,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
                 write_json(path, _envelope(release_id, species, page), "construct_page")
                 construct_descriptor["pages"].append(path)
                 shard_paths.append(("constructs", path))
-            all_constructs.extend(constructs)
+            construct_count += len(constructs)
             sequence_paths = {}
             reference_path = None
             reference = projected_target["reference_sequence"]
@@ -885,7 +1081,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
                 reference_path = f"{species_prefix}/sequences/{key}-reference.json"
                 write_json(reference_path, _envelope(release_id, species, reference), "sequence_shard")
                 shard_paths.append(("sequence", reference_path))
-                all_sequences.append(reference)
+                reference_count += 1
             for cid, sequence_record in projected_target["construct_sequences"].items():
                 sequence_paths[cid] = None
                 if sequence_record is not None:
@@ -893,7 +1089,7 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
                     write_json(path, _envelope(release_id, species, sequence_record), "sequence_shard")
                     sequence_paths[cid] = path
                     shard_paths.append(("sequence", path))
-                    all_sequences.append(sequence_record)
+                    construct_sequence_count += 1
             value = {"summary": summary, "sections": descriptors, "constructs": construct_descriptor, "reference_sequence_path": reference_path, "construct_sequence_paths": sequence_paths}
             write_json(target_path, _envelope(release_id, species, value), "target_shard", TARGET_LIMIT)
             if target_id is not None:
@@ -901,19 +1097,35 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
             shard_paths.append(("target", target_path))
         downloads = []
 
+        def exported_records(role: str) -> Iterable[dict[str, Any]]:
+            for kind, path in shard_paths:
+                if role == "summary" and kind == "target":
+                    yield _read_json(_safe_path(output, path))["data"]["summary"]
+                elif role == "construct" and kind == "constructs":
+                    yield from _read_json(_safe_path(output, path))["data"]
+                elif role in {"reference", "construct_sequence"} and kind == "sequence" and path.endswith("-reference.json") == (role == "reference"):
+                    yield _read_json(_safe_path(output, path))["data"]
+
         def download(name: str, content: bytes | Iterable[bytes], media: str, count: int | None, schema: str | None = None, encoding: str | None = None) -> dict[str, Any]:
             path = f"{species_prefix}/downloads/{name}"
             destination = _safe_path(output, path, exists=False)
             destination.parent.mkdir(parents=True, exist_ok=True)
             chunks = [content] if isinstance(content, bytes) else content
+            limit = EXTERNAL_DOWNLOAD_LIMIT if name in EXTERNAL_DOWNLOAD_ROLES else SHARD_LIMIT
             with destination.open("wb") as handle:
                 if encoding == "gzip":
                     with gzip.GzipFile(filename="", mode="wb", fileobj=handle, compresslevel=6, mtime=0) as compressor:
                         for chunk in chunks:
                             compressor.write(chunk)
+                            if handle.tell() > limit:
+                                break
                 else:
                     for chunk in chunks:
                         handle.write(chunk)
+                        if handle.tell() > limit:
+                            break
+            if destination.stat().st_size > limit:
+                raise PublicDataError(f"Public download role {name} has {destination.stat().st_size} bytes; storage limit is {limit} bytes")
             metadata = {"sha256": _sha_file(destination), "bytes": destination.stat().st_size, "media_type": media, "encoding": encoding, "schema": schema}
             files[path] = metadata
             result = {"name": name, "url": static_origin.rstrip("/") + f"/data/releases/{release_id}/{species}/{name}", "path": path, **metadata, "row_count": count, "license": LICENSE}
@@ -922,21 +1134,20 @@ def build_public_api_bundle(human_summary_path: str | Path, mouse_summary_path: 
             return result
 
         jsonl = lambda records: (canonical_bytes(row) + b"\n" for row in records)
-        download("index.jsonl", jsonl(summaries), "application/x-ndjson", len(summaries), "summary")
-        download("index.tsv", _tsv_chunks(summaries, tuple(DEFS["summary"]["properties"])), "text/tab-separated-values", len(summaries))
-        download("constructs.jsonl", jsonl(all_constructs), "application/x-ndjson", len(all_constructs), "construct")
-        download("constructs.tsv", _tsv_chunks(all_constructs, tuple(DEFS["construct"]["properties"])), "text/tab-separated-values", len(all_constructs))
-        for name, selected in (("constructs.fasta", [row for row in all_sequences if row["construct_id"]]), ("reference.fasta", [row for row in all_sequences if row["construct_id"] is None])):
-            download(name, (sequence_fasta(record, release_id=release_id, provenance_url=static_origin.rstrip("/") + f"/data/releases/{release_id}/manifest.json", records_url=static_origin.rstrip("/") + f"/data/releases/{release_id}/{species}/records.jsonl.gz").encode("utf-8") for record in selected), "text/x-fasta", len(selected))
+        download("index.jsonl", jsonl(exported_records("summary")), "application/x-ndjson", len(rows), "summary")
+        download("index.tsv", _tsv_chunks(exported_records("summary"), tuple(DEFS["summary"]["properties"])), "text/tab-separated-values", len(rows))
+        download("constructs.jsonl", jsonl(exported_records("construct")), "application/x-ndjson", construct_count, "construct")
+        download("constructs.tsv", _tsv_chunks(exported_records("construct"), tuple(DEFS["construct"]["properties"])), "text/tab-separated-values", construct_count)
+        for name, role, count in (("constructs.fasta", "construct_sequence", construct_sequence_count), ("reference.fasta", "reference", reference_count)):
+            download(name, (sequence_fasta(record, release_id=release_id, provenance_url=static_origin.rstrip("/") + f"/data/releases/{release_id}/manifest.json", records_url=static_origin.rstrip("/") + f"/data/releases/{release_id}/{species}/records.jsonl.gz").encode("utf-8") for record in exported_records(role)), "text/x-fasta", count)
         download("schema.json", canonical_bytes(PUBLIC_SCHEMA) + b"\n", "application/schema+json", None)
         download("citation.json", canonical_bytes(citation) + b"\n", "application/json", None, "citation")
-        from .site_docs import citation_downloads
-        for name, content in citation_downloads().items():
-            download(name, content.encode("utf-8"), "application/x-bibtex" if name.endswith(".bib") else "application/x-research-info-systems", None)
+        for name, content in public_citation_downloads(citation).items():
+            download(name, content, "application/x-bibtex" if name.endswith(".bib") else "application/x-research-info-systems", None)
         records = ({"kind": kind, "path": path, "payload": _read_json(output / path)} for kind, path in shard_paths)
         records_download = download("records.jsonl.gz", jsonl(records), "application/x-ndjson", len(shard_paths), None, "gzip")
         human_disease = species == "human" and (public_site / "open_targets_disease_associations.tsv").is_file()
-        species_manifests[species] = {"taxon_id": SPECIES[species], "index_path": index_path, "target_paths": target_paths, "downloads": downloads, "counts": {"targets": len(rows), "resolved_targets": len(target_paths), "constructs": len(all_constructs), "status": dict(sorted(Counter(row["status"] for row in summaries).items()))}, "capabilities": {"sections": [section for section in SECTIONS if section != "disease" or human_disease], "disease": human_disease}, "records_download": records_download}
+        species_manifests[species] = {"taxon_id": SPECIES[species], "index_path": index_path, "target_paths": target_paths, "downloads": downloads, "counts": {"targets": len(rows), "resolved_targets": len(target_paths), "constructs": construct_count, "status": dict(sorted(Counter(row["status"] for row in search_rows).items()))}, "capabilities": {"sections": [section for section in SECTIONS if section != "disease" or human_disease], "disease": human_disease}, "records_download": records_download}
     manifest = {"release_id": release_id, "schema_version": SCHEMA_VERSION, "manifest_url": static_origin.rstrip("/") + f"/data/releases/{release_id}/manifest.json", "provenance": provenance, "citation": citation, "licenses": LICENSES, "species": species_manifests, "files": files, "core": core}
     validate_schema("release_manifest", manifest)
     manifest_path = f"{prefix}/manifest.json"
@@ -1003,11 +1214,19 @@ def _copy_static_downloads(bundle: Path, public_site: Path) -> None:
 
 def _approved_release_schema(schema: Any) -> int:
     """Accept only offline, closed schemas compatible with the trusted public allowlist."""
-    if not isinstance(schema, dict) or set(schema) - {"$schema", "$id", "$defs", "x-openantigens-fasta-version"} or schema.get("$schema") != PUBLIC_SCHEMA["$schema"] or schema.get("$id") != PUBLIC_SCHEMA["$id"] or not isinstance(schema.get("$defs"), dict):
+    if not isinstance(schema, dict) or set(schema) - {"$schema", "$id", "$defs", "x-openantigens-fasta-version", "x-openantigens-index-version", "x-openantigens-disease-selection"} or schema.get("$schema") != PUBLIC_SCHEMA["$schema"] or schema.get("$id") != PUBLIC_SCHEMA["$id"] or not isinstance(schema.get("$defs"), dict):
         raise PublicDataError("Unsupported historical public schema")
     version = schema.get("x-openantigens-fasta-version", 1)
     if version not in (1, 2):
         raise PublicDataError("Unsupported historical FASTA contract")
+    index_version = schema.get("x-openantigens-index-version", 1)
+    if index_version not in (1, 2):
+        raise PublicDataError("Unsupported historical search-index contract")
+    if schema.get("x-openantigens-disease-selection") not in (None, "portal_top_100"):
+        raise PublicDataError("Unsupported historical disease projection")
+    has_coverage = "disease_coverage" in schema["$defs"].get("summary", {}).get("properties", {})
+    if has_coverage != (schema.get("x-openantigens-disease-selection") == "portal_top_100"):
+        raise PublicDataError("Disease projection marker and public summary schema disagree")
 
     def compatible(old: Any, current: Any) -> None:
         if isinstance(old, dict):
@@ -1040,7 +1259,10 @@ def _approved_release_schema(schema: Any) -> int:
     for name, definition in schema["$defs"].items():
         if name not in DEFS:
             raise PublicDataError("Unknown historical public schema definition")
-        compatible(definition, DEFS[name])
+        expected = DEFS[name]
+        if name == "index" and index_version == 1:
+            expected = {**expected, "properties": {**expected["properties"], "data": {"type": "array", "items": {"$ref": "#/$defs/summary"}}}}
+        compatible(definition, expected)
     for required in ("summary", "target_shard", "index", "construct", "construct_page", "sequence", "sequence_shard", "citation", "release_manifest", *[f"section_{key}" for key in SECTIONS]):
         if required not in schema["$defs"]:
             raise PublicDataError("Incomplete historical public schema")
@@ -1152,24 +1374,47 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
         if pointer["manifest_path"] != expected_prefix + "manifest.json":
             raise PublicDataError("Release manifest is outside its immutable namespace")
         allowed.add(pointer["manifest_path"])
+        for relative, info in release["files"].items():
+            public_file_role(relative, info, rid)
         schema_paths = [relative for relative, info in release["files"].items() if info["media_type"] == "application/schema+json"]
         if not schema_paths:
             raise PublicDataError("Release-local public schema is missing")
         schema_path = _safe_path(root, schema_paths[0])
         if schema_path.stat().st_size > SHARD_LIMIT:
-            raise PublicDataError("Release schema exceeds service budget")
+            raise PublicDataError(f"Public download role schema.json has {schema_path.stat().st_size} bytes; storage limit is {SHARD_LIMIT} bytes")
         release_schema = json.loads(schema_path.read_bytes())
         fasta_version = _approved_release_schema(release_schema)
+        index_version = release_schema.get("x-openantigens-index-version", 1)
+        if release_schema.get("x-openantigens-disease-selection") == "portal_top_100" and release["provenance"].get("projection_methods") != {"disease": {"selection": "portal_top_100", "species": "human", "limit": 100, "order": "published_source_order"}}:
+            raise PublicDataError("Disease projection method is absent from release provenance")
         _validate_release_value(release_schema, "release_manifest", release)
         stored = _ShardFiles(root, release["files"], rid)
+        reachable = set()
+        for species, metadata in release["species"].items():
+            expected_index = f"{expected_prefix}{species}/index.json"
+            if metadata["index_path"] != expected_index:
+                raise PublicDataError("Public index path does not match its fixed species role")
+            reachable.add(expected_index)
+            downloads = metadata["downloads"]
+            if {item["name"] for item in downloads} != set(PUBLIC_DOWNLOAD_ROLES) or len(downloads) != len(PUBLIC_DOWNLOAD_ROLES):
+                raise PublicDataError("Public release must contain exactly the approved download roles")
+            for download in downloads:
+                expected_path = f"{expected_prefix}{species}/downloads/{download['name']}"
+                if download["path"] != expected_path:
+                    raise PublicDataError("Public download path does not match its fixed artifact role")
+                public_file_role(expected_path, download, rid)
+                reachable.add(expected_path)
         schema_payloads = []
         for relative, info in release["files"].items():
             if not relative.startswith(expected_prefix):
                 raise PublicDataError("Public file belongs to another release")
+            public_file_role(relative, info, rid)
             file = _safe_path(root, relative)
-            maximum = INDEX_LIMIT if info["schema"] == "index" else TARGET_LIMIT if info["schema"] == "target_shard" else 128 * 1024 * 1024 if "/downloads/" in relative and info["media_type"] != "application/schema+json" else SHARD_LIMIT
+            download_name = relative.rsplit("/", 1)[-1]
+            maximum = INDEX_LIMIT if info["schema"] == "index" else TARGET_LIMIT if info["schema"] == "target_shard" else EXTERNAL_DOWNLOAD_LIMIT if "/downloads/" in relative and download_name in EXTERNAL_DOWNLOAD_ROLES else SHARD_LIMIT
             if file.stat().st_size > maximum:
-                raise PublicDataError("Public file exceeds the validated service budget")
+                role = f"download {download_name}" if "/downloads/" in relative else str(info["schema"])
+                raise PublicDataError(f"Public role {role} has {file.stat().st_size} bytes; storage limit is {maximum} bytes")
             if info["schema"] == "index":
                 total_index_bytes += file.stat().st_size
                 if total_index_bytes > INDEX_TOTAL_LIMIT:
@@ -1226,7 +1471,7 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
             for row in rows:
                 if row["taxon_id"] != SPECIES[species] or row["species"] != species:
                     raise PublicDataError("Public target species mismatch")
-                if row["target_id"] is not None and row["target_id"] != f"{SPECIES[species]}:{row['identifier_source']}:{row['identifier_accession']}":
+                if row["target_id"] is not None and not row["target_id"].startswith(f"{SPECIES[species]}:"):
                     raise PublicDataError("Public target ID mismatch")
             # Target/section/construct/sequence cross-references are checked together
             # in the per-target semantic pass below, without loading a species twice.
@@ -1271,39 +1516,83 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
             payload_digest.update(b"[")
             construct_total = 0
             export_hashes = {name: hashlib.sha256() for name in ("index.jsonl", "index.tsv", "constructs.jsonl", "constructs.tsv", "reference.fasta", "constructs.fasta", "citation.json")}
-            for row in rows:
-                export_hashes["index.jsonl"].update(canonical_bytes(row) + b"\n")
-            for chunk in _tsv_chunks(rows, tuple(DEFS["summary"]["properties"])):
+            summary_fields = tuple(key for key in DEFS["summary"]["properties"] if key in release_schema["$defs"]["summary"]["properties"])
+            for chunk in _tsv_chunks([], summary_fields):
                 export_hashes["index.tsv"].update(chunk)
             for chunk in _tsv_chunks([], tuple(DEFS["construct"]["properties"])):
                 export_hashes["constructs.tsv"].update(chunk)
             export_hashes["citation.json"].update(canonical_bytes(release["citation"]) + b"\n")
+            for name, content in public_citation_downloads(release["citation"]).items():
+                export_hashes[name] = hashlib.sha256(content)
 
             def fasta_bytes(sequence: dict[str, Any]) -> bytes:
                 return (sequence_fasta(sequence, release_id=rid, provenance_url=release["manifest_url"], records_url=species_manifest["records_download"]["url"]) if fasta_version == 2 else _legacy_fasta(sequence)).encode("utf-8")
 
-            for target_position, summary in enumerate(rows):
-                target_path = target_records[summary["record_id"]]
+            for target_position, search_row in enumerate(rows):
+                target_path = target_records[search_row["record_id"]]
                 target = stored[target_path]["data"]
-                if target["summary"] != summary:
+                summary = target["summary"]
+                target_key = _hash(summary["target_id"] or summary["record_id"])
+                species_prefix = f"{expected_prefix}{species}"
+                if target_path != f"{species_prefix}/targets/{target_key}.json":
+                    raise PublicDataError("Public target filename does not match its canonical record")
+                reachable.add(target_path)
+                expected_search_row = {**{key: summary[key] for key in SEARCH_FIELDS}, "summary_path": target_path} if index_version == 2 else summary
+                if search_row != expected_search_row:
                     raise PublicDataError("Public target summary differs from index")
+                if summary["target_id"] is not None and summary["target_id"] != f"{SPECIES[species]}:{summary['identifier_source']}:{summary['identifier_accession']}":
+                    raise PublicDataError("Public canonical target ID mismatch")
+                export_hashes["index.jsonl"].update(canonical_bytes(summary) + b"\n")
+                for chunk in _tsv_chunks([summary], summary_fields, include_header=False):
+                    export_hashes["index.tsv"].update(chunk)
                 if summary["target_id"] is not None and species_manifest["target_paths"].get(summary["target_id"]) != target_path:
                     raise PublicDataError("Public resolved target mapping differs from its indexed record")
                 sections = {}
                 for section, descriptor in target["sections"].items():
                     values = []
-                    for relative in descriptor["pages"]:
+                    for page_number, relative in enumerate(descriptor["pages"]):
+                        if relative != f"{species_prefix}/sections/{target_key}/{section}-{page_number}.json":
+                            raise PublicDataError("Public evidence page path is outside its fixed target role")
+                        reachable.add(relative)
                         value = stored.get(relative)
                         if value is None or release["files"][relative]["schema"] != f"section_{section}" or value["species"] != species or value["data"]["target_id"] != summary["target_id"] or value["data"]["section"] != section or len(value["data"]["items"]) > PAGE_SIZE:
                             raise PublicDataError("Invalid public evidence page reference")
                         if value["data"]["state"] != descriptor["state"] or value["data"]["reason"] != descriptor["reason"]:
                             raise PublicDataError("Public evidence availability mismatch")
+                        if section == "disease" and "disease_coverage" in summary and value["data"].get("coverage") != summary["disease_coverage"]:
+                            raise PublicDataError("Public disease page coverage differs from its target summary")
                         values.extend(value["data"]["items"])
                     if len(values) != descriptor["total"] or descriptor["state"] != summary["section_availability"][section]:
                         raise PublicDataError("Public evidence counts or state differ from summary")
                     sections[section] = {"state": descriptor["state"], "reason": descriptor["reason"], "items": values}
+                    if section == "disease" and "disease_coverage" in summary:
+                        coverage = summary["disease_coverage"]
+                        if coverage["projected_count"] != len(values) or len(values) > 100 or coverage["state"] != descriptor["state"]:
+                            raise PublicDataError("Public disease coverage count or state mismatch")
+                        if coverage["source_count"] is not None and coverage["source_count"] < len(values):
+                            raise PublicDataError("Public disease source count is below projected evidence count")
+                        if summary["disease_ids"] != sorted({row["disease_id"] for row in values if row["disease_id"]}):
+                            raise PublicDataError("Public disease identifiers differ from the selected evidence")
+                        reference = coverage["source_reference"]
+                        if species == "mouse":
+                            if coverage["state"] != "not_applicable" or coverage["source_count"] is not None or values or reference != {"state": "not_applicable", "url": None, "sha256": None}:
+                                raise PublicDataError("Mouse disease coverage claims unsupported source evidence")
+                        else:
+                            if coverage["state"] != ("available" if values else "unknown"):
+                                raise PublicDataError("Disease coverage must preserve unknown query completion")
+                            source_sha = release["provenance"]["input_sha256"].get("human:disease_tsv")
+                            if reference["sha256"] is not None:
+                                expected_url = f"{manifest_url.scheme}://{manifest_url.netloc}/open_targets_disease_associations.tsv"
+                                if reference["state"] != "live" or reference["sha256"] != source_sha or reference["url"] != expected_url or coverage["source_count"] is None:
+                                    raise PublicDataError("Disease source reference differs from its recorded full input")
+                            elif coverage["source_count"] is not None or (reference["state"] == "live" and reference["url"] != f"{manifest_url.scheme}://{manifest_url.netloc}/downloads.html") or (reference["state"] == "unknown" and reference["url"] is not None):
+                                raise PublicDataError("Disease coverage invents an unrecorded full source count or URI")
+                        sections[section]["coverage"] = coverage
                 constructs = []
-                for relative in target["constructs"]["pages"]:
+                for page_number, relative in enumerate(target["constructs"]["pages"]):
+                    if relative != f"{species_prefix}/constructs/{target_key}-{page_number}.json":
+                        raise PublicDataError("Public construct page path is outside its fixed target role")
+                    reachable.add(relative)
                     value = stored.get(relative)
                     if value is None or release["files"][relative]["schema"] != "construct_page" or value["species"] != species or len(value["data"]) > PAGE_SIZE:
                         raise PublicDataError("Invalid public construct page reference")
@@ -1323,6 +1612,10 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                     if construct["construct_id"] != expected_id:
                         raise PublicDataError("Public construct ID mismatch")
                     relative = target["construct_sequence_paths"].get(construct["construct_id"])
+                    if relative is not None:
+                        if relative != f"{species_prefix}/sequences/{construct['construct_id']}.json":
+                            raise PublicDataError("Public construct sequence path does not match its canonical ID")
+                        reachable.add(relative)
                     if relative is not None and relative not in stored:
                         raise PublicDataError("Missing public construct sequence reference")
                     value = stored.get(relative) if relative else None
@@ -1333,6 +1626,10 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                         raise PublicDataError("Public construct export state mismatch")
                     sequences[construct["construct_id"]] = sequence
                 relative = target["reference_sequence_path"]
+                if relative is not None:
+                    if relative != f"{species_prefix}/sequences/{target_key}-reference.json":
+                        raise PublicDataError("Public reference sequence path is outside its fixed target role")
+                    reachable.add(relative)
                 if relative is not None and relative not in stored:
                     raise PublicDataError("Missing public reference sequence")
                 reference = stored[relative]["data"] if relative else None
@@ -1369,6 +1666,8 @@ def validate_public_api_bundle(bundle_dir: str | Path) -> dict[str, Any]:
                     raise PublicDataError("Public tabular or sequence export differs from projected records")
         if asset_hashes != release["core"]["asset_sha256"]:
             raise PublicDataError("Public asset references differ from canonical asset identity")
+        if reachable != set(release["files"]):
+            raise PublicDataError("Public manifest contains unreachable or unapproved files")
     actual = {str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()}
     if actual != allowed or any(path.is_symlink() for path in root.rglob("*")):
         raise PublicDataError("Unexpected file in public API bundle")

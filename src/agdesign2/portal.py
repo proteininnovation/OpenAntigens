@@ -3184,6 +3184,14 @@ def render_privacy_page(*, portal_title: str = "OpenAntigens") -> str:
     </section>
 
     <section class="card doc-card">
+      <h2>API and MCP request measurements</h2>
+      <p>The API and MCP service records request counts, endpoint categories, species, response status, errors, rate-limit refusals, response size, and timing. These operational records cover automated clients as well as browsers. They exclude search text, protein sequences, request bodies, credentials, target identifiers, and raw request URLs.</p>
+      <p>When verified client information and a privacy key are configured, the service derives a daily pseudonymous client identifier from the network address and client-software header. Application records retain that keyed identifier rather than the raw address or header. These counts describe approximate clients, which can include agents and shared networks; they are not counts of individual people. Reports state when client or endpoint detail is unavailable.</p>
+      <p>When API analytics delivery is enabled, Plausible receives the genuine client network address and client-software header transiently, together with a fixed API or MCP event name and a synthetic endpoint-category path. This supports its approximate visitor and country/city views. Plausible filters some automated traffic, so separate service reports count requests independently and identify accepted, filtered, or failed analytics delivery.</p>
+      <p>Service records are available to authorized operators through the hosting provider's logs. Their availability follows the provider's retention policy; exported reports are stored privately. Hosting gateways may keep separate operational access logs under their own policies. The service reports disclose their captured time window and coverage.</p>
+    </section>
+
+    <section class="card doc-card">
       <h2>Processing, access, and retention</h2>
       <p>Analytics are processed by <a class="inline-link" href="https://plausible.io/data-policy" target="_blank" rel="noreferrer">Plausible Analytics under its data policy</a>. Dashboard access is limited to authorized OpenAntigens administrators at the Institute for Protein Innovation. Only aggregate summaries are shared with funders; visitor-level data and breakdowns with fewer than five unique visitors are not shared.</p>
       <p>Reviewed quarterly summaries are retained for historical reporting. Provider analytics are retained while OpenAntigens uses Plausible. OpenAntigens will delete the provider-held analytics if the site is removed from the service.</p>

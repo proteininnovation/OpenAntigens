@@ -48,13 +48,13 @@ Current release counts, construct totals, projection sizes, and latency have not
 | User task | Required behavior |
 | --- | --- |
 | Find a target | Search gene names, aliases, accessions, entry names, protein names, family, and topology within an explicit species and release. Return candidates; keep ambiguity visible. |
-| Find suitable records | Filter by catalogue track, processing state, structure availability, and construct availability. Keep analyzed topology separate from catalogue inclusion rationale. Human disease-association filtering is enabled only when advertised by the release. |
+| Find suitable records | Narrow a gene/accession query by catalogue track, processing state, structure availability and construct availability. Keep analyzed topology separate from catalogue inclusion rationale. Read human disease evidence for one target at a time. |
 | Inspect a target | Return identity, canonical sequence identity, processing state, design intervals, section availability, report link, and provenance. |
 | Inspect evidence | Read bounded sections for topology, domains/PTMs, orthologs, paralogs/family, assembly, structures/PDB, sequence similarity, literature links, and human disease associations where released. |
 | Select a construct | List the released construct classes, boundaries, sequence identity, source, selection score, evidence, structural metrics, and warnings. Preserve separate PDB records and the portal's construct classes. |
 | Export sequence | Return the exact released reference or construct sequence as JSON or FASTA, with accession/source, species, coordinates, length, checksum, and warning/provenance references. |
 | Reproduce a result | Use explicit release IDs, schemas, software/source provenance, manifest hashes, citation files, and retained downloads. |
-| Analyze many records | Discover complete, prebuilt species index and construct downloads. Bulk work uses static downloads rather than large tool responses. |
+| Analyze many records | Use the static website's downloads. API/MCP functions support individual target lookups and small follow-ups. |
 
 The service describes model scores and predictions with their recorded meaning. Processing success does not establish experimental validation. Sequence similarity does not establish specificity, epitope identity, or cross-reactivity. Empty results do not establish biological absence. These interpretation rules belong in schemas, tool descriptions, and the common agent guide.
 
@@ -76,6 +76,8 @@ Each successful data response contains `release_id`, `schema_version`, species/t
 Target summaries include IDs, names/aliases, distinct identifier and sequence accessions/sources, sequence hash, processing state, catalogue track, analyzed topology/source, numeric design intervals, construct counts, structure flags, section availability, and the species-specific report URL. The catalogue bucket is an inclusion rationale; it cannot fill a missing analyzed topology or design interval. Omit internal paths, raw input queries, source-column names, timing/debug fields, exceptions, and broad metadata dictionaries even if an old export includes them.
 
 Each section carries `state`: `available`, `no_results`, `unavailable`, `not_applicable`, `error`, or `unknown`. Use `no_results` only when evidence shows a completed query. Where source history cannot distinguish empty from unqueried, use `unknown`. Use safe error categories and a public explanation. Never serialize upstream exceptions.
+
+Human disease evidence follows the website's first 100 recorded associations in published source order. Its machine-readable coverage records the projection limit, projected count, full recorded source count when known, and a clearly labelled live original-source reference with checksum. Mouse disease evidence remains not applicable. The original complete website TSV remains unchanged and outside the app package. This is a bounded projection, not a claim that other associations are absent; disease-ID catalogue filtering is outside the interactive API.
 
 Coordinates are **1-based inclusive** in the explicitly named reference sequence. Keep absent values as `null`, measured zero as zero, and unknown flags as unknown. Store exact sequence text, source accession, length, and SHA-256 during the Python build. Node reads those values; it does not map homologs, infer boundaries, or reconstruct engineered sequences.
 
@@ -112,13 +114,12 @@ Serve the following routes under `https://api.openantigens.org`. Data routes req
 | `GET .../{species}/targets/{target_id}/constructs` | Paged constructs; optional `category` filter with the seven tokens defined in section 4. |
 | `GET .../{species}/targets/{target_id}/sequence?format=json\|fasta` | Exact released reference sequence. |
 | `GET .../{species}/targets/{target_id}/constructs/{construct_id}/sequence?format=json\|fasta` | Exact released construct sequence and provenance. |
-| `GET .../{species}/downloads` | Manifest-listed immutable download URLs, media types, sizes, hashes, citations, and attribution. |
 | `GET /healthz`, `GET /readyz` | Minimal liveness and validated-bundle readiness; no paths, environment values, or credentials. |
 | `GET /openapi.json` | Versioned API description with example fixtures, error codes, schemas, limits, and links to interpretation guidance. |
 
 `species` is exactly `human` or `mouse`. Reject a species/target mismatch. The complete `section` enum is `topology`, `domains`, `ptms`, `orthologs`, `paralogs`, `family`, `assembly`, `structures`, `similarity`, `literature`, `disease`. Each has a declared schema and availability state. `disease` requires the human release capability; unsupported sections/filters return the typed capability error, while a supported section can report no results/unavailable/unknown.
 
-Search accepts only `q`, `track`, `status`, `structure`, `constructs`, `disease_id`, `limit`, and `cursor`. Construct lists accept only `category`, `limit`, and `cursor`; sections accept only `limit` and `cursor`; sequence routes accept only `format`. Reject unknown keys, duplicate scalar query arguments, and inappropriate keys on all routes. MCP schemas expose the same normalized arguments and exact tokens.
+Search accepts only `q`, `track`, `status`, `structure`, `constructs`, `limit`, and `cursor`. Construct lists accept only `category`, `limit`, and `cursor`; sections accept only `limit` and `cursor`; sequence routes accept only `format`. Reject unknown keys, duplicate scalar query arguments, and inappropriate keys on all routes. MCP schemas expose the same normalized arguments and exact tokens.
 
 | Filter | Exact contract |
 | --- | --- |
@@ -127,23 +128,22 @@ Search accepts only `q`, `track`, `status`, `structure`, `constructs`, `disease_
 | `status` | `ok`, `error`, `pending`, `running`, `started`, `skipped_existing`, `unknown`; preserve the final portal source state. These describe the frozen build record, not a live running job. An unrecognized source token is preserved in a raw label and maps to unknown until reviewed. |
 | `structure` | `available`, `unavailable`, `unknown`, referring to packaged public structure availability, not biological absence. |
 | `constructs` | `available`, `unavailable`, `unknown`, based on the released count/availability state; null is not zero. |
-| `disease_id` | One exact released association-source ID, at most 128 characters; human capability only. Return only targets with that recorded association; no inferred biology. |
 
 Do not implement user regular expressions, SQL, arbitrary field predicates, arbitrary sort, or a new search engine. Define public field names, exact normalization and representative fixtures in the versioned schema/OpenAPI before service code.
 
-Use a cursor containing release ID, species, normalized filter fingerprint, fixed sort version, and validated position. Base64url encoding is an opaque convenience, not authentication. Validate every field and position; tampering cannot increase a page bound or read a path. A cursor for another query/species/release returns `400 invalid_cursor`. Sorting includes a deterministic tie-breaker for unresolved catalogue rows.
+Use a cursor containing release ID, species, normalized filter fingerprint, fixed sort version, and validated position. Base64url encoding is an opaque convenience, not authentication. Validate every field and position; tampering cannot increase a page bound, read a path, or pass the twenty-match search window. A cursor for another query/species/release returns `400 invalid_cursor`. Sorting includes a deterministic tie-breaker for unresolved catalogue rows. Require a literal query of at least two trimmed characters. Broad matches require query refinement; complete catalogue enumeration and batch requests are outside this service contract.
 
 Limits are initial **engineering settings to validate on the host**, not capacity claims:
 
 | Limit | Initial setting |
 | --- | --- |
 | Query | 200 Unicode code points; total request URL 4 KiB |
-| Collection | Default 25, maximum 100 records; similarity section maximum 50 |
+| Collection | Default 5, maximum 10 records; search exposes at most 20 matches per query |
 | Detail/export scope | One target or one construct per request; no arbitrary bulk body |
 | Ordinary JSON result | 256 KiB serialized; use section pagination or a static download on overflow |
 | Single sequence/export | 1 MiB serialized; larger records use a prebuilt manifest URL |
 | HTTP request body | 32 KiB, uncompressed; public GET routes reject bodies |
-| Concurrent admitted work | 8 requests per process initially; bounded queue, excess returns 429 |
+| Concurrent admitted work | 2 requests per process, 1 per client; no waiting queue, excess returns 429 |
 | Admitted handler budget | 5 seconds; measure and test slow reads and client disconnects |
 
 Return stable machine error codes, a request ID, and a safe message. Use `400` for malformed/unknown arguments, `404` for unknown IDs, `410` only for a known retired release with a published tombstone, `413` for request/result size limits, `405` for unsupported methods, `406`/`415` for unsupported media types as applicable, `429` with `Retry-After` for admission limits, and `503` when the required release/bundle is unavailable. Never substitute another release on a lookup failure. For unsupported species-specific sections/filters, return a typed `unsupported_capability` error; successful metadata explains the capability map.
@@ -158,12 +158,11 @@ Use **stateless HTTP**. Current-protocol calls return JSON. The official SDK's l
 
 | Tool | Parameters and result |
 | --- | --- |
-| `get_release` | Optional literal release ID; omission resolves current metadata. Outside maintenance, returns selected release metadata plus current and retained release discovery, matching HTTP. During maintenance, an explicit ID returns only its pinned metadata with a publication-state notice; current/retained discovery is withheld. Includes capability map, provenance, citations, and download links. |
+| `get_release` | Optional literal release ID; omission resolves current metadata. Outside maintenance, returns selected release metadata plus current and retained release discovery, matching HTTP. During maintenance, an explicit ID returns only its pinned metadata with a publication-state notice; current/retained discovery is withheld. Includes capability map, provenance, schemas and citations; retired history is a bounded count and literal-ID lookup reference. |
 | `search_targets` | Required release/species; query, exact filters, limit, cursor. Returns the same catalogue page as HTTP. |
 | `get_target` | Required release/species/target ID; optional explicit section and page arguments. Returns summary or one bounded evidence section. |
-| `list_constructs` | Required release/species/target ID; optional `category`, limit, cursor. Returns construct records. |
+| `list_constructs` | Required release/species/target ID; optional `category`, limit, cursor. Returns a small page of construct records for that target. |
 | `get_sequence` | Required release/species/target ID; optional construct ID. Returns one structured sequence with its declared basis and provenance. |
-| `get_downloads` | Required release/species. Returns safe URLs and file metadata rather than file contents. |
 
 Declare exact input/output schemas with unknown fields rejected. Tool annotations describe these calls as read-only, idempotent, non-destructive, and closed-world. Annotations help clients; server validation enforces the boundary. Tool results return structured content plus a short text summary that preserves release, species, source, missingness, and interpretation. Tool/data failures use the SDK's tool-error contract; malformed protocol messages use protocol errors. Never put raw exception text in either.
 
@@ -186,7 +185,11 @@ Keep the existing Python scientific package and add a small isolated JavaScript 
 | `tests/` and service tests | Projection/contract/parity/security/regression/integration tests described below. |
 | Shared site docs and README | API/MCP connection instructions, species/release examples, limits, citation, privacy and retention. Generate identical common guidance for both portals through `site_docs.py`. |
 
-Startup validates the complete manifest and schema versions before readiness. Load only compact indexes into memory. Resolve target/section/sequence files through a build-generated ID-to-file manifest, never by joining user input to a path. Validate file types, containment, symlink rejection, declared size, and hashes while staging/startup; fail closed on missing or changed bytes. Read one bounded shard per operation with a bounded file/read concurrency pool. Avoid a general result cache until profiling shows a need.
+Startup validates the manifest and schema versions before readiness. Load only compact search/filter indexes into memory; full summaries come from the selected target records. Resolve data through a build-generated ID-to-file manifest, never by joining user input to a path. Validate types, containment, symlink rejection, sizes and hashes for query data while staging/startup, and fail closed on changed or missing query bytes. Avoid a general result cache until profiling shows a need.
+
+The physical deployment transport groups related target records into bounded deterministic gzip containers. It preserves their virtual paths, canonical bytes, per-member checksums, schemas and scientific release identity. A separately hashed storage index binds the containers to the source root manifest; the generated application build record pins those hashes. Oversized targets use bounded parts. Node reads and validates container members without extracting or writing scientific files. Unpacked source bundles remain supported for local compilation and verification.
+
+Complete website JSONL/TSV/FASTA and full-record export bytes are validated against the scientific projection and final static copies during staging. The app carries their approved metadata, not redundant bulk copies. Runtime validates query data and the pinned source metadata; it does not claim to recheck remote website bytes. Static publication checks and client download checksums establish that separate boundary. Unknown roles, unreachable query data and unapproved files remain rejected in both transports.
 
 Start with a 32 MiB compact-index budget, an 8 MiB target storage-shard limit, and 1 MiB evidence/sequence storage shards. These limits bound validation and parsing; they are separate from the smaller response budgets. Split evidence at build time into independently paged shards so a legal page never requires parsing an unbounded array. Validate public text-field maxima in the schema; an oversized source record blocks packaging or gets an explicit unavailable export state agreed in the contract, never silent clipping. Measure peak startup/request RSS against the host's actual limit with headroom.
 
@@ -213,7 +216,7 @@ Frozen compilation covers caches/reference tables as well as report JSON. Existi
 | Injection and source-text execution | Typed filters and fixed substring matching; no SQL, regex evaluation, shell execution, template evaluation, HTML rendering, or dynamic imports from request values. JSON-escape strings and serve FASTA/TSV as text attachments with safe filenames and `nosniff`. TSV display cells need formula-neutralization under the documented export policy while exact machine values stay available in JSON. |
 | DNS rebinding and cross-origin access | Validate canonical Host/authority and any present Origin against a configured exact allowlist. Reject `null`/untrusted origins; accept absent Origin for non-browser clients. CORS permits only named production/local test origins, exact methods/headers, and no credentials. Both species portals share the production website origin. No wildcard credential policy. |
 | Proxy/header spoofing | Trust client-IP/forwarded headers only when the hosting proxy contract and ingress make them reliable. Verify HTTP-to-HTTPS and host mapping. Ignore attacker-controlled forwarding chains. If trusted client identity is unavailable, use safe global admission control and require an effective edge abuse-control gate before public launch. |
-| Cost/resource exhaustion | Edge request/body/rate protection plus app body, URL, result, concurrency, file-read, and time limits. Start with 60 admitted requests/minute/client, burst 20, and 300/minute/app, burst 60; HTTP and MCP share quotas, including discovery/error calls. These are tuning defaults. Cross-process aggregate enforcement must be provided at the edge or another verified shared control; per-process counters alone are insufficient under scale-out. Limit indexes, shard bytes, record counts, and text lengths at build time. |
+| Cost/resource exhaustion | Edge protection plus app body, URL, result, concurrency, file-read and time limits. Use 20 requests/minute/client with burst 8, and 90/minute/process with burst 10; HTTP and MCP share quotas. Limit work to two admitted requests per process and one per client. Cross-process enforcement requires a verified edge control; per-process counters alone are insufficient under scale-out. Require explicit small queries, bounded windows, and single-record exports. |
 | HTTP/protocol abuse | Strict method/media/header validation; body cap before JSON parsing; reject compressed request bodies, unsupported batching, duplicate/ambiguous security headers, and slow/incomplete bodies. Set header/body/idle timeouts through supported Node/host controls. Abort reads/work after disconnect/deadline. Return bounded safe errors. |
 | MCP prompt injection | Descriptions identify source text as data. Return structured records and source URLs; do not repeat source prose as instructions or add executable commands. The service exposes no writing, upload, external-fetch, or administrative capability. Test malicious annotation fixtures. This limits service impact; it cannot guarantee how every downstream agent uses public text. |
 | Dependency/build compromise | Pin supported Node major and exact package versions; commit lockfile; deterministic `npm ci`; review install scripts, dependency changes, licenses, audit results, and provenance. Prefer official MCP modules and standard library. Build from canonical repository and reviewed PRs. Runtime carries no repository write token or scientific-source credentials. |
@@ -228,9 +231,11 @@ Deployment uses the existing authorized account and least-privilege credentials 
 
 ## 9. Privacy, attribution, and operations
 
-The API is public and requires no account, cookie, or sequence submission. Search text and requested targets can still reveal a user's research interests. Application logs record timestamp, generated request ID, route template, status, latency, response bytes, and release/build ID. Omit full URL/query/body, sequence content, raw target IDs, names, MCP arguments/results, auth headers, and user-agent identifiers unless a separately justified operational policy is approved. Do not include such values in error strings or request IDs.
+The API is public and requires no account, cookie, or sequence submission. Search text and requested targets can reveal research interests. Sanitized application records cover completed, refused and aborted requests: timestamp, random request ID, controlled operation/transport/species, status, error category, timing and response bytes. They omit full URL/query/body, sequences, raw target IDs, names, MCP arguments/results, credentials, raw addresses and user-agent strings. A configured privacy key and verified client identity support daily pseudonymous HMAC client IDs; these describe approximate clients rather than individual people. Bounded backpressure aggregation preserves request totals while explicitly recording unavailable detail.
 
-The hosting edge may log client IPs and full URLs independently. Before launch, identify that logging, retention, access, and deletion policy and update the common privacy page accurately. Proposed app-log retention is 14 days; aggregate operational counts may be retained for 90 days. These are settings to verify with the host, not claims about its present defaults. Keep security incident records only under a documented restricted process. Reuse the site's aggregate-reporting rules; never send sequence/search content into analytics.
+Use the existing Plausible property for eligible visitor and country/city views, plus complete local JSON/CSV/interactive HTML reports from the sanitized records. Plausible can filter automated or hosting-provider traffic, so its acceptance, provider-drop, failure and local-budget outcomes remain separate from request counts. Optional custom goals are `API Request` and `MCP Request`, with fixed synthetic endpoint-category paths and no custom properties. They receive genuine verified client identity transiently; identities are never spoofed to bypass bot filters. Delivery stays off until goals, quota, client/proxy identity, privacy and deployment prerequisites pass. A fixed 100-attempt process/day collector budget protects optional delivery; restarts and replicas require an operator-level quota check. Complete request recording remains active when collector delivery is disabled, skipped or filtered.
+
+The hosting edge may log client IPs and full URLs independently. Before launch, identify that logging, retention, access and deletion policy and keep the shared privacy page accurate. GoDaddy's documented runtime-log query horizon is seven days; operator exports must occur before records expire. Preserve private source exports and reviewed reports under an explicit retention policy. Reports state their imported time window, missing detail and coverage; they cannot recover upstream requests or logs the host never captured. Reuse the site's aggregate-sharing rules and keep incident records restricted. Never send sequence/search content into analytics. The exact report and operator workflow is in `API_MCP_ANALYTICS.md`.
 
 Measure request/error/429 counts, latency, readiness, process restarts, memory, package/disk use, and release mismatch. Use host monitoring and existing operational tooling where available. Assign a named service owner and backup before launch. Record the check schedule, patch policy, incident contact, and available alert route; notifications or new paid monitoring need authorization.
 
@@ -303,7 +308,7 @@ Acceptance requires all contract/security tests, selected existing Python tests,
 1. **Feasibility and contract:** confirm hosting gates and client/protocol support; measure one frozen release; lock schemas, route/tool contracts, field/source inventory, limits, and retention. Deliver a tiny synthetic-data host probe only with authorization to create/deploy it.
 2. **Public projector:** share the required export values, emit both species and provenance, add build CLI/schema checks and meaningful fixtures. Keep all scientific computations in Python.
 3. **Read service and HTTP:** implement one manifest-backed data provider, typed search/section/export operations, bounds, errors, health, caching, and OpenAPI; validate full-release memory and package budget.
-4. **MCP adapter:** register the six tools against that provider with the chosen official SDK, schemas/annotations, stateless transport, compatibility and security checks.
+4. **MCP adapter:** register the five tools against that provider with the chosen official SDK, schemas/annotations, stateless transport, compatibility and security checks.
 5. **Packaging and operations:** build the complete managed-app artifact, finalize shared manifests after compression, add dry-run/release/rollback orchestration, confirm rate/log controls, update shared guidance and privacy for both species.
 6. **Independent adversarial review and rehearsal:** review the implementation and deployment artifact, fix findings, rerun targeted checks, and rehearse failed publication and recovery. Planning review does not replace this implementation review.
 7. **Reviewable publication:** supply the evidence and exact authorized actions from section 11. Publish only after approval; verify ordinary live HTTP/MCP and both portals.

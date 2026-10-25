@@ -9,13 +9,20 @@ import os
 import re
 import sys
 import tempfile
+import time
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 SHA = re.compile(r"[0-9a-f]{64}\Z")
-TOOLS = {"get_release", "search_targets", "get_target", "list_constructs", "get_sequence", "get_downloads"}
+TOOLS = {"get_release", "search_targets", "get_target", "list_constructs", "get_sequence"}
+REFERENCE_ROLES = {
+    "schema.json": ("application/schema+json", None),
+    "citation.json": ("application/json", "citation"),
+    "openantigens.bib": ("application/x-bibtex", None),
+    "openantigens.ris": ("application/x-research-info-systems", None),
+}
 MAX_RESPONSE_BYTES = 1024 * 1024
 
 
@@ -35,7 +42,14 @@ def _base_url(value: str) -> str:
     return value.rstrip("/")
 
 
-def _request(opener, base: str, path: str, *, payload: dict | None = None, protocol: str | None = None) -> tuple[int, object, object]:
+def _wait(seconds: float, budget: dict) -> None:
+    if seconds < 0 or budget["wait_seconds"] + seconds > 30:
+        raise ValueError("smoke rate-limit wait budget exceeds thirty seconds")
+    time.sleep(seconds)
+    budget["wait_seconds"] += seconds
+
+
+def _request(opener, base: str, path: str, *, budget: dict, payload: dict | None = None, protocol: str | None = None) -> tuple[int, object, object]:
     headers = {"Accept": "application/json, text/event-stream" if payload is not None else "application/json"}
     body = None
     if payload is not None:
@@ -47,31 +61,66 @@ def _request(opener, base: str, path: str, *, payload: dict | None = None, proto
                 headers["MCP-Name"] = payload["params"]["name"]
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
     request = Request(base + path, data=body, headers=headers, method="POST" if body is not None else "GET")
-    try:
-        response = opener.open(request, timeout=5)
-    except HTTPError as exc:
-        response = exc
-    with response:
-        data = response.read(MAX_RESPONSE_BYTES + 1)
-        if len(data) > MAX_RESPONSE_BYTES:
-            raise ValueError("smoke response exceeds the byte limit")
-        if response.headers.get_content_type() != "application/json":
-            raise ValueError("smoke response must be JSON")
-        return response.status, json.loads(data), response.headers
+    for attempt in range(3):
+        if budget["requests"] >= 20:
+            raise ValueError("smoke request budget exceeds twenty reads")
+        scheduled = max(0, (budget["requests"] + 1 - 8) * 3)
+        delay = max(0, scheduled - (time.monotonic() - budget["started_at"]))
+        if delay:
+            _wait(delay, budget)
+        budget["requests"] += 1
+        try:
+            response = opener.open(request, timeout=5)
+        except HTTPError as exc:
+            response = exc
+        with response:
+            data = response.read(MAX_RESPONSE_BYTES + 1)
+            if budget["requests"] == 1:
+                budget["started_at"] = time.monotonic()
+            if len(data) > MAX_RESPONSE_BYTES:
+                raise ValueError("smoke response exceeds the byte limit")
+            if response.status != 429:
+                if response.headers.get_content_type() != "application/json":
+                    raise ValueError("smoke response must be JSON")
+                return response.status, json.loads(data), response.headers
+            retry = response.headers.get("Retry-After", "")
+        if attempt == 2:
+            raise ValueError("smoke rate limit persisted after three attempts")
+        if not re.fullmatch(r"[1-9][0-9]*", retry):
+            raise ValueError("rate-limited smoke response needs numeric Retry-After seconds")
+        _wait(int(retry), budget)
+
+
+def _provenance(value: object, release_id: str, manifest: object) -> None:
+    if not isinstance(value, dict) or "input_sha256" in value or not isinstance(manifest, dict):
+        raise ValueError("response provenance must use a compact immutable-manifest reference")
+    if not isinstance(value.get("software_commit"), str) or not value["software_commit"] or not isinstance(value.get("snapshot_id"), str) or not value["snapshot_id"] or not isinstance(value.get("source_versions"), dict) or not isinstance(value.get("source_dates"), dict) or not isinstance(value.get("notes"), list):
+        raise ValueError("response provenance identity is incomplete")
+    hashes = value.get("input_hashes")
+    if not isinstance(hashes, dict) or type(hashes.get("count")) is not int or hashes["count"] < 0 or hashes.get("json_pointer") != "/provenance/input_sha256" or hashes.get("manifest_sha256") != manifest.get("sha256") or not SHA.fullmatch(str(manifest.get("sha256", ""))):
+        raise ValueError("response input hashes reference is invalid")
+    url = urlsplit(str(hashes.get("manifest_url", "")))
+    if hashes.get("manifest_url") != manifest.get("url") or url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment or url.path != f"/data/releases/{release_id}/manifest.json":
+        raise ValueError("response input hashes must reference their immutable release manifest")
 
 
 def _envelope(value: object, release_id: str, species: str | None = None) -> dict:
     if not isinstance(value, dict) or value.get("release_id") != release_id or value.get("schema_version") != 1:
         raise ValueError("response release/schema mismatch")
+    _provenance(value.get("provenance"), release_id, value.get("manifest"))
+    if species is None and isinstance(value.get("data"), dict) and "species" in value["data"]:
+        _provenance(value["data"].get("provenance"), release_id, value.get("manifest"))
     if species is not None:
         taxon = 9606 if species == "human" else 10090
         if value.get("species") != species or value.get("taxon_id") != taxon:
             raise ValueError("response species/taxon mismatch")
-        if not isinstance(value.get("data"), list):
-            raise ValueError("species collection must contain an array")
+        if not isinstance(value.get("data"), list) or not 0 < len(value["data"]) <= 1 or type(value.get("total")) is not int or value["total"] < 1:
+            raise ValueError("the explicit species smoke query must return a known target")
         for row in value["data"]:
-            if not isinstance(row, dict) or row.get("species", species) != species or row.get("taxon_id", taxon) != taxon:
+            if not isinstance(row, dict) or row.get("species") != species or row.get("taxon_id") != taxon or not {"record_id", "target_id", "protein_name", "construct_count", "section_availability"}.issubset(row):
                 raise ValueError("collection contains a record from another species")
+            if not SHA.fullmatch(str(row["record_id"])) or row["target_id"] is not None and (not isinstance(row["target_id"], str) or not row["target_id"].startswith(f"{taxon}:")):
+                raise ValueError("collection record identity does not match its species")
     return value
 
 
@@ -84,25 +133,50 @@ def _discovery(value: dict, expected_current: str, maintenance: bool) -> list[st
         raise ValueError("literal metadata identifies another current release")
     retained = value.get("releases")
     ids = [entry.get("release_id") for entry in retained] if isinstance(retained, list) and all(isinstance(entry, dict) for entry in retained) else []
-    if not ids or len(ids) > 2 or len(set(ids)) != len(ids) or ids[0] != expected_current or any(not SHA.fullmatch(str(item)) for item in ids):
+    if not ids or any(not isinstance(item, str) or not SHA.fullmatch(item) for item in ids) or len(ids) > 2 or len(set(ids)) != len(ids) or ids[0] != expected_current:
         raise ValueError("retained release discovery is invalid")
     return ids
 
 
-def check_api_service(base_url: str, release_id: str, *, expect_maintenance: bool = False, retained_release_ids: list[str] | None = None) -> dict:
-    """Perform at most twenty-two sequential reads; send no credentials or data."""
+def _references(metadata: dict, release_id: str) -> None:
+    species_map = metadata.get("species")
+    if not isinstance(species_map, dict) or set(species_map) != {"human", "mouse"}:
+        raise ValueError("release metadata must describe both species")
+    for species, taxon in (("human", 9606), ("mouse", 10090)):
+        entry = species_map[species]
+        capabilities = entry.get("capabilities") if isinstance(entry, dict) else None
+        if not isinstance(entry, dict) or entry.get("taxon_id") != taxon or not isinstance(capabilities, dict) or species == "mouse" and capabilities.get("disease") is not False or "downloads" in entry:
+            raise ValueError("release metadata species/capability/reference mismatch")
+        references = entry.get("references")
+        if not isinstance(references, list) or len(references) != len(REFERENCE_ROLES) or not all(isinstance(item, dict) and isinstance(item.get("name"), str) for item in references) or {item.get("name") for item in references} != set(REFERENCE_ROLES):
+            raise ValueError("interactive release references must contain only schemas and citations")
+        for item in references:
+            media, schema = REFERENCE_ROLES[item["name"]]
+            url = urlsplit(str(item.get("url", "")))
+            if item.get("media_type") != media or item.get("schema") != schema or item.get("encoding") is not None or type(item.get("bytes")) is not int or item["bytes"] < 0 or not SHA.fullmatch(str(item.get("sha256", ""))) or item.get("path") != f"releases/{release_id}/{species}/downloads/{item['name']}" or url.scheme != "https" or not url.hostname or url.username or url.password or url.query or url.fragment or url.path != f"/data/releases/{release_id}/{species}/{item['name']}":
+                raise ValueError("interactive reference metadata has an unapproved role or immutable URL")
+
+
+def check_api_service(base_url: str, release_id: str, *, human_query: str, mouse_query: str, expect_maintenance: bool = False, retained_release_ids: list[str] | None = None) -> dict:
+    """Bounded interactive checks: twenty attempts and thirty seconds of waiting."""
     base = _base_url(base_url)
     if not SHA.fullmatch(release_id) or any(not SHA.fullmatch(value) for value in retained_release_ids or []):
         raise ValueError("expected release IDs must be lowercase SHA-256 values")
     known_ids = list(dict.fromkeys([release_id, *(retained_release_ids or [])]))
     if len(known_ids) > 2:
         raise ValueError("smoke checks accept current plus at most one caller-known retained release")
+    if not isinstance(human_query, str) or not isinstance(mouse_query, str):
+        raise ValueError("both species smoke queries must be explicit strings")
+    queries = {"human": human_query.strip(), "mouse": mouse_query.strip()}
+    if any(not 2 <= len(query) <= 200 or "?" in query or "*" in query for query in queries.values()):
+        raise ValueError("each species smoke query must contain two to two hundred literal characters")
     opener = build_opener(NoRedirect)
+    budget = {"started_at": time.monotonic(), "requests": 0, "wait_seconds": 0.0}
     for path, state in (("/healthz", "ok"), ("/readyz", "ready")):
-        status, value, headers = _request(opener, base, path)
+        status, value, headers = _request(opener, base, path, budget=budget)
         if status != 200 or not isinstance(value, dict) or value.get("status") != state or headers.get("Cache-Control") != "no-store":
             raise ValueError("service health/readiness check failed")
-    status, current, headers = _request(opener, base, "/v1/releases/current")
+    status, current, headers = _request(opener, base, "/v1/releases/current", budget=budget)
     if expect_maintenance:
         if status != 503 or not isinstance(current, dict) or current.get("error", {}).get("code") != "publication_in_progress" or headers.get("Cache-Control") != "no-store" or not headers.get("Retry-After"):
             raise ValueError("current discovery is not in the expected maintenance state")
@@ -110,7 +184,7 @@ def check_api_service(base_url: str, release_id: str, *, expect_maintenance: boo
         raise ValueError("current discovery check failed")
     else:
         _envelope(current, release_id)
-    status, metadata, headers = _request(opener, base, f"/v1/releases/{release_id}")
+    status, metadata, headers = _request(opener, base, f"/v1/releases/{release_id}", budget=budget)
     if status != 200 or headers.get("Cache-Control") != "no-store":
         raise ValueError("literal release metadata check failed")
     _envelope(metadata, release_id)
@@ -119,23 +193,16 @@ def check_api_service(base_url: str, release_id: str, *, expect_maintenance: boo
     if not expect_maintenance and retained_release_ids is not None and set(ids) != set(known_ids):
         raise ValueError("retained release IDs do not match the expected release set")
     released = metadata.get("data")
-    if not isinstance(released, dict) or set(released.get("species", {})) != {"human", "mouse"}:
-        raise ValueError("release metadata must describe both species")
-    for species, taxon in (("human", 9606), ("mouse", 10090)):
-        entry = released["species"][species]
-        if not isinstance(entry, dict) or entry.get("taxon_id") != taxon or species == "mouse" and entry.get("capabilities", {}).get("disease") is not False:
-            raise ValueError("release metadata species/capability mismatch")
+    if not isinstance(released, dict):
+        raise ValueError("release metadata is invalid")
+    _references(released, release_id)
     http = {}
-    http_downloads = {}
     for species in ("human", "mouse"):
-        status, collection, _ = _request(opener, base, f"/v1/releases/{release_id}/{species}/targets?limit=1")
+        query = urlencode({"limit": 1, "q": queries[species]})
+        status, collection, _ = _request(opener, base, f"/v1/releases/{release_id}/{species}/targets?{query}", budget=budget)
         if status != 200:
             raise ValueError("HTTP species check failed")
         http[species] = _envelope(collection, release_id, species)
-        status, downloads, _ = _request(opener, base, f"/v1/releases/{release_id}/{species}/downloads")
-        if status != 200:
-            raise ValueError("HTTP download discovery failed")
-        http_downloads[species] = _envelope(downloads, release_id, species)
     request_id = 0
     protocol = "2026-07-28"
 
@@ -143,7 +210,7 @@ def check_api_service(base_url: str, release_id: str, *, expect_maintenance: boo
         nonlocal request_id
         request_id += 1
         meta = {"io.modelcontextprotocol/protocolVersion": protocol, "io.modelcontextprotocol/clientCapabilities": {}, "io.modelcontextprotocol/clientInfo": {"name": "openantigens-python-smoke", "version": "1"}}
-        status, value, headers = _request(opener, base, "/mcp", payload={"jsonrpc": "2.0", "id": request_id, "method": method, "params": {**params, "_meta": meta}}, protocol=protocol)
+        status, value, headers = _request(opener, base, "/mcp", budget=budget, payload={"jsonrpc": "2.0", "id": request_id, "method": method, "params": {**params, "_meta": meta}}, protocol=protocol)
         if status != 200 or not isinstance(value, dict) or value.get("jsonrpc") != "2.0" or value.get("id") != request_id or "error" in value or not isinstance(value.get("result"), dict):
             raise ValueError("MCP wire check failed")
         if headers.get("Mcp-Session-Id"):
@@ -157,7 +224,7 @@ def check_api_service(base_url: str, release_id: str, *, expect_maintenance: boo
         raise ValueError("MCP discovery did not advertise tools")
     listed = rpc("tools/list", {})
     inventory = listed.get("tools")
-    if not isinstance(inventory, list) or not all(isinstance(tool, dict) for tool in inventory) or {tool.get("name") for tool in inventory} != TOOLS:
+    if not isinstance(inventory, list) or len(inventory) != len(TOOLS) or not all(isinstance(tool, dict) and isinstance(tool.get("name"), str) for tool in inventory) or {tool.get("name") for tool in inventory} != TOOLS:
         raise ValueError("MCP tool inventory mismatch")
 
     def tool(name: str, arguments: dict) -> dict:
@@ -179,34 +246,30 @@ def check_api_service(base_url: str, release_id: str, *, expect_maintenance: boo
     elif tool("get_release", {}).get("data") != metadata.get("data"):
         raise ValueError("MCP current discovery differs from the expected release")
     for species in ("human", "mouse"):
-        selected = tool("search_targets", {"release_id": release_id, "species": species, "limit": 1})
-        if selected.get("data") != http[species].get("data") or selected.get("total") != http[species].get("total"):
+        selected = tool("search_targets", {"release_id": release_id, "species": species, "q": queries[species], "limit": 1})
+        if selected.get("data") != http[species].get("data") or selected.get("total") != http[species].get("total") or selected.get("refine_query") != http[species].get("refine_query"):
             raise ValueError("HTTP and MCP species records differ")
-        downloads = tool("get_downloads", {"release_id": release_id, "species": species})
-        if downloads.get("data") != http_downloads[species].get("data"):
-            raise ValueError("HTTP and MCP download metadata differ")
-    extra_http_reads = 0
     for known_id in known_ids[1:]:
-        status, pinned, headers = _request(opener, base, f"/v1/releases/{known_id}")
-        extra_http_reads += 1
+        status, pinned, headers = _request(opener, base, f"/v1/releases/{known_id}", budget=budget)
         if status != 200 or headers.get("Cache-Control") != "no-store":
             raise ValueError("caller-known retained release is unavailable")
         _envelope(pinned, known_id)
         _discovery(pinned, release_id, expect_maintenance)
+        _references(pinned["data"], known_id)
         selected = tool("get_release", {"release_id": known_id})
         _discovery(selected, release_id, expect_maintenance)
         if selected.get("data") != pinned.get("data"):
             raise ValueError("retained release metadata differs across interfaces")
         for species in ("human", "mouse"):
-            status, collection, _ = _request(opener, base, f"/v1/releases/{known_id}/{species}/targets?limit=1")
-            extra_http_reads += 1
+            query = urlencode({"limit": 1, "q": queries[species]})
+            status, collection, _ = _request(opener, base, f"/v1/releases/{known_id}/{species}/targets?{query}", budget=budget)
             if status != 200:
                 raise ValueError("caller-known retained species is unavailable")
             _envelope(collection, known_id, species)
-            selected = tool("search_targets", {"release_id": known_id, "species": species, "limit": 1})
-            if selected.get("data") != collection.get("data") or selected.get("total") != collection.get("total"):
+            selected = tool("search_targets", {"release_id": known_id, "species": species, "q": queries[species], "limit": 1})
+            if selected.get("data") != collection.get("data") or selected.get("total") != collection.get("total") or selected.get("refine_query") != collection.get("refine_query"):
                 raise ValueError("retained species records differ across interfaces")
-    return {"base_url": base, "release_id": release_id, "retained_release_ids": ids, "retained_release_ids_source": "caller" if expect_maintenance else "service_discovery", "species": ["human", "mouse"], "http": "passed", "mcp_wire": "passed", "publication_state": "maintenance" if expect_maintenance else "active", "requests": 8 + extra_http_reads + request_id}
+    return {"base_url": base, "release_id": release_id, "retained_release_ids": ids, "retained_release_ids_source": "caller" if expect_maintenance else "service_discovery", "species": ["human", "mouse"], "http": "passed", "mcp_wire": "passed", "publication_state": "maintenance" if expect_maintenance else "active", "requests": budget["requests"], "wait_seconds": round(budget["wait_seconds"], 3)}
 
 
 def activate_local_discovery(public_site_dir: Path, checked: dict) -> None:
@@ -259,12 +322,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--release-id", required=True)
+    parser.add_argument("--human-query", required=True, help="Explicit literal query for a known human target; at least two characters.")
+    parser.add_argument("--mouse-query", required=True, help="Explicit literal query for a known mouse target; at least two characters.")
     parser.add_argument("--retained-release-id", action="append", default=None, help="Expected previous retained ID; supply every retained ID to enforce the set.")
     parser.add_argument("--expect-maintenance", action="store_true")
     parser.add_argument("--activate-discovery-local-site", type=Path, help="After all checks pass, activate API links in both local portal metadata files; publishes nothing.")
     args = parser.parse_args(argv)
     try:
-        result = check_api_service(args.base_url, args.release_id, expect_maintenance=args.expect_maintenance, retained_release_ids=args.retained_release_id)
+        result = check_api_service(args.base_url, args.release_id, human_query=args.human_query, mouse_query=args.mouse_query, expect_maintenance=args.expect_maintenance, retained_release_ids=args.retained_release_id)
         if args.activate_discovery_local_site is not None:
             activate_local_discovery(args.activate_discovery_local_site, result)
             result["local_discovery"] = "activated_for_both_species"

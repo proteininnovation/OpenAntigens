@@ -31,26 +31,28 @@ def citation_metadata() -> dict:
     return {**PAPER, "url": DOI_URL, "text": citation_text()}
 
 
-def citation_downloads() -> dict[str, str]:
-    authors = " and ".join(f'{a["family"]}, {a["given"]}' for a in PAPER["authors"])
+def citation_downloads(paper: dict | None = None) -> dict[str, str]:
+    paper = PAPER if paper is None else paper
+    doi_url = "https://doi.org/" + paper["doi"]
+    authors = " and ".join(f'{a["family"]}, {a["given"]}' for a in paper["authors"])
     bib = (
         "@article{Teixeira2026OpenAntigens,\n"
         f"  author = {{{authors}}},\n"
-        f'  title = {{{{{PAPER["title"]}}}}},\n'
-        f'  journal = {{{PAPER["journal"]}}},\n'
-        f'  year = {{{PAPER["date"][:4]}}},\n'
-        f'  doi = {{{PAPER["doi"]}}},\n'
-        f'  url = {{{DOI_URL}}},\n'
-        f'  note = {{Preprint, version {PAPER["version"]}; posted {PAPER["date"]}}}\n'
+        f'  title = {{{{{paper["title"]}}}}},\n'
+        f'  journal = {{{paper["journal"]}}},\n'
+        f'  year = {{{paper["date"][:4]}}},\n'
+        f'  doi = {{{paper["doi"]}}},\n'
+        f'  url = {{{doi_url}}},\n'
+        f'  note = {{Preprint, version {paper["version"]}; posted {paper["date"]}}}\n'
         "}\n"
     )
     ris = "\n".join([
         "TY  - JOUR",
-        *(f'AU  - {a["family"]}, {a["given"]}' for a in PAPER["authors"]),
-        f'TI  - {PAPER["title"]}', f'JO  - {PAPER["journal"]}',
-        f'PY  - {PAPER["date"][:4]}', f'DA  - {PAPER["date"].replace("-", "/")}',
-        f'DO  - {PAPER["doi"]}', f'UR  - {DOI_URL}',
-        f'N1  - Preprint, version {PAPER["version"]}; not peer reviewed.', "ER  -", "",
+        *(f'AU  - {a["family"]}, {a["given"]}' for a in paper["authors"]),
+        f'TI  - {paper["title"]}', f'JO  - {paper["journal"]}',
+        f'PY  - {paper["date"][:4]}', f'DA  - {paper["date"].replace("-", "/")}',
+        f'DO  - {paper["doi"]}', f'UR  - {doi_url}',
+        f'N1  - Preprint, version {paper["version"]}; not peer reviewed.', "ER  -", "",
     ])
     return {"openantigens.bib": bib, "openantigens.ris": ris}
 
