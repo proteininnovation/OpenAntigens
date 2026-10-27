@@ -81,7 +81,7 @@ export function makeServer(provider, options = {}) {
     bucket.updated = now;
   };
   const server = createServer(
-    { maxHeaderSize: 8192, requestTimeout: 6000, headersTimeout: 6000 },
+    { maxHeaderSize: 8192, requestTimeout: 6000, headersTimeout: 6000, connectionsCheckingInterval: 1000 },
     async (req, res) => {
       const id = randomUUID();
       const started = performance.now();

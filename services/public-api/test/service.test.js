@@ -2,6 +2,7 @@ import test from "node:test";
 import { createHash } from "node:crypto";
 import { gzipSync, gunzipSync } from "node:zlib";
 import { request } from "node:http";
+import { connect } from "node:net";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
@@ -76,6 +77,38 @@ async function setup(t, config = {}) {
   const target = `${root}/human/targets/${f.target_id}`;
   return { ...f, provider, server, base, root, target };
 }
+test("trickled incomplete headers expire before occupying a socket for nine seconds", { timeout: 12000 }, async (t) => {
+  const records = [];
+  const f = await setup(t, { analytics: { record: (record) => records.push(record) } });
+  const socket = connect({ host: "127.0.0.1", port: f.server.address().port });
+  t.after(() => socket.destroy());
+  let response = "", trickle, watchdog, reset = false, began;
+  try {
+    await new Promise((resolve, reject) => {
+      socket.once("error", (error) => {
+        if (error.code !== "ECONNRESET") return reject(error);
+        reset = true;
+        resolve();
+      });
+      socket.on("data", (chunk) => { response += chunk.toString(); });
+      socket.once("close", resolve);
+      socket.once("connect", () => {
+        began = performance.now();
+        socket.write("GET /healthz HTTP/1.1\r\nHost: localhost\r\nX-Slow: ");
+        trickle = setInterval(() => socket.write("x"), 500);
+      });
+      watchdog = setTimeout(() => reject(new Error("Incomplete headers outlived their timeout")), 9000);
+    });
+  } finally {
+    clearInterval(trickle);
+    clearTimeout(watchdog);
+    socket.destroy();
+  }
+  assert.ok(reset || /^HTTP\/1\.1 408 /.test(response));
+  assert.ok(performance.now() - began >= 5000, "The incomplete connection reached its header deadline");
+  assert.equal(records.length, 0, "Node rejects incomplete headers before the application handler");
+  assert.equal((await fetch(`${f.base}/healthz`)).status, 200);
+});
 async function wire(base, method, params = {}, headers = {}, modern = true) {
   const body = {
     jsonrpc: "2.0",
@@ -305,6 +338,8 @@ test("official MCP clients negotiate current and legacy, list five read-only too
         assert.equal(tool.annotations.openWorldHint, false);
         assert.equal(tool.inputSchema.additionalProperties, false);
         assert.ok(tool.outputSchema);
+        assert.match(tool.description, /PDB construct exports use native reference intervals/);
+        assert.match(tool.description, /deposited sequence changes, tags, fusions and partners/);
       }
       const result = await client.callTool({
         name: "get_sequence",

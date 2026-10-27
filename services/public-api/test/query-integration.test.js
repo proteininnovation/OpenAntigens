@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { readFile, writeFile, rm, cp, mkdtemp } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -68,6 +69,62 @@ async function serve(t, provider) {
       }),
   );
   return `http://127.0.0.1:${server.address().port}`;
+}
+for (const protocol of ["2026-07-28", "2025-11-25"]) {
+  test(`MCP ${protocol} disconnect cancels remote work and releases storage slots`, { timeout: 10000 }, async (t) => {
+    const { source, query } = await own(t);
+    const remote = origin(query.staticDirectory);
+    let started, remoteSignal, hold = true;
+    const entered = new Promise((resolve) => { started = resolve; });
+    const provider = await new Provider(query.directory, {
+      querySeal: query.seal,
+      fetchImpl: (url, options) => {
+        if (!hold) return remote.fetchImpl(url, options);
+        remoteSignal = options.signal;
+        started();
+        return new Promise((resolve, reject) => {
+          options.signal.addEventListener("abort", () => reject(options.signal.reason), { once: true });
+        });
+      },
+    }).initialize();
+    const base = await serve(t, provider);
+    const modern = protocol === "2026-07-28";
+    const controller = new AbortController();
+    const args = { release_id: provider.current, species: "human", target_id: source.target_id };
+    const headers = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      "mcp-protocol-version": protocol,
+      ...(modern ? { "mcp-method": "tools/call", "mcp-name": "get_target" } : {}),
+    };
+    const body = JSON.stringify({
+      jsonrpc: "2.0", id: 1, method: "tools/call",
+      params: {
+        name: "get_target", arguments: args,
+        ...(modern ? { _meta: {
+          "io.modelcontextprotocol/protocolVersion": protocol,
+          "io.modelcontextprotocol/clientCapabilities": {},
+        } } : {}),
+      },
+    });
+    const request = fetch(`${base}/mcp`, { method: "POST", headers, body, signal: controller.signal })
+      .catch((error) => { assert.equal(error.name, "AbortError"); });
+    await entered;
+    const cancelled = once(remoteSignal, "abort", { signal: AbortSignal.timeout(1000) });
+    controller.abort();
+    await Promise.all([request, cancelled]);
+    // The abort event precedes the request's storage cleanup microtasks.
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(provider.storage.snapshot(), {
+      activeTargets: 0, activeFetches: 0, cacheBytes: 0, cacheEntries: 0,
+    });
+    hold = false;
+    const repaired = await fetch(`${base}/mcp`, { method: "POST", headers, body });
+    assert.equal(repaired.status, 200);
+    const text = await repaired.text();
+    assert.ok(text.includes(source.target_id));
+    assert.equal(provider.ready, true);
+  });
 }
 test("query mode boots and searches with zero origin work and preserves unresolved source-offset association", async (t) => {
   const { source, query } = await own(t, {

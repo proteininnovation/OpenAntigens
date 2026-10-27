@@ -52,6 +52,8 @@ Input is streamed with a 64 KiB line limit. Oversized and malformed lines are co
 
 Complete counts depend on complete exports and successful host log capture. A process termination can lose buffered aggregates. Missing exports, malformed records, host truncation and boundary exclusions reduce coverage. Check the report's input-quality notice before comparing intervals. No report can establish that an absent request never reached an upstream proxy or hosting edge.
 
+Node rejects malformed HTTP, oversized headers and incomplete-header timeouts before the application handler. Those connections produce no application request record. Host and edge security logs are needed to measure these refusals and traffic blocked before Node receives it. Application reports therefore cover application requests; they do not measure every network connection.
+
 Plausible delivery outcomes are independent of server request counts:
 
 | Outcome | Meaning |

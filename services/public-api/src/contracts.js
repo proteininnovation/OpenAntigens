@@ -41,7 +41,7 @@ export const STATUSES = [
 ];
 export const STATES = ["available", "unavailable", "unknown"];
 export const GUIDANCE =
-  "Processing success does not establish experimental validation. Model scores and predictions retain their recorded meaning. Sequence similarity does not establish specificity, epitope identity, or cross-reactivity. Empty results do not establish biological absence. Cite the release, source accession and supplied attribution.";
+  "Processing success does not establish experimental validation. Model scores and predictions retain their recorded meaning. Sequence similarity does not establish specificity, epitope identity, or cross-reactivity. Empty results do not establish biological absence. PDB construct exports use native reference intervals at mapped boundaries. Consult the PDB entry and source study for deposited sequence changes, tags, fusions and partners. Cite the release, source accession and supplied attribution.";
 export const LIMITS = Object.freeze({
   url: 4096,
   body: 32768,

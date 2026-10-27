@@ -105,7 +105,7 @@ export function makeMcpHandler(provider, observe = () => {}) {
               species: args.species ?? "none",
             });
             try {
-              const value = await provider.call(name, args, context.signal);
+              const value = await provider.call(name, args, context.mcpReq.signal);
               const budget =
                 name === "get_sequence" ? LIMITS.sequence : LIMITS.json;
               if (Buffer.byteLength(JSON.stringify(value)) > budget)
