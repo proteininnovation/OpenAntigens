@@ -97,6 +97,28 @@ class SiteDocumentationTests(unittest.TestCase):
         self.assertIn('href="help.html#cite-openantigens"', html)  # Local footer.
         self.assertIn("Start at https://openantigens.org/mouse/index.html", html)
 
+    def test_mcp_quick_start_and_prompt_reach_both_portals(self):
+        for title, species, prefix in (("OpenAntigens", "human", ""), ("OpenAntigens Mouse", "mouse", "mouse/")):
+            with self.subTest(species=species):
+                guide = render_agent_guide_page(portal_title=title)
+                self.assertIn('href="#connect-your-ai-assistant"', guide)
+                self.assertIn('id="mcp-connection-controls" hidden', guide)
+                self.assertIn('href="portal_metadata.json"', guide)
+                self.assertIn("When MCP is published, its server address appears here", guide)
+                self.assertIn("Streamable HTTP", guide)
+                self.assertIn("No authentication", guide)
+                self.assertIn("Sponsor-based lookup requires sponsor annotations", guide)
+                self.assertIn("human EGFR", guide)
+                self.assertIn("mouse Ptprc", guide)
+                for page in (guide, render_index_page([], portal_title=title)):
+                    self.assertIn(f"species={species}", page)
+                    self.assertIn(f"the species requested in my question (default species={species})", page)
+                    self.assertIn(f"https://openantigens.org/{prefix}portal_metadata.json", page)
+                    for tool in ("get_release", "search_targets", "get_target", "list_constructs", "get_sequence"):
+                        self.assertIn(tool, page)
+                    self.assertIn("When MCP tools are unavailable", page)
+                    self.assertNotIn("https://api.openantigens.org/mcp", page)
+
 
 if __name__ == "__main__":
     unittest.main()

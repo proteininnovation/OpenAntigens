@@ -1,0 +1,925 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openantigens.org/internal/own-static-query-v1.schema.json",
+  "$defs": {
+    "file": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      },
+      "required": ["path", "bytes", "sha256"],
+      "additionalProperties": false
+    },
+    "seal": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "openantigens-own-static-query-v1"
+        },
+        "query_root_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "source_root_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "static_origin": {
+          "const": "https://openantigens.org"
+        }
+      },
+      "required": [
+        "format",
+        "query_root_sha256",
+        "source_root_manifest_sha256",
+        "static_origin"
+      ],
+      "additionalProperties": false
+    },
+    "retirement": {
+      "type": "object",
+      "properties": {
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retired_by_release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "archive_url": {
+          "$ref": "#/$defs/public_archive_url"
+        }
+      },
+      "required": ["release_id", "retired_by_release_id", "archive_url"],
+      "additionalProperties": false
+    },
+    "author": {
+      "additionalProperties": false,
+      "properties": {
+        "family": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "given": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "orcid": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": ["given", "family", "orcid"],
+      "type": "object"
+    },
+    "citation": {
+      "additionalProperties": false,
+      "properties": {
+        "authors": {
+          "items": {
+            "$ref": "#/$defs/author"
+          },
+          "type": "array"
+        },
+        "date": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doi": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "journal": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "title",
+        "authors",
+        "doi",
+        "version",
+        "journal",
+        "date",
+        "type"
+      ],
+      "type": "object"
+    },
+    "download": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "encoding": {
+          "anyOf": [
+            {
+              "enum": ["gzip"],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "license": {
+          "maxLength": 16384,
+          "type": "string"
+        },
+        "media_type": {
+          "maxLength": 256,
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "enum": [
+            "index.jsonl",
+            "index.tsv",
+            "constructs.jsonl",
+            "constructs.tsv",
+            "constructs.fasta",
+            "reference.fasta",
+            "schema.json",
+            "citation.json",
+            "openantigens.bib",
+            "openantigens.ris",
+            "records.jsonl.gz"
+          ]
+        },
+        "path": {
+          "maxLength": 1024,
+          "type": "string"
+        },
+        "row_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "schema": {
+          "anyOf": [
+            {
+              "maxLength": 16384,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 1024,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "url",
+        "path",
+        "media_type",
+        "bytes",
+        "sha256",
+        "encoding",
+        "row_count",
+        "schema",
+        "license"
+      ],
+      "type": "object"
+    },
+    "provenance": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "software_commit": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "snapshot_id": {
+          "type": "string",
+          "maxLength": 256
+        },
+        "source_versions": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "source_dates": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 16384
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 16384
+          }
+        },
+        "projection_methods": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "disease": {
+                  "type": "object",
+                  "properties": {
+                    "selection": {
+                      "type": "string",
+                      "const": "portal_top_100"
+                    },
+                    "species": {
+                      "type": "string",
+                      "const": "human"
+                    },
+                    "limit": {
+                      "type": "number",
+                      "const": 100
+                    },
+                    "order": {
+                      "type": "string",
+                      "const": "published_source_order"
+                    }
+                  },
+                  "required": ["selection", "species", "limit", "order"],
+                  "additionalProperties": false
+                }
+              },
+              "required": ["disease"],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_hashes": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "manifest_url": {
+              "type": "string",
+              "maxLength": 1024,
+              "format": "uri"
+            },
+            "manifest_sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "json_pointer": {
+              "type": "string",
+              "const": "/provenance/input_sha256"
+            }
+          },
+          "required": [
+            "count",
+            "manifest_url",
+            "manifest_sha256",
+            "json_pointer"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "software_commit",
+        "snapshot_id",
+        "source_versions",
+        "source_dates",
+        "notes",
+        "projection_methods",
+        "input_hashes"
+      ],
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "resolved_targets": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "constructs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "status": {
+          "type": "object",
+          "properties": {
+            "ok": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "error": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "pending": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "running": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "started": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "skipped_existing": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "unknown": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": ["targets", "resolved_targets", "constructs", "status"],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "disease": {
+          "type": "boolean"
+        },
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "topology",
+              "domains",
+              "ptms",
+              "orthologs",
+              "paralogs",
+              "family",
+              "assembly",
+              "structures",
+              "similarity",
+              "literature",
+              "disease"
+            ]
+          },
+          "maxItems": 11,
+          "uniqueItems": true
+        }
+      },
+      "required": ["disease", "sections"],
+      "additionalProperties": false
+    },
+    "species": {
+      "type": "object",
+      "properties": {
+        "taxon_id": {
+          "enum": [9606, 10090]
+        },
+        "index": {
+          "$ref": "#/$defs/file"
+        },
+        "counts": {
+          "$ref": "#/$defs/counts"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/capabilities"
+        },
+        "downloads": {
+          "type": "array",
+          "minItems": 11,
+          "maxItems": 11,
+          "items": {
+            "$ref": "#/$defs/download"
+          }
+        },
+        "records_download_name": {
+          "const": "records.jsonl.gz"
+        },
+        "summary_lines": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "offsets": {
+              "$ref": "#/$defs/file"
+            }
+          },
+          "required": ["path", "bytes", "sha256", "offsets"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "taxon_id",
+        "index",
+        "counts",
+        "capabilities",
+        "downloads",
+        "records_download_name",
+        "summary_lines"
+      ],
+      "additionalProperties": false
+    },
+    "query_release": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "openantigens-query-release-v1"
+        },
+        "release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "schema_version": {
+          "const": 1
+        },
+        "source_manifest": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://openantigens\\.org/data/releases/[a-f0-9]{64}/manifest\\.json$"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": ["url", "sha256"],
+          "additionalProperties": false
+        },
+        "source_payload_sha256": {
+          "type": "object",
+          "properties": {
+            "human": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "mouse": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "citation": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": ["human", "mouse", "schema", "citation"],
+          "additionalProperties": false
+        },
+        "citation": {
+          "$ref": "#/$defs/citation"
+        },
+        "licenses": {
+          "type": "object",
+          "properties": {
+            "software": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "annotations": {
+              "type": "string",
+              "maxLength": 16384
+            },
+            "third_party": {
+              "type": "string",
+              "maxLength": 16384
+            }
+          },
+          "required": ["software", "annotations", "third_party"],
+          "additionalProperties": false
+        },
+        "provenance": {
+          "$ref": "#/$defs/provenance"
+        },
+        "species": {
+          "type": "object",
+          "properties": {
+            "human": {
+              "$ref": "#/$defs/species"
+            },
+            "mouse": {
+              "$ref": "#/$defs/species"
+            }
+          },
+          "required": ["human", "mouse"],
+          "additionalProperties": false
+        },
+        "public_schema": {
+          "$ref": "#/$defs/file"
+        }
+      },
+      "required": [
+        "format",
+        "release_id",
+        "schema_version",
+        "source_manifest",
+        "source_payload_sha256",
+        "citation",
+        "licenses",
+        "provenance",
+        "species",
+        "public_schema"
+      ],
+      "additionalProperties": false
+    },
+    "query_root": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "openantigens-own-static-query-v1"
+        },
+        "source_root_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "current_release_id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "retired_releases": {
+          "type": "array",
+          "maxItems": 1000,
+          "items": {
+            "$ref": "#/$defs/retirement"
+          }
+        },
+        "transport_index": {
+          "$ref": "#/$defs/file"
+        },
+        "releases": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "items": {
+            "type": "object",
+            "properties": {
+              "release_id": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+              },
+              "bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": ["release_id", "path", "bytes", "sha256"],
+            "additionalProperties": false
+          }
+        },
+        "static_origin": {
+          "const": "https://openantigens.org"
+        }
+      },
+      "required": [
+        "format",
+        "source_root_manifest_sha256",
+        "current_release_id",
+        "retired_releases",
+        "transport_index",
+        "releases",
+        "static_origin"
+      ],
+      "additionalProperties": false
+    },
+    "offsets": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "openantigens-summary-offsets-v1"
+        },
+        "index_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "jsonl_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1048576
+              },
+              {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            ],
+            "items": false
+          }
+        }
+      },
+      "required": ["format", "index_sha256", "jsonl_sha256", "rows"],
+      "additionalProperties": false
+    },
+    "part": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4194304
+        },
+        "decoded_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "members": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "min_path": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "max_path": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "bytes",
+        "decoded_bytes",
+        "members",
+        "min_path",
+        "max_path"
+      ],
+      "additionalProperties": false
+    },
+    "transport_index": {
+      "type": "object",
+      "properties": {
+        "format": {
+          "const": "openantigens-target-gzip-v1"
+        },
+        "root_manifest_sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        },
+        "targets": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^releases/[a-f0-9]{64}/(human|mouse)/targets/[a-f0-9]{64}\\.json$"
+          },
+          "additionalProperties": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2,
+            "items": {
+              "$ref": "#/$defs/part"
+            }
+          }
+        }
+      },
+      "required": ["format", "root_manifest_sha256", "targets"],
+      "additionalProperties": false
+    },
+    "public_archive_url": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "pattern": "^https://(?![^/?#]*@)(?!.*(?:/[uU][sS][eE][rR][sS]/|/[pP][rR][iI][vV][aA][tT][eE]/|/[hH][oO][mM][eE]/|[fF][iI][lL][eE]://|-----[bB][eE][gG][iI][nN] [pP][rR][iI][vV][aA][tT][eE] [kK][eE][yY]|[aA][uU][tT][hH][oO][rR][iI][zZ][aA][tT][iI][oO][nN]: [bB][eE][aA][rR][eE][rR]|[pP][rR][iI][vV][aA][tT][eE]_[cC][aA][nN][aA][rR][yY]|[sS][kK]-[pP][rR][oO][jJ]-))[^\\u0000-\\u0020\\u007f\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000?#\\\\]+$"
+        }
+      ]
+    }
+  },
+  "x-public-text-policy": {
+    "max_length": 1024,
+    "percent_decode_passes": 4,
+    "scheme": "https",
+    "allowed_ports": [443],
+    "allow_query": false,
+    "allow_fragment": false,
+    "reject_dot_segments": true,
+    "reject_backslash": true,
+    "reject_unicode_whitespace": true,
+    "dns_pattern": "(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]",
+    "blocked_host_suffixes": [
+      "localhost",
+      "local",
+      "localdomain",
+      "internal",
+      "intranet",
+      "corp",
+      "home",
+      "home.arpa",
+      "lan",
+      "test",
+      "invalid",
+      "example",
+      "onion"
+    ],
+    "private_markers": [
+      "/Users/",
+      "/private/",
+      "/home/",
+      "file://",
+      "-----BEGIN PRIVATE KEY",
+      "Authorization: Bearer",
+      "PRIVATE_CANARY",
+      "sk-proj-"
+    ],
+    "case_insensitive_archive_markers": true
+  }
+}

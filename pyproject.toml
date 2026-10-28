@@ -18,6 +18,7 @@ dependencies = [
   "fastapi>=0.115",
   "uvicorn>=0.30",
   "mistune>=3.0,<4",
+  "jsonschema>=4.26,<5",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +31,7 @@ agdesign2 = "agdesign2.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-agdesign2 = ["data/*.json", "data/*.md", "data/*.js", "data/*.tsv"]
+agdesign2 = ["data/*.json", "data/*.md", "data/*.js", "data/*.tsv", "data/public_api/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

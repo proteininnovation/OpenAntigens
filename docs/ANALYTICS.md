@@ -24,6 +24,12 @@ Plausible creates the automatic `File Download` goal after the first tracked fil
 
 ## Event dictionary
 
+The website events below are separate from API/MCP request accounting. See
+[API and MCP traffic reports](API_MCP_ANALYTICS.md) for sanitized application
+records, offline reports, optional Plausible request goals, and the different
+coverage of filtered automated traffic. API/MCP delivery remains off until its
+deployment, privacy, trusted-client and billing prerequisites pass.
+
 | Measure | Trigger | Data attached by OpenAntigens | Interpretation |
 | --- | --- | --- | --- |
 | Pageview | A tracked page loads | No custom properties | Approximate page traffic |

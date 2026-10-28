@@ -263,8 +263,70 @@ const { pathToFileURL } = require('node:url');
       await visit(`site/${name}.html`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: mobile page overflow`);
     }
+    // Exercise publication gating and clipboard controls in both generated guides.
+    let metadata = {};
+    let metadataStatus = 200;
+    await page.route('https://agent-guide.test/**', route => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith('/portal_metadata.json'))
+        return route.fulfill({ status: metadataStatus, json: metadata });
+      const folder = url.pathname.startsWith('/mouse/') ? 'mouse-site' : 'site';
+      const file = path.join(root, folder, path.basename(url.pathname));
+      return fs.existsSync(file) ? route.fulfill({ path: file }) : route.abort();
+    });
+    await page.addInitScript(() => {
+      window.copiedTexts = [];
+      window.failClipboard = false;
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+        writeText: async text => {
+          if (window.failClipboard) throw new Error('Clipboard denied');
+          window.copiedTexts.push(text);
+        },
+      } });
+    });
+    for (const species of ['human', 'mouse']) {
+      const visitGuide = () => page.goto(`https://agent-guide.test/${species}/agent-guide.html`);
+      for (const api of [undefined, { state: 'packaged', mcp_url: 'https://api.openantigens.org/mcp' }]) {
+        metadata = { public_api: api };
+        await visitGuide();
+        await page.getByRole('status').filter({ hasText: 'MCP is not published' }).waitFor();
+        assert.equal(await page.locator('#mcp-connection-controls').isVisible(), false);
+        assert.equal(await page.locator('#mcp-server-url').inputValue(), '');
+      }
+      for (const url of ['javascript:alert(1)', 'https://user:password@api.openantigens.org/mcp', 'https://api.openantigens.org/mcp?key=hidden', 'https://api.openantigens.org/other']) {
+        metadata = { public_api: { state: 'active', mcp_url: url } };
+        await visitGuide();
+        await page.getByRole('status').filter({ hasText: 'could not be loaded' }).waitFor();
+        assert.equal(await page.locator('#mcp-connection-controls').isVisible(), false);
+      }
+      metadataStatus = 503;
+      await visitGuide();
+      await page.getByRole('status').filter({ hasText: 'could not be loaded' }).waitFor();
+      metadataStatus = 200;
+      metadata = { public_api: { state: 'active', mcp_url: 'https://API.OPENANTIGENS.ORG:443/mcp' } };
+      const publishedAddress = new URL(metadata.public_api.mcp_url).href;
+      await visitGuide();
+      await page.getByRole('status').filter({ hasText: 'Published MCP server' }).waitFor();
+      await page.getByRole('button', { name: 'Copy server address' }).click();
+      await page.getByRole('button', { name: 'Copy AI prompt' }).click();
+      const copied = await page.evaluate(() => window.copiedTexts);
+      assert.equal(copied[0], publishedAddress);
+      assert.match(copied[1], new RegExp(`species=${species}`));
+      assert.match(copied[1], /get_release.*search_targets.*get_target.*list_constructs.*get_sequence/);
+      await page.evaluate(() => { window.failClipboard = true; });
+      await page.getByRole('button', { name: 'Copy server address' }).click();
+      assert.equal(await page.locator('#mcp-server-url').evaluate(input => input.selectionEnd - input.selectionStart), publishedAddress.length);
+      await page.getByRole('button', { name: 'Copy AI prompt' }).click();
+      assert.equal(await page.locator('#agent-prompt').getAttribute('open'), '');
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${species} guide overflow at ${width}px`);
+        await page.locator('#connect-your-ai-assistant').scrollIntoViewIfNeeded();
+        if (width !== 320) await page.screenshot({ path: path.join(root, `agent-guide-${species}-${width}.png`) });
+      }
+    }
     assert.deepEqual(errors, []);
-    console.log('PASS: construct selection guide, help link and preserved builder state, section menu, anchors, focus, dismissal, browser Back, reduced motion, mobile layout, construct tabs, persistent exports, PTPRC mapping, real 3D viewer, annotation escaping, and calculators.');
+    console.log('PASS: human/mouse MCP quick start, publication gating, address validation, clipboard controls, mobile layout, construct selection guide, help link and preserved builder state, section menu, anchors, focus, dismissal, browser Back, reduced motion, construct tabs, persistent exports, PTPRC mapping, real 3D viewer, annotation escaping, and calculators.');
   } finally {
     await browser.close();
   }

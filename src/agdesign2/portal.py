@@ -662,7 +662,23 @@ def _pubtator_count_or_existing(pubtator_info: dict[str, Any] | None, item: dict
 _MOUSE_REDIRECT_MAP = "mouse_portal_redirects.tsv"
 
 
-_PORTAL_HTACCESS_COMMON = """\
+_QUERY_ASSET_HTACCESS = """\
+# Immutable query containers are gzip payloads, not HTTP-encoded text assets.
+<FilesMatch "\\.oap$">
+  ForceType application/octet-stream
+  <IfModule mod_env.c>
+    SetEnv no-gzip 1
+  </IfModule>
+  <IfModule mod_headers.c>
+    Header unset Content-Encoding
+    Header set X-Content-Type-Options nosniff
+    Header set Cache-Control "public, max-age=31536000, immutable, no-transform" "expr=%{REQUEST_STATUS} == 200"
+  </IfModule>
+</FilesMatch>
+"""
+
+
+_PORTAL_HTACCESS_COMMON = _QUERY_ASSET_HTACCESS + """\
 <IfModule mod_deflate.c>
   AddOutputFilterByType DEFLATE text/html text/css text/plain text/javascript application/javascript image/svg+xml
 </IfModule>
@@ -1061,10 +1077,17 @@ def _citation_section() -> str:
 
 def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = False) -> str:
     site = "https://openantigens.org/mouse/" if portal_title == "OpenAntigens Mouse" else "https://openantigens.org/"
+    species = "mouse" if portal_title == "OpenAntigens Mouse" else "human"
     prompt = (
         f"Before using OpenAntigens, read {site}llms.txt. "
-        f"Start at {site}index.html. Confirm each target's species and accession, preserve its residue numbering, "
+        f"Start at {site}index.html. If OpenAntigens MCP tools are connected, call get_release, then search_targets "
+        f"with that release ID, the species requested in my question (default species={species}), and a specific gene or accession. Use get_target and list_constructs "
+        "to inspect evidence, boundaries, and warnings; use get_sequence for one selected sequence. "
+        f"Use only an active mcp_url published in {site}portal_metadata.json. When MCP tools are unavailable, "
+        "use this portal and its linked downloads. Respect small result limits and Retry-After. "
+        "Confirm each target's species and accession, preserve its residue numbering, "
         "distinguish predicted from experimental evidence, and cite the inspected report and release. "
+        "PDB exports are native reference intervals; check the deposit for sequence engineering and partners. "
         "For research use, include the OpenAntigens preprint citation given in the guide.\n\nMy question: "
     )
     label, href = ("Open plain text /llms.txt", "llms.txt") if guide else ("Read the agent guide", "agent-guide.html")
@@ -1072,7 +1095,7 @@ def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = F
     <section class="agent-banner" aria-labelledby="agent-banner-title">
       <div><p class="agent-eyebrow">For AI assistants</p>
         <h2 id="agent-banner-title">Using Claude, ChatGPT, or another agent?</h2>
-        <p>Start with the guide for search, downloads, residue numbering, and evidence interpretation.</p></div>
+        <p>Connect through MCP or use the website. The guide explains setup, example questions, and construct selection.</p></div>
       <div class="agent-actions"><a class="agent-guide-link" href="{href}">{label}</a>
         <button id="agent-copy" class="agent-copy" type="button">Copy AI prompt</button></div>
       <details id="agent-prompt" class="agent-prompt"><summary>View prompt</summary>
@@ -1107,6 +1130,16 @@ def render_agent_guide_page(*, portal_title: str = "OpenAntigens") -> str:
     human_prefix = "../" if is_mouse else ""
     content = agent_guide_html().replace('href="https://openantigens.org/"', f'href="{human_prefix}index.html"')
     content = content.replace('href="https://openantigens.org/', f'href="{human_prefix}')
+    content = content.replace("<h2>Connect your AI assistant</h2>", """<h2>Connect your AI assistant</h2>
+        <div id="mcp-connection" class="mcp-connection">
+          <p id="mcp-connection-status" role="status">When MCP is published, its server address appears here and in <a href="portal_metadata.json">portal metadata</a>. Open View prompt above to copy instructions for the website and downloads.</p>
+          <div id="mcp-connection-controls" hidden>
+            <label for="mcp-server-url">MCP server address</label>
+            <div class="mcp-connection-address"><input id="mcp-server-url" type="url" readonly>
+              <button id="mcp-copy" class="agent-copy" type="button">Copy server address</button></div>
+          </div>
+          <span id="mcp-copy-status" class="agent-copy-status" role="status" aria-live="polite"></span>
+        </div>""")
     if is_mouse:
         for artifact in _PER_PORTAL_GUIDE_ARTIFACTS:
             content = content.replace(f'href="../{artifact}"', f'href="{artifact}"')
@@ -3184,6 +3217,14 @@ def render_privacy_page(*, portal_title: str = "OpenAntigens") -> str:
     </section>
 
     <section class="card doc-card">
+      <h2>API and MCP request measurements</h2>
+      <p>The API and MCP service records request counts, endpoint categories, species, response status, errors, rate-limit refusals, response size, and timing. These operational records cover automated clients as well as browsers. They exclude search text, protein sequences, request bodies, credentials, target identifiers, and raw request URLs.</p>
+      <p>When verified client information and a privacy key are configured, the service derives a daily pseudonymous client identifier from the network address and client-software header. Application records retain that keyed identifier rather than the raw address or header. These counts describe approximate clients, which can include agents and shared networks; they are not counts of individual people. Reports state when client or endpoint detail is unavailable.</p>
+      <p>When API analytics delivery is enabled, Plausible receives the genuine client network address and client-software header transiently, together with a fixed API or MCP event name and a synthetic endpoint-category path. This supports its approximate visitor and country/city views. Plausible filters some automated traffic, so separate service reports count requests independently and identify accepted, filtered, or failed analytics delivery.</p>
+      <p>Service records are available to authorized operators through the hosting provider's logs. Their availability follows the provider's retention policy; exported reports are stored privately. Hosting gateways may keep separate operational access logs under their own policies. The service reports disclose their captured time window and coverage.</p>
+    </section>
+
+    <section class="card doc-card">
       <h2>Processing, access, and retention</h2>
       <p>Analytics are processed by <a class="inline-link" href="https://plausible.io/data-policy" target="_blank" rel="noreferrer">Plausible Analytics under its data policy</a>. Dashboard access is limited to authorized OpenAntigens administrators at the Institute for Protein Innovation. Only aggregate summaries are shared with funders; visitor-level data and breakdowns with fewer than five unique visitors are not shared.</p>
       <p>Reviewed quarterly summaries are retained for historical reporting. Provider analytics are retained while OpenAntigens uses Plausible. OpenAntigens will delete the provider-held analytics if the site is removed from the service.</p>
@@ -4592,9 +4633,7 @@ def _render_construct_tabs(
     labels = [full_label, "PDB", "Annotated domains / repeats", "Strict", "Lenient", "Full-length multipass", "Trimmed multipass"]
     groups: list[list[dict[str, Any]]] = [[] for _ in labels]
     for construct in constructs:
-        group = _construct_display_group(construct)[0]
-        if group == 5 and construct.get("name") != "membrane_expression_full_length":
-            group = 6
+        group = _CONSTRUCT_CATEGORIES.index(_construct_category(construct))
         groups[group].append(construct)
     tabs: list[str] = []
     panels: list[str] = []
@@ -8845,6 +8884,16 @@ def _construct_display_group(construct: dict[str, Any]) -> tuple[int, int, int, 
     return (2, start, end, name)
 
 
+_CONSTRUCT_CATEGORIES = ("full_region", "pdb", "domain_repeat", "strict", "lenient", "multipass_full_length", "multipass_trimmed")
+
+
+def _construct_category(construct: dict[str, Any]) -> str:
+    group = _construct_display_group(construct)[0]
+    if group == 5 and construct.get("name") != "membrane_expression_full_length":
+        group = 6
+    return _CONSTRUCT_CATEGORIES[group]
+
+
 def _sorted_constructs_for_display(constructs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     def summary_order(construct: dict[str, Any]) -> tuple[int, int, int, str]:
         group, *boundary = _construct_display_group(construct)
@@ -12182,7 +12231,12 @@ select:focus, input:focus, button:focus, textarea:focus, .residue:focus {
 .guide-content a {color:#076b67;text-underline-offset:3px;}
 .guide-content blockquote {margin:24px 0;border-left:3px solid #abd8d5;padding:1px 20px;color:#415d72;}
 .guide-content code {background:#eff4f7;padding:2px 4px;border-radius:3px;font-size:.9em;}
-.agent-banner a:focus-visible,.agent-banner button:focus-visible,.agent-banner summary:focus-visible,.agent-banner textarea:focus-visible,.guide-toc a:focus-visible {outline:3px solid #1f4d8c;outline-offset:4px;}
+.mcp-connection {padding:16px;border:1px solid #abd8d5;border-radius:9px;background:#f4fcfb;}
+.mcp-connection p {margin:0 0 10px;}
+.mcp-connection label {display:block;margin-bottom:6px;font-weight:650;}
+.mcp-connection-address {display:flex;flex-wrap:wrap;gap:10px;}
+.mcp-connection-address input {flex:1 1 220px;min-width:0;max-width:100%;padding:10px;border:1px solid #abd8d5;border-radius:7px;font:inherit;background:white;color:#102338;}
+.agent-banner a:focus-visible,.agent-banner button:focus-visible,.agent-banner summary:focus-visible,.agent-banner textarea:focus-visible,.guide-toc a:focus-visible,.mcp-connection input:focus-visible,.mcp-connection button:focus-visible {outline:3px solid #1f4d8c;outline-offset:4px;}
 @media(max-width:800px) {
  .agent-banner {grid-template-columns:minmax(0,1fr);padding:18px;gap:14px;}
  .agent-actions {gap:14px;}
