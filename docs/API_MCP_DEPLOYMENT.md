@@ -235,7 +235,9 @@ rollback path. Recheck canonical `origin`. Local build commands publish nothing.
    requires a separate approval after old traffic drains and rollback retention
    is reviewed; the deployer performs no automatic garbage collection.
 4. Verify normal static URLs, checksums, opaque `.oap` headers and both portals
-   through the actual edge. Update the same managed app ID with the checked ZIP.
+   through the actual edge. Include both portals' rebuilt `agent-guide.html`,
+   `agent-guide.js`, `llms.txt`, `index.html` and `portal.css` in the authorized
+   static publication. Update the same managed app ID with the checked ZIP.
    Keep current discovery held while validating literal HTTP and real MCP reads,
    target availability, both species, source counts and representative exports.
 5. Run the checker with `--expect-maintenance` and, after its HTTPS checks pass,
@@ -244,6 +246,10 @@ rollback path. Recheck canonical `origin`. Local build commands publish nothing.
    Publish those metadata files through the authorized static workflow and
    verify the public copies. Set publication state to `active`, restart, and
    repeat normal discovery/client checks before leaving an external hold.
+   Check both For AI agents pages: published metadata should reveal a copyable
+   MCP address, and Copy AI prompt should follow an explicitly requested species
+   while using the portal species as its default. Before activation, the pages
+   should offer the website/download fallback without a server address.
 
 The static copy updates files in place. Keep a controlled publication window;
 separate app and static updates do not form an atomic transaction. A failed

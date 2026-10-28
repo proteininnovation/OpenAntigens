@@ -6,6 +6,24 @@ Website: https://openantigens.org/
 
 OpenAntigens supports research construct selection. A proposed construct is not evidence of successful expression, folding, antigenicity, antibody binding, or therapeutic efficacy. Available evidence varies by target and release.
 
+## Connect your AI assistant
+
+Use MCP to let a connected assistant search targets, compare proposed constructs, and retrieve one exact sequence at a time. Your AI client must support remote MCP servers.
+
+When a server address is available:
+
+1. Open your AI client's MCP server settings and add a server named **OpenAntigens**. The location of this setting varies by client.
+2. Paste the server address. If asked, select **Streamable HTTP** for transport and **No authentication**. Public lookups need no API key.
+3. Connect, then use **Copy AI prompt** above and add your question. The prompt works with the website and downloads when MCP tools are unavailable.
+
+Try a specific target and species:
+
+> Find human EGFR constructs informed by PDB records. Compare their boundaries and warnings, then give me the exact sequence for the construct I choose.
+
+> Show mouse Ptprc constructs and explain their boundaries, evidence, and warnings.
+
+PDB construct exports contain native reference intervals at mapped boundaries. Consult the PDB entry and study for deposited sequence changes, tags, fusions, and partners. Sponsor-based lookup requires sponsor annotations, which are outside the current release.
+
 ## Start here
 
 - [Browse human targets](https://openantigens.org/index.html): Search by gene symbol, UniProt entry name, protein name, alias, family, or topology. Use the separate disease filter for indexed Open Targets associations.
@@ -51,11 +69,13 @@ OpenAntigens supports research construct selection. A proposed construct is not 
 
 Prefer the release index for bulk lookup instead of scraping every report. The public site publishes static artifacts; do not assume development-server JSON APIs exist on the public host. If page text extraction omits a JavaScript-rendered table, use the downloadable index or a browser capable of rendering the page.
 
-### Use a published API or MCP service
+### API and MCP tool workflow
 
 Check the inspected portal's `portal_metadata.json` for `public_api`. A packaged release can provide machine downloads before its service is published. Connect only when that metadata supplies an active `service_url` or `mcp_url`; otherwise use the static downloads listed by the release.
 
-For HTTP, resolve the literal release ID through `<service_url>/v1/releases/current`, then search `/v1/releases/<release_id>/human/targets?q=<gene-or-accession>` or the corresponding `mouse` path. For MCP, connect to the recorded `mcp_url`, call `get_release`, and pass its release ID, an explicit species, and a specific gene or accession to `search_targets`. Queries need at least two characters. The five tools support release discovery, small target searches, target evidence, constructs, and one exact sequence per call.
+For MCP, call `get_release`, then pass its release ID, an explicit species, and a specific gene or accession to `search_targets`. Use the returned target ID with `get_target` for evidence and `list_constructs` for construct choices. Filter PDB-informed constructs with `category: "pdb"`; match an exact PDB ID within the returned pages. Use `get_sequence` for one selected construct or the reference sequence. Queries need at least two characters.
+
+For HTTP, resolve the literal release ID through `<service_url>/v1/releases/current`, then search `/v1/releases/<release_id>/human/targets?q=<gene-or-accession>` or the corresponding `mouse` path.
 
 Collections return five records by default, with a maximum of ten. Search exposes at most twenty matches for one query; refine a broad query rather than enumerate the catalogue. Use the returned IDs and cursor with the same release, species, and filters. Respect `Retry-After` when the service returns a rate-limit response. Bulk analysis uses the static website's downloads page; the API and MCP provide individual lookups and small follow-ups.
 
