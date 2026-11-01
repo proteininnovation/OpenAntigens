@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 type: software
 title: OpenAntigens
-message: "If you use OpenAntigens in research, please cite the preprint below and record the release used."
+message: "If you use OpenAntigens in research, please cite the paper below and record the release used."
 authors:
   - family-names: "Teixeira"
     given-names: "Andre A. R."
@@ -28,9 +28,8 @@ preferred-citation:
     - family-names: "Mills"
       given-names: "Allan"
       orcid: "https://orcid.org/0000-0003-3056-7764"
-  journal: bioRxiv
+  journal: Nucleic Acids Research
   year: 2026
-  date-released: 2026-08-04
-  doi: 10.64898/2026.07.30.741735
-  url: https://doi.org/10.64898/2026.07.30.741735
-  notes: "Preprint, version 1; not peer reviewed."
+  date-released: 2026-10-29
+  doi: 10.1093/nar/gkag1051
+  url: https://doi.org/10.1093/nar/gkag1051

@@ -61,7 +61,7 @@ When describing or using OpenAntigens in research, please cite:
 
 {{citation}}
 
-This is a preprint, version 1, posted August 4, 2026; it has not been peer reviewed. For target-specific claims, also cite the inspected report or artifact and record its release build date, software version, and your access date. Cite underlying databases or primary studies where their evidence is used. Do not use the database paper as evidence that an individual construct has been experimentally validated.
+For target-specific claims, also cite the inspected report or artifact and record its release build date, software version, and your access date. Cite underlying databases or primary studies where their evidence is used. Do not use the database paper as evidence that an individual construct has been experimentally validated.
 
 - [How to cite](https://openantigens.org/help.html#cite-openantigens): Citation and release-provenance guidance.
 - [BibTeX citation](https://openantigens.org/downloads/openantigens.bib): Import into a bibliography manager.

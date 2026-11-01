@@ -24,7 +24,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         snapshot = root / "snapshot"
         public_site = snapshot / "public_site"
         public_site.mkdir(parents=True)
-        doi = "10.64898/2026.07.30.741735"
+        doi = "10.1093/nar/gkag1051"
         (public_site / "index.html").write_text(
             '<link rel="stylesheet" href="portal.css?v=test">\n'
             '<script src="portal-index-data.js?v=test"></script>\n'

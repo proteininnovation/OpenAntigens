@@ -965,7 +965,7 @@ def _portal_footer(*, prefix: str = "", portal_title: str = "OpenAntigens") -> s
         </nav>
       </div>
       <p class="footer-citation">Using OpenAntigens in your research? Cite
-        {citation_short_html()} (preprint).
+        {citation_short_html()}.
         <a href="{escape(prefix)}help.html#cite-openantigens">How to cite</a>
       </p>
       <div class="footer-meta">
@@ -1051,7 +1051,7 @@ def _citation_section() -> str:
       <h2>How to cite OpenAntigens</h2>
       <p>If you use OpenAntigens in research, please cite:</p>
       <p class="paper-citation">{citation_html()}</p>
-      <p class="section-note">Preprint, version {escape(PAPER['version'])}; posted {escape(PAPER['date'])}. Not peer reviewed.</p>
+      <p class="section-note">Published online {escape(PAPER['date'])}.</p>
       <p>Import the reference: {_citation_download_links()}</p>
       <p>Also record the portal build date, software version, report or downloaded artifact URL, and your access date. These identify the release you used; the paper describes the database.</p>
       <p>Cite underlying databases or primary studies where you use their evidence. See <a class="inline-link" href="terms.html">Terms</a> for data attribution and reuse requirements.</p>
@@ -1065,7 +1065,7 @@ def _agent_guidance_panel(*, portal_title: str = "OpenAntigens", guide: bool = F
         f"Before using OpenAntigens, read {site}llms.txt. "
         f"Start at {site}index.html. Confirm each target's species and accession, preserve its residue numbering, "
         "distinguish predicted from experimental evidence, and cite the inspected report and release. "
-        "For research use, include the OpenAntigens preprint citation given in the guide.\n\nMy question: "
+        "For research use, include the OpenAntigens paper citation given in the guide.\n\nMy question: "
     )
     label, href = ("Open plain text /llms.txt", "llms.txt") if guide else ("Read the agent guide", "agent-guide.html")
     return f"""
@@ -1216,7 +1216,7 @@ def render_index_page(
           <h1>{escape(subtitle)}</h1>
           <p class="hero-text">{escape(intro)}</p>
           <p class="homepage-citation">Using OpenAntigens in your research? Cite
-            {citation_short_html()} (preprint).
+            {citation_short_html()}.
             <a href="help.html#cite-openantigens">How to cite</a>
           </p>
         </div>
@@ -2170,7 +2170,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         body_html=f"""
     <section class="card doc-card">
       <h2>Overview</h2>
-      <p>Database paper: {citation_short_html()} (preprint). See <a class="inline-link" href="help.html#cite-openantigens">How to cite OpenAntigens</a>.</p>
+      <p>Database paper: {citation_short_html()}. See <a class="inline-link" href="help.html#cite-openantigens">How to cite OpenAntigens</a>.</p>
       <p>Each release records the results of a local analysis. Reports link proposed construct boundaries to the sequence, annotations, and structural evidence used in that analysis.</p>
       <p>The methods below describe the current pipeline. Previously generated releases retain the results of the software and reference data used for their build.</p>
       <div class="table-scroll">
@@ -2421,7 +2421,7 @@ def render_downloads_page(
     <section class="download-grid">
       <article class="card doc-card">
         <h2>Release flat files</h2>
-      <p>For research use, please cite {citation_short_html()} (preprint) and record the release used. <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> · {_citation_download_links()}</p>
+      <p>For research use, please cite {citation_short_html()} and record the release used. <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> · {_citation_download_links()}</p>
         <p>Current index snapshot: {total:,} portal rows, {ok:,} successful reports, {errors:,} error rows.</p>
         <div class="link-group link-group-wrap">
           <a class="button" href="downloads/agdesign2_portal_index.tsv">Download TSV index</a>
@@ -3373,8 +3373,8 @@ def portal_download_manifest(entries: list[dict[str, Any]], *, include_disease_c
         ],
     }
     manifest["files"].extend([
-        {"path": "downloads/openantigens.bib", "format": "BibTeX", "description": "OpenAntigens preprint citation."},
-        {"path": "downloads/openantigens.ris", "format": "RIS", "description": "OpenAntigens preprint citation."},
+        {"path": "downloads/openantigens.bib", "format": "BibTeX", "description": "OpenAntigens paper citation."},
+        {"path": "downloads/openantigens.ris", "format": "RIS", "description": "OpenAntigens paper citation."},
     ])
     if include_disease_context:
         manifest["files"].extend(
