@@ -1053,7 +1053,7 @@ def _citation_section() -> str:
       <p class="paper-citation">{citation_html()}</p>
       <p class="section-note">Published online {escape(PAPER['date'])}.</p>
       <p>Import the reference: {_citation_download_links()}</p>
-      <p>Also record the portal build date, software version, report or downloaded artifact URL, and your access date. These identify the release you used; the paper describes the database.</p>
+      <p>Also record which release you used (build date and software version, both in <code>portal_metadata.json</code>), the report or file URL, and your access date.</p>
       <p>Cite underlying databases or primary studies where you use their evidence. See <a class="inline-link" href="terms.html">Terms</a> for data attribution and reuse requirements.</p>
     </section>
 """
@@ -1561,18 +1561,13 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         if not include_disease_context
         else "The main search box scans gene symbol, UniProt entry, protein name, aliases, family name, and topology track. Use the disease-focused filter to search indexed Open Targets disease associations."
     )
-    sort_fields = (
-        "entry, gene, protein name, family, topology track, PubTator hits, design region, AlphaFold availability, PDB availability, construct count, or BLAST-hit count"
-        if not include_disease_context
-        else "entry, gene, protein name, family, disease score, topology track, PubTator hits, design region, AlphaFold availability, PDB availability, construct count, or BLAST-hit count"
-    )
     export_scope = (
         "mouse construct name, boundaries, sequence, and equivalent regions in the originating human target and available cynomolgus monkey orthologs"
         if is_mouse
         else "human construct name, boundaries, sequence, and equivalent mouse and cynomolgus monkey regions"
     )
     disease_row = (
-        "<tr><td>Open Targets Disease Associations</td><td>Indirect and direct disease associations and scores from Open Targets.</td><td>Review the underlying evidence before drawing conclusions about a target's therapeutic value.</td></tr>"
+        "<tr><td>Open Targets Disease Associations</td><td>Indirect and direct disease associations and scores from Open Targets.</td><td>Search targets by disease with the disease filter.</td></tr>"
         if include_disease_context
         else ""
     )
@@ -1611,7 +1606,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       <ol class="doc-list">
         <li>Search for a gene, UniProt entry, protein name, alias, family, topology track{quick_search_scope} on the <a class="inline-link" href="index.html">Browse</a> page.</li>
         <li>Scan the {evidence_columns} columns to identify reports with the evidence needed for review.</li>
-        <li>Open a target report by clicking the UniProt entry name. Public snapshots show the results of a completed build. Pending or failed rows retain their recorded status and error details.</li>
+        <li>Click the entry name to open its report.</li>
         <li>Use the <strong>Interactive Construct Builder</strong> to adjust boundaries and inspect linked sequences, warnings, and available structure panels. You can also export sequences from the precomputed construct cards.</li>
         <li>Review the ordered construct sections, copy TSV or FASTA outputs, and download the release index or manifest for downstream analysis.</li>
       </ol>
@@ -1626,7 +1621,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       <article class="card doc-card">
         <h2>Filter and sort</h2>
         <p>The Browse page defaults to all rows sorted by PubTator hits from highest to lowest. Search terms narrow the table; <strong>Reset</strong> clears both search boxes and restores PubTator-hit sorting.</p>
-        <p>Click table headers to sort by {sort_fields}.</p>
+        <p>Click any column header to sort.</p>
         <p>Choose how many rows to show, then use the page controls to browse the remaining results.</p>
       </article>
       <article class="card doc-card">
@@ -1636,7 +1631,6 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       </article>
       <article class="card doc-card">
         <h2>Static release snapshots</h2>
-        <p>Public releases contain the results recorded during their build. The pages can be browsed locally or on the website.</p>
         <p>Opening a page does not update its annotations.</p>
       </article>
     </section>
@@ -1647,15 +1641,15 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
         <table>
           <thead><tr><th>Section</th><th>What it tells you</th><th>How to use it</th></tr></thead>
           <tbody>
-            <tr><td>Target / Design Region</td><td>Resolved UniProt target, organism, sequence length, topology-derived design scope, links, PubTator count, and source identifiers.</td><td>Confirm target resolution and compare the extracellular, secreted, or membrane scope with the planned design.</td></tr>
+            <tr><td>Target / Design Region</td><td>Resolved UniProt target, organism, sequence length, topology-derived design scope, links, PubTator count, and source identifiers.</td><td>Confirm this is the protein and region you meant.</td></tr>
             <tr><td>Interactive Construct Builder</td><td>Linked sequence, cysteine/furin warnings, copy-ready sequence exports, and structure/pLDDT/PAE panels when compatible local structure assets exist.</td><td>Adjust boundaries and export {export_scope}.</td></tr>
             {disease_row}
-            <tr><td>Homology</td><td>{homology_description}</td><td>Review conservation, boundary transfer, and cross-species reagent risk before animal screening or validation.</td></tr>
+            <tr><td>Homology</td><td>{homology_description}</td><td>Pick constructs that stay conserved in the species you will screen.</td></tr>
             <tr><td>Sequence similarity and cross-reactivity context</td><td>Local BLAST hits ranked by bit score, with identity, coverage, E-value, coordinates, and alignment text.</td><td>Inspect high-scoring non-self hits as possible proteins to counter-screen.</td></tr>
-            <tr><td>Cysteines / PTMs / Furin sites</td><td>Potential expression liabilities, curated UniProt PTM or processing annotations, and optional mutation guidance.</td><td>Review warnings before ordering constructs. Optional Cys-to-Ser and furin-site edits in the builder update names and sequences in real time.</td></tr>
+            <tr><td>Cysteines / PTMs / Furin sites</td><td>Potential expression liabilities, curated UniProt PTM or processing annotations, and optional mutation guidance.</td><td>Optional Cys-to-Ser and furin-site edits in the builder update names and sequences in real time.</td></tr>
             <tr><td>Family Context</td><td>Canonical family/paralog context and directional identity matrix when available.</td><td>Identify close paralogs that may create specificity risks or useful comparison antigens.</td></tr>
             <tr><td>Interactions / Assembly</td><td>Known interaction or complex context, including possible obligatory partners when evidence supports it.</td><td>Flag proteins that may require co-expression, partner chains, or extra caution when designing isolated soluble constructs.</td></tr>
-            <tr><td>Construct Summary / Constructs</td><td>Precomputed construct classes, boundaries, homolog-equivalent sequences, images, and sequence exports.</td><td>Review construct classes in display order, then refine boundaries in the builder when needed.</td></tr>
+            <tr><td>Construct Summary / Constructs</td><td>Precomputed construct classes, boundaries, homolog-equivalent sequences, images, and sequence exports.</td><td>Start here; refine boundaries in the builder.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1666,15 +1660,9 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       <p>The summary and builder list soluble constructs in this order: <strong>full design region</strong>, <strong>PDB-backed</strong>, <strong>strict calculated</strong>, <strong>lenient calculated</strong>, then <strong>domain annotated</strong> constructs. For multipass proteins, review <strong>membrane-expression constructs</strong> separately from soluble extracellular-region constructs. The <a class="inline-link" href="constructs.html">Pre-generated Constructs page</a> explains how their boundaries are generated. Display order is not a validated ranking of expression performance.</p>
     </section>
 
-    <section class="doc-grid">
-      <article class="card doc-card">
-        <h2>pLDDT in one sentence</h2>
-        <p>pLDDT tells you whether AlphaFold is locally confident at each residue. High pLDDT supports local fold confidence, but it does not prove that two domains have a fixed relative orientation.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>PAE in one sentence</h2>
-        <p>PAE reports AlphaFold's estimated uncertainty in relative placement between residues or regions. Low PAE within a block supports a cohesive structural unit; high PAE between blocks indicates uncertain relative placement.</p>
-      </article>
+    <section class="card doc-card">
+      <h2>pLDDT and PAE</h2>
+      <p>pLDDT is AlphaFold's per-residue confidence; PAE is its uncertainty about where two regions sit relative to each other. The <a class="inline-link" href="builder.html">Builder guide</a> explains how to read both.</p>
     </section>
 
     <section class="card doc-card">
@@ -1688,7 +1676,7 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
             <tr><td>Prioritize cross-species screening constructs</td><td>{cross_species_workflow} Prioritize mapped constructs with high identity and conserved boundaries.</td></tr>
             <tr><td>Review paralog cross-reactivity risk</td><td>Use Family Context and BLAST similarity together. The family matrix compares paralogs across their sequence regions; BLAST alignments locate similar stretches.</td></tr>
             <tr><td>Handle a multipass protein</td><td>Look for a large extracellular region if present, then separately review membrane-expression constructs, full-length AlphaFold context, full-length BLAST, and GPCR/membrane engineering suggestions.</td></tr>
-            <tr><td>Review release-state gaps</td><td>Check the index status and error details. Public pages do not rerun an analysis when opened.</td></tr>
+            <tr><td>Review release-state gaps</td><td>Check the error field in the release index.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1730,27 +1718,9 @@ def render_help_page(*, portal_title: str = "OpenAntigens", include_disease_cont
       </div>
     </section>
 
-    <section class="doc-grid">
-      <article class="card doc-card">
-        <h2>Where to go next</h2>
-        <p>Use the <a class="inline-link" href="builder.html">Builder guide</a> for detailed instructions on sequence/structure selection, pLDDT, PAE, Cys-to-Ser edits, and FASTA/TSV exports.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Methods</h2>
-        <p>Use the <a class="inline-link" href="methods.html">Methods page</a> for source databases, construct heuristics, BLAST setup, family/paralog logic, update cadence, and limitations.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Construct methodology</h2>
-        <p>Use the <a class="inline-link" href="constructs.html">Constructs page</a> for the dedicated explanation of pre-generated construct classes, structural diagnostics, homolog transfer, PTM and processing review, and limitations.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Downloads</h2>
-        <p>Use the <a class="inline-link" href="downloads.html">Downloads page</a> for the portal index, manifest, and flat files that support reproducible downstream analysis.</p>
-      </article>
-      <article class="card doc-card">
-        <h2>Terms</h2>
-        <p>Use the <a class="inline-link" href="terms.html">Terms page</a> for software license, generated annotation license, source-data terms, and contact information.</p>
-      </article>
+    <section class="card doc-card">
+      <h2>Where to go next</h2>
+      <p><a class="inline-link" href="builder.html">Builder guide</a> · <a class="inline-link" href="constructs.html">Constructs</a> · <a class="inline-link" href="methods.html">Methods</a> · <a class="inline-link" href="downloads.html">Downloads</a> · <a class="inline-link" href="terms.html">Terms</a></p>
     </section>
 """,
     )
@@ -1782,8 +1752,8 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="doc-grid">
       <article class="card doc-card">
         <h2>What the builder shows</h2>
-        <p>Reports with a compatible local AlphaFold model include the interactive builder and Live Selected Region table. The pLDDT trace and PAE matrix appear when their data are available. Reports without a compatible model retain precomputed construct cards and their sequence exports.</p>
-        <p>Selections stay synchronized across the panels present in the report. Selecting residues in the sequence or plots highlights the same residue window in the structure and updates the TSV/FASTA outputs.</p>
+        <p>Reports with an AlphaFold model that matches the canonical sequence include the interactive builder and Live Selected Region table. Without one, the report shows only the precomputed construct cards and their exports.</p>
+        <p>Selecting residues in the sequence or plots highlights the same residue window in the structure and updates the TSV/FASTA outputs.</p>
       </article>
       <article class="card doc-card">
         <h2>Basic workflow</h2>
@@ -1809,7 +1779,7 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>How to interpret pLDDT</h2>
-      <p><strong>pLDDT</strong> is AlphaFold's per-residue local confidence estimate. It describes confidence in the immediate geometry around a residue. Domain-domain orientation requires PAE review.</p>
+      <p><strong>pLDDT</strong> is AlphaFold's per-residue confidence in the local geometry. It says nothing about how domains sit relative to each other; PAE, below, covers that.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>pLDDT range</th><th>Practical interpretation</th><th>Construct-design value</th></tr></thead>
@@ -1821,7 +1791,7 @@ def render_builder_page(*, portal_title: str = "OpenAntigens") -> str:
           </tbody>
         </table>
       </div>
-      <p>For soluble antigen design, high mean pLDDT and a high fraction of residues above the structured threshold support local fold confidence. Use PAE to evaluate relative orientation between domains.</p>
+      <p>For soluble antigen design, high mean pLDDT and a high fraction of residues above the structured threshold support local fold confidence.</p>
     </section>
 
     <section class="card doc-card">
@@ -1927,7 +1897,7 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
       <ul class="doc-list">
         <li>Inspect both ends of the construct and retain any required domains or partners. Predicted boundaries may cut through helices or strands and do not establish that the isolated region will fold independently.</li>
         <li>Check whether truncation removed a cysteine's disulfide partner. Surface exposure alone does not justify mutating a cysteine, and burial does not establish that a substitution is safe.</li>
-        <li>Review PTMs, processing sites, and relevant ortholog mappings. Use warnings to identify features that need closer inspection before deciding whether to keep or change the construct.</li>
+        <li>Review PTMs, processing sites, and relevant ortholog mappings.</li>
       </ul>
       <p class="construct-choice-more">More detail: <a class="inline-link" href="#construct-classes">construct categories</a> · <a class="inline-link" href="builder.html">using the builder</a> · <a class="inline-link" href="#construct-feature-review">cysteines and processing</a>.</p>
     </section>
@@ -1956,7 +1926,6 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>Strict and lenient construct algorithm</h2>
-      <p>Calculated constructs use a compatible AlphaFold model and PAE matrix. Strict constructs use conservative pLDDT seeds followed by recursive PAE boundary scoring; lenient constructs use a lower pLDDT threshold to preserve larger structured regions.</p>
       <p>Both tracks begin with intervals selected by pLDDT. The lenient track keeps these intervals; the strict track can split them further using PAE.</p>
       <p>The steps below use the default configuration. A release built with different settings can produce different boundaries.</p>
     </section>
@@ -1972,7 +1941,7 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
         <li><strong>Apply the PAE thresholds.</strong> A cut is eligible only when interblock PAE is at least 12 angstroms and separation is at least 4 angstroms. These thresholds select cuts where the model is less certain about placement between the blocks than within them.</li>
         <li><strong>Score eligible strict split boundaries.</strong> Candidate boundaries are ranked using <code>split score = separation + 0.35 x max(0, boundary PAE - intrablock PAE) + linker bonus</code>. The linker bonus increases when local pLDDT near the cut is low, because low-confidence linker residues support splitting adjacent structured blocks.</li>
         <li><strong>Recursively split strict regions.</strong> The highest-scoring eligible cut is applied, then the same PAE split search is repeated on the left and right child regions. Recursion stops when no valid cut remains, child regions would become too small, or the configured maximum recursion depth is reached.</li>
-        <li><strong>Apply final construct filters.</strong> Calculated soluble constructs must stay inside the design region and must be at least 50 amino acids. Exact duplicate boundaries from different calculated or annotated sources are collapsed to keep reports concise; PDB-backed constructs are exempt from deduplication but still pass the scope and length filters.</li>
+        <li><strong>Apply final construct filters.</strong> Calculated soluble constructs must stay inside the design region and must be at least 50 amino acids. Duplicate boundaries are shown once, except PDB-backed constructs, which keep one card per PDB chain.</li>
         <li><strong>Annotate each construct for review.</strong> Construct cards list sequence, boundaries, exports, included UniProt/InterPro annotations, PTMs, furin-like motifs, cysteine warnings, homolog-equivalent regions, and construct-specific conservation. Structural metrics, PAE split diagnostics, ligand-interaction annotations, and images appear when available.</li>
       </ol>
     </section>
@@ -2027,7 +1996,6 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
           </tbody>
         </table>
       </div>
-      <p>Interpret these diagnostics with domain annotations, PDB evidence, PTMs, ligand sites, cysteines, and the intended antibody-discovery strategy.</p>
     </section>
 
     <section class="card doc-card">
@@ -2082,9 +2050,9 @@ def render_constructs_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>PTM and processing review</h2>
         <p>Construct cards list overlapping PTMs and processing features for boundary review.</p>
-        <p>Cleavage, propeptide, signal peptide, and chain annotations deserve special attention because they can define mature protein boundaries.</p>
+        <p>Cleavage, propeptide, signal-peptide, and chain annotations can move the mature protein's ends; check them against your boundaries.</p>
         <p>Review glycosylation and other PTMs when choosing the host, and check the target literature before removing a modification site. Consider whether processing is needed to obtain the intended mature protein.</p>
-        <p>Furin-like motifs warrant particular attention during mammalian expression, where proteolytic processing can affect product integrity. A motif alone does not predict whether cleavage will occur. When intact protein is required and the site's role is uncertain, compare the original sequence with a cleavage-site variant, checking the literature and measuring integrity and function in the intended system.</p>
+        <p>In mammalian cells, furin can cleave at these motifs and fragment the product. A motif alone does not predict whether cleavage will occur. When intact protein is required and the site's role is uncertain, compare the original sequence with a cleavage-site variant, checking the literature and measuring integrity and function in the intended system.</p>
       </article>
       <article class="card doc-card">
         <h2>Multipass proteins</h2>
@@ -2113,19 +2081,18 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         "Targets without a resolved mouse record are omitted, and duplicate mouse records are included once. "
         "Most included targets are analyzed against reviewed mouse UniProt data; where no reviewed mouse entry covers the ortholog, the sequence comes from the RefSeq record named in the report's sequence source. The originating human target remains in report metadata."
         if is_mouse
-        else "The human target universe is sourced from the refined cell-surface and secreted protein topology table under <code>data/inputs/</code>. "
-        "That table combines public evidence from UniProt, Thera-SAbDab, the SURFY surfaceome publication, and the Uhlén secretome publication. "
-        "The active portal includes proteins categorized as secreted, GPI-anchored, single-pass membrane, or multipass membrane."
+        else "The human target set comes from a cell-surface and secreted protein topology table that combines UniProt, Thera-SAbDab, the SURFY surfaceome, and the Uhlén secretome. "
+        "It includes secreted, GPI-anchored, single-pass, and multipass membrane proteins."
     )
     target_resolution_text = (
         "Mouse records are resolved through reviewed mouse UniProt entries where one exists, and otherwise through the RefSeq sequence in the precomputed ortholog table; each report states which it used. The build records skipped human targets, including missing mouse orthologs and duplicate mouse targets, in a separate manifest."
         if is_mouse
-        else "Each input row is resolved primarily through reviewed human UniProt records. Resolution prefers stable UniProt entry names or accessions when available and preserves the original input identifiers for traceability. Ambiguous or unresolved rows remain represented in batch outputs with explicit error status."
+        else "Each input row is resolved through reviewed human UniProt records, keeping its original identifiers. Unresolved rows stay in the index with an error status."
     )
     ortholog_text = (
         "The mouse portal keeps the originating human target in report metadata and maps additional homolog regions when suitable reference sequences are available."
         if is_mouse
-        else "Precomputed ortholog reference tables provide human, mouse, and cynomolgus monkey accessions, sequences, and pairwise identity to the human sequence. Mouse resolution ranks matches across the HCOP and human fallback symbols together, always preferring reviewed UniProt over unreviewed TrEMBL. Reports use these tables first. If no precomputed row covers the target, the analyzer runs live species lookup."
+        else "Precomputed ortholog reference tables provide human, mouse, and cynomolgus monkey accessions, sequences, and pairwise identity to the human sequence. Mouse resolution ranks matches across the HCOP and human fallback symbols together, always preferring reviewed UniProt over unreviewed TrEMBL. Targets missing from these tables are looked up during the build."
     )
     homolog_projection_text = (
         "Construct-level homolog sequences are inferred by aligning the mouse design scope to available homolog sequences, projecting the selected mouse boundaries through that alignment, and extracting the corresponding homolog region. A projection is rejected when fewer than 70% of the target-region residues align to the homolog."
@@ -2133,9 +2100,9 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         else "Construct-level homolog sequences are inferred by aligning the full human design scope to species ortholog sequences, projecting the human construct boundaries through that alignment, and extracting the corresponding species region. A projection is rejected when fewer than 70% of the human-region residues align to the homolog. Construct-specific identity is then calculated against the human construct sequence."
     )
     blast_database_text = (
-        "Mouse target sequences are searched against the configured local human, mouse, and cynomolgus monkey protein databases."
+        "Mouse target sequences are searched against local human, mouse, and cynomolgus monkey protein databases."
         if is_mouse
-        else "Human, mouse, and cynomolgus monkey primary databases use reviewed UniProt protein sets. For cynomolgus monkey, targets without hits in the reviewed set are searched against a broader local UniProt proteome database when that database is configured."
+        else "Human, mouse, and cynomolgus monkey primary databases use reviewed UniProt protein sets. For cynomolgus monkey, targets with no hit in the reviewed set are searched against a broader local UniProt proteome where one is available."
     )
     ortholog_source = (
         "Reviewed UniProt homolog lookup, with the ortholog table's RefSeq sequence as the fallback"
@@ -2153,7 +2120,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         else ""
     )
     disease_methods = (
-        "Open Targets direct target-disease associations are precomputed as a separate resumable artifact. The portal shows the top disease association in the index, loads a disease-name index for disease-aware filtering, and lists disease score plus datasource-score context on each target page."
+        "Direct target-disease associations come from Open Targets and are retrieved during the build. The index shows each target's top association, the disease filter searches indexed disease names, and each target page lists the disease score with its datasource scores."
         if not is_mouse
         else "The mouse portal does not display Open Targets disease associations or disease-search controls."
     )
@@ -2171,8 +2138,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card">
       <h2>Overview</h2>
       <p>Database paper: {citation_short_html()}. See <a class="inline-link" href="help.html#cite-openantigens">How to cite OpenAntigens</a>.</p>
-      <p>Each release records the results of a local analysis. Reports link proposed construct boundaries to the sequence, annotations, and structural evidence used in that analysis.</p>
-      <p>The methods below describe the current pipeline. Previously generated releases retain the results of the software and reference data used for their build.</p>
+      <p>These methods describe the current pipeline; older releases were built with older versions.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Evidence class</th><th>Primary source</th><th>Used for</th></tr></thead>
@@ -2214,7 +2180,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>AlphaFold confidence</h2>
         <p>pLDDT is used as local residue-confidence evidence. High pLDDT supports local fold confidence, while low pLDDT is consistent with flexible linkers, disordered tails, or uncertain loops. PAE is used as regional confidence evidence: low internal PAE supports a coherent structural unit, while high PAE between neighboring blocks indicates uncertain relative orientation.</p>
-        <p>Construct diagnostics summarize mean pLDDT, structured fraction, mean intrablock PAE, interblock PAE, local boundary PAE, separation, and linker pLDDT when available. These metrics are evidence features, not absolute pass/fail criteria.</p>
+        <p>Construct diagnostics summarize mean pLDDT, structured fraction, mean intrablock PAE, interblock PAE, local boundary PAE, separation, and linker pLDDT when available. None of them is a pass/fail cutoff.</p>
       </article>
       <article class="card doc-card">
         <h2>Residue topology and accessibility</h2>
@@ -2244,7 +2210,6 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>Construct generation</h2>
-      <p>The analysis engine scores construct candidates, removes exact duplicate boundaries across calculated and annotated candidate sources (PDB-backed constructs are kept individually as evidence), filters soluble candidates outside the inferred design scope or below the minimum length, and the portal displays the surviving classes in a fixed review order.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Construct class</th><th>How it is generated</th><th>Primary use</th></tr></thead>
@@ -2258,7 +2223,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
           </tbody>
         </table>
       </div>
-      <p>The minimum construct size defaults to 50 amino acids. Soluble constructs outside the inferred design scope are excluded. Exact duplicate boundaries from different calculated or annotated sources are collapsed during construct deduplication; PDB-backed constructs are exempt from deduplication, but still pass the scope and length filters.</p>
+      <p>The minimum construct size defaults to 50 amino acids. Soluble constructs outside the inferred design scope are excluded. Duplicate boundaries are shown once, except PDB-backed constructs, which keep one card per PDB chain.</p>
       <p>The <a class="inline-link" href="constructs.html">Constructs page</a> gives the default pLDDT thresholds, PAE split criteria, and boundary score. These classes describe the algorithm used, not measured expression or binding.</p>
     </section>
 
@@ -2271,7 +2236,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Family and paralog context</h2>
         <p>Canonical family assignment prefers InterPro family annotations when they are specific and informative. HGNC and Ensembl-derived paralog references are used to recover biologically relevant families when InterPro is incomplete or too broad. If multiple families are available, smaller and more specific families are preferred over large generic families.</p>
-        <p>Large families can be skipped from detailed matrix rendering to keep pages readable. For each globally aligned pair, directional identity divides the number of identical residues by the length of the row protein's sequence region. Reversing the comparison changes the denominator when the lengths differ.</p>
+        <p>Families with more than 20 members (the default limit) get no matrix. For each globally aligned pair, directional identity divides the number of identical residues by the length of the row protein's sequence region. Reversing the comparison changes the denominator when the lengths differ.</p>
       </article>
       <article class="card doc-card">
         <h2>Orthologs and homology</h2>
@@ -2325,7 +2290,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Assembly and partner requirements</h2>
         <p>Interaction and complex information is summarized separately from obligatory-partner classification. Known interactions provide context; obligatory-partner warnings require stronger curated complex evidence.</p>
-        <p>Obligatory-partner warnings are anchored to curated Complex Portal records when that module is enabled. UniProt <code>SUBUNIT</code> comments inform integrin assembly classification but do not independently create obligatory-partner warnings. Other free-text interaction rows are not shown in the public portal.</p>
+        <p>Obligatory-partner warnings come from curated Complex Portal records. UniProt <code>SUBUNIT</code> comments inform integrin assembly classification but do not create a warning by themselves.</p>
         <div class="table-scroll">
           <table>
             <thead><tr><th>Class</th><th>Evidence rule</th><th>How to use it</th></tr></thead>
@@ -2357,15 +2322,15 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card">
       <h2>Update cadence and limitations</h2>
       <p>OpenAntigens is released as a static, versioned snapshot. Each release records the build date, target universe, and OpenAntigens version when available. Future releases may incorporate updated annotations.</p>
-      <p>Because each release is static, source databases may have changed after the displayed release date. Cite the release date and downloaded artifact names when using OpenAntigens data in downstream analyses.</p>
+      <p>Source databases may have changed since the release date. See <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> for what to record.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Limitation</th><th>Consequence</th></tr></thead>
           <tbody>
             <tr><td>AlphaFold confidence is computational.</td><td>High pLDDT/low PAE supports design reasoning. Expression, folding, and epitope presentation require experimental evidence; experimental structures remain separate evidence.</td></tr>
-            <tr><td>Topology annotations can be incomplete or inconsistent.</td><td>Mature secreted and extracellular-region boundaries require manual review for important targets.</td></tr>
+            <tr><td>Topology annotations can be incomplete or inconsistent.</td><td>The design region can start or end in the wrong place; check it against the target literature.</td></tr>
             <tr><td>BLAST is sequence-based.</td><td>It cannot fully predict antibody cross-reactivity, conformational epitope overlap, glycosylation effects, or cell-surface accessibility.</td></tr>
-            <tr><td>Family assignment can be imperfect.</td><td>Some proteins have broad, overlapping, or missing family annotations; paralog matrices provide context and require biological review.</td></tr>
+            <tr><td>Family assignment can be imperfect.</td><td>A protein can be assigned a family that is too broad, or none, so its paralog matrix may include distant proteins or miss close ones.</td></tr>
             <tr><td>Ortholog mapping depends on available canonical sequences.</td><td>Missing or predicted RefSeq records can limit mouse or cynomolgus monkey construct transfer.</td></tr>
             <tr><td>Construct heuristics are general-purpose.</td><td>Known biology, literature constructs, ligand-binding requirements, and assay-specific constraints can override automated suggestions.</td></tr>
           </tbody>
@@ -2486,7 +2451,7 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
         <div class="hero-copy">
           <p class="eyebrow">Bench calculator</p>
           <h1>Protein concentration calculator</h1>
-          <p class="hero-text">Enter the protein's molecular weight, then a concentration or amount to convert between mass and moles. Add a value from a second category, such as volume, to calculate the remaining quantities.</p>
+          <p class="hero-text">Enter the protein's molecular weight, then any two of concentration, amount, and volume.</p>
         </div>
         <div class="hero-panel calculator-hero-panel">
           <span>Molecular weight is required.</span>
@@ -2603,7 +2568,6 @@ def render_calculator_page(*, portal_title: str = "OpenAntigens") -> str:
           <dt>Total volume</dt><dd id="factVolume">-</dd>
         </dl>
         <ul class="doc-list calculator-notes">
-          <li>Enter molecular weight first. Use any two categories to solve the full calculation: concentration, amount, or volume.</li>
           <li>Fields you type into are source values. Automatically filled fields use a pale background.</li>
           <li>Changing a unit converts the displayed value so the underlying amount stays constant.</li>
           <li>If you enter both mass and molar values in one category, the latest edit is used. If you supply concentration, amount, and volume, they must agree.</li>
@@ -3127,9 +3091,9 @@ def render_terms_page(*, portal_title: str = "OpenAntigens") -> str:
       <article class="card doc-card">
         <h2>Recommended scholarly citation</h2>
         <p class="paper-citation">{citation_html()}</p>
-        <p>This is a recommended scholarly citation. Data reuse remains governed by the licenses and attribution requirements on this page. See <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> for citation files and release details.</p>
+        <p>Data reuse remains governed by the licenses and attribution requirements on this page. See <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> for citation files and release details.</p>
         <h2>Attribution</h2>
-        <p>Recommended attribution: <em>OpenAntigens, Institute for Protein Innovation, created by Andre A. R. Teixeira</em>. For publications or redistributed datasets, include the portal build date, downloaded artifact name, OpenAntigens version when available, and the relevant source databases.</p>
+        <p>Recommended attribution: <em>OpenAntigens, Institute for Protein Innovation, created by Andre A. R. Teixeira</em>. For publications or redistributed datasets, also name the release (see <a class="inline-link" href="help.html#cite-openantigens">How to cite</a>) and the source databases you used.</p>
       </article>
       <article class="card doc-card">
         <h2>Endorsement</h2>
@@ -3180,7 +3144,7 @@ def render_privacy_page(*, portal_title: str = "OpenAntigens") -> str:
 
     <section class="card doc-card">
       <h2>How measurements are used</h2>
-      <p>We use these measurements to maintain OpenAntigens, decide what to improve, and report aggregate reach and use to current and prospective funders. Counts are approximate and may omit visitors who block analytics. For static TSV and JSON files, analytics record a link click. Custom PDB and PNG events record that the browser initiated an export, while copy events record that the browser reported a successful clipboard write. None of these events shows that the resource was used in an experiment.</p>
+      <p>Counts are approximate and may omit visitors who block analytics. For static TSV and JSON files, analytics record a link click. Custom PDB and PNG events record that the browser initiated an export, while copy events record that the browser reported a successful clipboard write. None of these events shows that the resource was used in an experiment.</p>
     </section>
 
     <section class="card doc-card">

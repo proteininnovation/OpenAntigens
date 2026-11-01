@@ -133,7 +133,7 @@ class MouseMethodsProvenanceTests(unittest.TestCase):
 
     def test_human_methods_is_untouched(self) -> None:
         human = render_methods_page()
-        self.assertIn("The human target universe is sourced from the refined cell-surface", human)
+        self.assertIn("The human target set comes from a cell-surface", human)
         self.assertNotIn("Most included targets are analyzed against reviewed mouse UniProt", human)
 
 
