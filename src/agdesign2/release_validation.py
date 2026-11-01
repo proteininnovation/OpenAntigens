@@ -138,6 +138,10 @@ def _validate_catalog(
     missing_files = [path for path in detail_pages if not (catalog_root / path).is_file()]
     if missing_files:
         raise ValueError(f"{label} catalog is missing {len(missing_files)} rendered detail pages")
+    # A failed PubTator lookup is stored as null and shown as n/a on the browse page.
+    missing_pubtator = sum(row.get("pubtator_count") in (None, "") for row in rows)
+    if missing_pubtator:
+        raise ValueError(f"{label} catalog contains {missing_pubtator} targets without a PubTator count")
     if not metadata_path.is_file():
         raise ValueError(f"{label} portal metadata is missing: {metadata_path}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))

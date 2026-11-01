@@ -36,6 +36,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             "status": "ok",
             "detail_page": "reports/example.html",
             "cross_reactivity_count": 1,
+            "pubtator_count": 1,
             "top_disease_name": "Example disease",
             "disease_count": 1,
             "has_alphafold_structure": 1,
@@ -44,6 +45,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             "status": "ok",
             "detail_page": "reports/example.html",
             "cross_reactivity_count": 1,
+            "pubtator_count": 1,
             "has_alphafold_structure": 1,
         }
         (public_site / "downloads").mkdir()

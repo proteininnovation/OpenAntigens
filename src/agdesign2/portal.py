@@ -12,7 +12,8 @@ import io
 import os
 import re
 import shutil
-from time import perf_counter
+import sys
+from time import perf_counter, sleep
 from html import escape
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ from urllib.parse import quote
 from urllib.request import urlopen
 
 from .cache import FileCache
+from .exceptions import ExternalServiceError
 from .blast import extract_accession, extract_entry_name
 from .af3 import is_af3_artifact
 from .config import AnalysisConfig
@@ -587,45 +589,73 @@ def _write_text_atomic(path: Path, text: str) -> None:
     _atomic_write(path, text.encode("utf-8"))
 
 
-def _get_pubtator_literature_info(gene_symbol: str | None, *, cache_dir: Path) -> dict[str, Any] | None:
+_PUBTATOR_RETRY_DELAYS = (2, 5, 15)  # seconds; a full build makes ~10k sequential requests
+
+
+def _get_pubtator_literature_info(
+    gene_symbol: str | None, *, cache_dir: Path, human: bool = False
+) -> dict[str, Any] | None:
     symbol = str(gene_symbol or "").strip().upper()
     if not symbol:
         return None
     cache_key = (str(cache_dir.resolve()), symbol)
     if cache_key in _PUBTATOR_COUNT_CACHE:
         return _PUBTATOR_COUNT_CACHE[cache_key]
-    query_text = f"@GENE_{symbol}"
-    query_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3/docsum?text={quote(query_text)}"
-    api_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/?text={quote(query_text)}"
+    cache = FileCache(cache_dir.resolve())
+    http = HttpClient(cache=cache, timeout=20)
+    used_symbol = symbol
+    try:
+        count: int | None = _pubtator_search_count(symbol, cache=cache, http=http)
+        # PubTator indexes some renamed human genes under a former symbol
+        # (ACKR5 under GPR182). HGNC previous symbols name the same gene.
+        if count == 0 and human:
+            for previous in _hgnc_previous_symbols(symbol, http=http):
+                previous_count = _pubtator_search_count(previous, cache=cache, http=http)
+                if previous_count > count:
+                    count, used_symbol = previous_count, previous
+    except (ExternalServiceError, OSError, ValueError) as exc:
+        # Left as None so the release gate refuses the build; never shown as 0.
+        print(f"WARNING: PubTator count unavailable for {symbol}: {exc}", file=sys.stderr)
+        count, used_symbol = None, symbol
+    query_text = f"@GENE_{used_symbol}"
     info: dict[str, Any] = {
         "gene_symbol": symbol,
         "query_text": query_text,
-        "query_url": query_url,
-        "count": None,
+        "query_url": f"https://www.ncbi.nlm.nih.gov/research/pubtator3/docsum?text={quote(query_text)}",
+        "count": count,
     }
-    cache = FileCache(cache_dir.resolve())
+    _PUBTATOR_COUNT_CACHE[cache_key] = info
+    return info
+
+
+def _pubtator_search_count(symbol: str, *, cache: FileCache, http: HttpClient) -> int:
+    """PubTator hit count for ``@GENE_<symbol>``; raises once retries are spent."""
+    api_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/?text={quote('@GENE_' + symbol)}"
     cache_path = cache.path_for("pubtator_search", api_url, ".json")
-    http = HttpClient(cache=cache, timeout=20)
-    for attempt in range(2):
+    for delay in (*_PUBTATOR_RETRY_DELAYS, None):
         try:
             payload = http.fetch_json(api_url, cache_namespace="pubtator_search", cache_key=api_url)
             count = _pubtator_payload_count(payload)
             if count is not None:
-                info["count"] = count
-                break
-            if attempt == 0 and cache_path.exists():
-                cache_path.unlink()
-                continue
-        except Exception:
-            if attempt == 0 and cache_path.exists():
-                try:
-                    cache_path.unlink()
-                except OSError:
-                    pass
-                continue
-            break
-    _PUBTATOR_COUNT_CACHE[cache_key] = info
-    return info
+                return count
+            error: Exception = ValueError("response has no count")
+        except (ExternalServiceError, OSError, ValueError) as exc:
+            error = exc
+        # A cached payload without a count would otherwise be re-read forever.
+        cache_path.unlink(missing_ok=True)
+        if delay is None:
+            raise error
+        sleep(delay)
+    raise AssertionError("unreachable")
+
+
+def _hgnc_previous_symbols(symbol: str, *, http: HttpClient) -> list[str]:
+    payload = http.fetch_json(
+        f"https://rest.genenames.org/fetch/symbol/{quote(symbol)}",
+        cache_namespace="hgnc_fetch_symbol",
+    )
+    docs = (payload.get("response") or {}).get("docs") or [] if isinstance(payload, dict) else []
+    return [str(item).upper() for item in (docs[0].get("prev_symbol") or [])] if docs else []
 
 
 def _pubtator_payload_count(payload: Any) -> int | None:
@@ -2114,6 +2144,11 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
         if is_mouse
         else "Human, mouse, and cynomolgus monkey sequence mapping and construct-level identity."
     )
+    pubtator_fallback = (
+        ""
+        if is_mouse
+        else " If a gene's current symbol has no hits, its HGNC previous symbols are tried, and the link searches the symbol that was counted."
+    )
     disease_row = (
         '<tr><td>Disease context</td><td>Open Targets Platform</td><td>Target-disease association scores and disease-aware portal search.</td></tr>'
         if not is_mouse
@@ -2310,7 +2345,7 @@ def render_methods_page(*, portal_title: str = "OpenAntigens") -> str:
     <section class="card doc-card">
       <h2>Disease, literature, and antibody-resource context</h2>
       <p>{disease_methods}</p>
-      <p>PubTator3 is queried for approximate gene-linked PubMed hit counts. The counts help locate literature; they do not grade its quality or validate a target. CiteAb links are provided as external antibody-resource shortcuts; CiteAb catalog content remains external.</p>
+      <p>PubTator3 is queried for approximate gene-linked PubMed hit counts.{pubtator_fallback} The counts help locate literature; they do not grade its quality or validate a target. CiteAb links are provided as external antibody-resource shortcuts; CiteAb catalog content remains external.</p>
     </section>
 
     <section class="card doc-card">
@@ -8500,7 +8535,8 @@ def _build_index_entry(
 
         batch_dir = report_json_path.parent if report_json_path else Path("outputs/surfy_batch")
         cache_dir = _module_refresh_config(batch_dir=batch_dir, verbose=False, enable_complex_portal=False).cache_dir
-        pubtator_info = _get_pubtator_literature_info(inferred_gene_symbol, cache_dir=cache_dir)
+        is_human = str(((report_data or {}).get("target") or {}).get("organism") or "").startswith("Homo sapiens")
+        pubtator_info = _get_pubtator_literature_info(inferred_gene_symbol, cache_dir=cache_dir, human=is_human)
     pubtator_count = _pubtator_count_or_existing(pubtator_info, item)
     if report_data is None:
         entry["detail_page"] = None

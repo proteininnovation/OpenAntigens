@@ -283,7 +283,7 @@ python3 scripts/build_public_release.py \
   --checksums
 ```
 
-Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target. Full releases also require current construct guidance, citation files, and cited report pages in both human and mouse portals.
+Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target. A full release also fails if any single target lacks a PubTator count: lookups retry with backoff, report each failure on stderr, and never record a failure as `0`. For human genes whose current symbol returns no hits, the build tries the HGNC previous symbols (PubTator indexes ACKR5 under GPR182). Full releases also require current construct guidance, citation files, and cited report pages in both human and mouse portals.
 
 Deploy an existing snapshot from the machine that holds it:
 

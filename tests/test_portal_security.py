@@ -68,7 +68,7 @@ class PortalRenderXssTests(unittest.TestCase):
             "status": "ok",
             "query": report["target"].get("gene_symbol"),
         }
-        entry = _build_index_entry(item, report, None)
+        entry = _build_index_entry(item, report, None, fetch_literature=False)
         return render_detail_page(entry, report, batch_dir=batch_dir, sibling_link=None)
 
     def test_no_raw_breakout_in_rendered_page(self) -> None:
