@@ -2379,7 +2379,7 @@ def render_downloads_page(
         eyebrow="Data access",
         heading="Download static release data",
         intro=(
-            "OpenAntigens release snapshots include static flat files for the processed target index, release metadata, and Open Targets disease associations when available."
+            "Download the target index, release metadata and, where included, Open Targets disease associations."
         ),
         portal_title=portal_title,
         body_html=f"""
@@ -2387,7 +2387,7 @@ def render_downloads_page(
       <article class="card doc-card">
         <h2>Release flat files</h2>
       <p>For research use, please cite {citation_short_html()} and record the release used. <a class="inline-link" href="help.html#cite-openantigens">How to cite</a> · {_citation_download_links()}</p>
-        <p>Current index snapshot: {total:,} portal rows, {ok:,} successful reports, {errors:,} error rows.</p>
+        <p>This release: {total:,} targets, {ok:,} with reports, {errors:,} failed.</p>
         <div class="link-group link-group-wrap">
           <a class="button" href="downloads/agdesign2_portal_index.tsv">Download TSV index</a>
           <a class="button" href="downloads/agdesign2_portal_index.json">Download JSON index</a>
@@ -2400,10 +2400,8 @@ def render_downloads_page(
 
     <section class="card doc-card">
       <h2>Download contents</h2>
-      <p>These files contain the current portal index and available release data. Open Targets links appear only when those files are included.</p>
         <ul class="doc-list">
-          <li><code>agdesign2_portal_index.tsv</code> is the compact index for spreadsheet and scripting workflows.</li>
-          <li><code>agdesign2_portal_index.json</code> contains the same compact index as JSON objects.</li>
+          <li><code>agdesign2_portal_index.tsv</code> and <code>agdesign2_portal_index.json</code> hold the same target index.</li>
           <li><code>download_manifest.json</code> describes included release files, formats, source notes, and index columns.</li>
           <li><code>portal_metadata.json</code> records release-level metadata such as build date, row counts, status counts, and topology counts.</li>
           {open_targets_note}
@@ -2411,7 +2409,7 @@ def render_downloads_page(
     </section>
     <section class="card doc-card">
       <h2>TSV schema</h2>
-      <p>The TSV index is compact by design. Use the rendered target pages for construct-level evidence and the release index for programmatic analysis.</p>
+      <p>The index has one row per target and no construct sequences; get those from the report pages.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
@@ -2419,9 +2417,9 @@ def render_downloads_page(
             <tr><td><code>entry_name</code>, <code>gene_symbol</code>, <code>protein_name</code></td><td>Resolved portal target identifiers.</td></tr>
             {mouse_schema_row}
             {disease_schema_row}
-            <tr><td><code>status</code>, <code>error</code></td><td>Batch processing state and failure message when present.</td></tr>
+            <tr><td><code>status</code>, <code>error</code></td><td>Build status and the error message, if any.</td></tr>
             <tr><td><code>topology_bucket</code>, <code>ectodomain</code></td><td>Portal track and mature secreted or extracellular design boundary.</td></tr>
-            <tr><td><code>construct_count</code>, <code>cross_reactivity_count</code></td><td>Number of reported constructs and BLAST hits used in the portal index.</td></tr>
+            <tr><td><code>construct_count</code>, <code>cross_reactivity_count</code></td><td>Number of constructs and BLAST hits in the report.</td></tr>
             <tr><td><code>has_alphafold_structure</code>, <code>has_pdb</code>, <code>has_interpro</code></td><td>Availability flags for major evidence classes.</td></tr>
             <tr><td><code>detail_page</code></td><td>Rendered report page path within the static release.</td></tr>
           </tbody>
@@ -3547,7 +3545,7 @@ def _render_obligatory_partner_warning(requirements: list[dict[str, Any]]) -> st
       <div>
         <p class="warning-kicker" style="margin:0 0 10px;color:#0f7a7f;font-size:0.78rem;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;">Complex-aware design note</p>
         <h2 style="margin:0 0 8px;color:#0b4f5a;">Obligatory protein-complex context</h2>
-        <p style="{paragraph_style}">Curated annotations indicate that the biologically relevant form of this target may be an obligatory protein complex rather than an isolated chain. Treat construct designs as starting points and review literature, structures, and assay goals to decide whether co-expression, partner-chain inclusion, or other complex-preserving strategies are needed.</p>
+        <p style="{paragraph_style}">Curated annotations suggest this protein may need its complex partners. Check whether to co-express them or include partner chains.</p>
         {partner_text}
         {evidence_text}
       </div>
@@ -3641,11 +3639,11 @@ def _render_entry_track(entry: dict[str, Any], report: dict[str, Any] | None = N
         and "multi" not in track.lower()
     ):
         topology_class = str((report.get("topology") or {}).get("topology_class") or "")
-        detail = f"; analysed record: {topology_class}" if topology_class else ""
+        detail = f"; analysed topology: {topology_class.replace('_', '-')}" if topology_class else ""
         return (
             f"<dt>Track</dt><dd>{escape(track)} "
-            f"<span class=\"muted\">(target-universe inclusion rationale{escape(detail)}; "
-            "no extracellular design region was derived for this record)</span></dd>"
+            f"<span class=\"muted\">(listed track{escape(detail)}; "
+            "no extracellular design region found)</span></dd>"
         )
     return f"<dt>Track</dt><dd>{escape(track)}</dd>"
 
@@ -3714,10 +3712,7 @@ def _cysteine_empty_reason(report: dict[str, Any]) -> str:
     """
     topology_class = str((report.get("topology") or {}).get("topology_class") or "")
     if not report.get("ectodomain") and not topology_class.startswith("multipass"):
-        return (
-            "No design region was defined and the target is not multipass, so no "
-            "structure was loaded and no cysteine analysis was run."
-        )
+        return "Not run: this target has no extracellular design region."
     for note in report.get("notes") or []:
         if not isinstance(note, dict):
             continue
@@ -3756,10 +3751,7 @@ def _interpro_empty_reason(report: dict[str, Any]) -> str:
     if _interpro_lookup_failed(report):
         return "The InterPro lookup failed for this report; see Notes."
     if not report.get("ectodomain"):
-        return (
-            "No design region was defined for this target, so no region-restricted "
-            "domain entries could be listed."
-        )
+        return "Not listed: this target has no extracellular design region."
     return (
         "No InterPro domain, repeat or homologous-superfamily entry lies entirely "
         "inside the design region."
@@ -3894,9 +3886,8 @@ def render_detail_page(
             if has_design_region
             else "protein over its full length, "
         )
-        + "aligned positions only. The BLAST, construct and family-context tables on this "
-        "page use different references and denominators, so their numbers are not "
-        "directly comparable."
+        + "aligned positions only. Other tables on this page use different regions and "
+        "denominators, so their identities will differ."
     )
     for item in homology:
         homolog_target = _fetch_homolog_target(item, batch_dir=batch_dir) or {}
@@ -3989,7 +3980,7 @@ def render_detail_page(
     elif not region_blast_ran:
         design_region_cross_html = f"""
       <h3>{escape(design_region_label)} BLAST sequence similarity hits</h3>
-      <p class="section-note">No design region was defined for this target, so no region-restricted BLAST search was run. The full-length search below covers the whole sequence.</p>
+      <p class="section-note">Not run: this target has no extracellular design region. The full-length search below covers the whole sequence.</p>
         """
     else:
         design_region_cross_html = f"""
@@ -4052,9 +4043,8 @@ def render_detail_page(
         "<tr><td colspan=\"4\">No candidate furin-like motif was found in the design "
         "region.</td></tr>"
         if region_blast_ran
-        else "<tr><td colspan=\"4\">No design region was defined, so no furin-like motif "
-        "search was run. The search covers the design region only, never the full "
-        "sequence.</td></tr>"
+        else "<tr><td colspan=\"4\">Not run: this target has no extracellular design region. The motif search never covers the "
+        "full sequence.</td></tr>"
     )
 
     ptm_rows = _render_ptm_rows(ptms, report)
@@ -4101,9 +4091,9 @@ def render_detail_page(
     elif non_obligatory_count:
         assembly_scope_note = (
             '<p class="section-note">'
-            f"{non_obligatory_count} non-obligatory interaction annotation(s) are recorded "
-            "for this target and are not shown here; this section lists obligate assembly "
-            "requirements only.</p>"
+            "This section lists obligate assembly requirements only; "
+            f"{non_obligatory_count} other interaction annotation"
+            f"{' is' if non_obligatory_count == 1 else 's are'} not shown.</p>"
         )
     else:
         assembly_scope_note = (
@@ -4122,7 +4112,11 @@ def render_detail_page(
 
     soluble_construct_summary_rows = _render_precomputed_construct_summary_rows(
         soluble_constructs,
-        empty_message=f"No soluble {design_region_lower} constructs.",
+        empty_message=(
+            f"No soluble {design_region_lower} constructs."
+            if has_design_region
+            else "No soluble constructs: this target has no extracellular design region."
+        ),
         allow_structure_actions=has_interactive_structure,
     )
     membrane_construct_summary_rows = _render_precomputed_construct_summary_rows(
@@ -4202,6 +4196,7 @@ def render_detail_page(
         f"""
     <section class="card" id="membrane-engineering" data-report-section="Membrane Engineering">
       <h2>Membrane Engineering Test Variants</h2>
+      <p class="section-note">Advisory suggestions, kept apart from the native construct tables. Loop engineering can change signaling and G-protein coupling.</p>
       {advanced_membrane_html}
     </section>
 """
@@ -4211,9 +4206,11 @@ def render_detail_page(
     gpcr_engineering_html = _render_gpcr_engineering_variants_section(gpcr_engineering_variants)
     gpcr_annotation_html = _render_gpcr_annotation_section(gpcr_annotation)
 
+    # INFO notes are build-log lines ("loaded from precomputed table"); readers see warnings only.
     note_items = "".join(
         f"<li><strong>{escape(str(note.get('severity') or '').upper())}</strong>: {escape(str(note.get('message') or ''))}</li>"
         for note in notes
+        if str(note.get("severity") or "").lower() != "info"
     ) or "<li>No notes.</li>"
 
     json_link = _relative_link(report_json_path, page_dir) if report_json_path else None
@@ -4330,7 +4327,7 @@ def render_detail_page(
 
     <section class="card" id="construct-summary" data-report-section="Construct Summary">
       <h2>Precomputed Construct Summary</h2>
-      <p class="section-note">These are algorithm-generated starting points. {construct_summary_note}Detailed construct evidence, warnings, ortholog sequences, copy-ready exports, and images are provided in the <a class="inline-link" href="#construct-details">Construct Details</a> section at the end of this page.</p>
+      <p class="section-note">{construct_summary_note}Evidence, warnings and exports for each construct are in the <a class="inline-link" href="#construct-details">Construct Details</a> section below.</p>
       <h3>{escape(soluble_construct_label)}</h3>
       <table>
         <thead><tr><th>Construct</th><th>Group</th><th>Boundary</th><th>Length</th><th>Support</th><th>Action</th></tr></thead>
@@ -4378,7 +4375,7 @@ def render_detail_page(
 
     <section class="card" id="post-translational-modifications" data-report-section="Post-translational Modifications">
       <h2>Post-translational Modifications</h2>
-      <p class="section-note">Curated UniProt PTM and molecule-processing annotations. Processing and cleavage annotations should be reviewed before finalizing construct boundaries.</p>
+      <p class="section-note">Curated UniProt PTM and processing annotations. Cleavage and processing sites can move the mature protein's ends.</p>
       <div class="table-scroll">
         <table>
           <thead><tr><th>Start</th><th>End</th><th>Type</th><th>Category</th><th>Description</th><th>Warning</th></tr></thead>
@@ -4437,7 +4434,7 @@ def _render_complex_portal_context(complexes: list[dict[str, Any]], lookup: Any)
         "no_hits": "<p class=\"section-note\">No curated human Complex Portal records matched this target.</p>",
         "error": "<p class=\"section-note\">The human Complex Portal lookup failed for this release.</p>",
         "disabled": "<p class=\"section-note\">Complex Portal lookup was disabled for this release.</p>",
-        "not_recorded": "<p class=\"section-note\">Complex Portal lookup was not recorded for this report.</p>",
+        "not_recorded": "<p class=\"section-note\">Complex Portal was not checked for this target.</p>",
     }.get(human_status, "")
     if not complexes:
         return status_html or "<p class=\"section-note\">No curated Complex Portal records were returned.</p>"
@@ -4817,7 +4814,7 @@ def _render_construct_card(
         elif record.get("available"):
             reason = "The ortholog sequence could not be loaded for this build."
         else:
-            reason = "; ".join(str(note) for note in (record.get("notes") or []) if str(note).strip()) or "No ortholog was found."
+            reason = " ".join(str(note) for note in (record.get("notes") or []) if str(note).strip()) or "No ortholog was found."
         accession = str(record.get("accession") or "")
         unavailable_rows.append(_unavailable(species, reason, accession, str(record.get("entry_name") or accession)))
     sequence_rows_html = "".join(
@@ -5674,7 +5671,7 @@ def _render_gpcr_annotation_section(annotation: dict[str, Any] | None) -> str:
     return f"""
     <section class="card" id="gpcr-annotation" data-report-section="GPCR Annotation">
       <h2>GPCR Annotation</h2>
-      <p class="section-note">GPCRdb annotations provide receptor-specific segment names and generic numbering. These annotations improve interpretation of membrane constructs but do not imply expression success.</p>
+      <p class="section-note">GPCRdb annotations provide receptor-specific segment names and generic numbering.</p>
       {warning_html}
       <div class="grid two">
         <div>
@@ -5811,8 +5808,8 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
       intracellular loop would place the cassette outside the published ICL3-fusion window, or would
       cut through an annotation this page also carries:</p>
       <ul>{reason_items}</ul>
-      <p class="section-note">This is the absence of a recommendation, not a prediction that a fusion
-      construct would fail. Screen the native full-length and trimmed membrane constructs instead.</p>
+      <p class="section-note">That does not mean a fusion would fail. Screen the native full-length and
+      trimmed membrane constructs instead.</p>
     </section>
     """
     rows: list[str] = []
@@ -5861,7 +5858,7 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
         tag_suggestions = variant.get("tag_suggestions") or {}
         tag_items = []
         for label, values in tag_suggestions.items():
-            joined = "; ".join(str(item) for item in values) if isinstance(values, list) else str(values)
+            joined = " ".join(str(item) for item in values) if isinstance(values, list) else str(values)
             if joined:
                 tag_items.append(f"<li><strong>{escape(str(label).replace('_', ' ').title())}:</strong> {escape(joined)}</li>")
         tags_html = "".join(tag_items) or "<li>No tag metadata.</li>"
@@ -5904,7 +5901,7 @@ def _render_gpcr_engineering_variants_section(variants: list[dict[str, Any]]) ->
     return f"""
     <section class="card" id="gpcr-engineering" data-report-section="GPCR Engineering">
       <h2>GPCR Expression and Stabilization Strategy</h2>
-      <p class="section-note">These are experimental GPCR expression/stability strategies for antibody-discovery workflows. They are intentionally separated from native OpenAntigens construct recommendations because loop fusions and partner cassettes can change receptor conformation, signaling state, trafficking, and epitope presentation.</p>
+      <p class="section-note">Engineered variants for expression or stability. They are kept apart from the native constructs because loop fusions and partner cassettes can change receptor conformation, signaling, trafficking, and epitopes.</p>
       <h3>Experimental GPCR Engineering Variants</h3>
       <div class="table-scroll">
         <table>

@@ -156,7 +156,7 @@ def _validate_catalog(
     missing_citation = 0
     for path in detail_pages:
         report_html = (catalog_root / path).read_bytes()
-        missing_complex_portal += b"Complex Portal lookup was not recorded" in report_html
+        missing_complex_portal += b"Complex Portal was not checked for this target" in report_html
         failed_complex_portal += b"Complex Portal lookup failed" in report_html
         missing_citation += doi.encode() not in report_html
     if missing_complex_portal:

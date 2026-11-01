@@ -851,7 +851,7 @@ class PortalFeatureOverlapTests(unittest.TestCase):
         self.assertIn("Complex-aware design note", warning)
         self.assertIn("Obligatory protein-complex context", warning)
         self.assertIn("ITGB1, ITGB3", warning)
-        self.assertIn("co-expression", warning)
+        self.assertIn("co-express them", warning)
 
     def test_disulfide_overlap_uses_bond_endpoints_not_full_span(self) -> None:
         features = [
@@ -1870,7 +1870,7 @@ class BatchTests(unittest.TestCase):
         self.assertIn("Test BRIL insertion.", detail_html)
         self.assertNotIn("Can heterodimerize with ERBB2.", detail_html)
         self.assertIn("Precomputed Construct Summary", detail_html)
-        self.assertIn("Detailed construct evidence", detail_html)
+        self.assertIn("Evidence, warnings and exports for each construct", detail_html)
         self.assertIn("#construct-details", detail_html)
         self.assertIn("<th>Action</th>", detail_html)
         self.assertIn("Soluble Extracellular-region Constructs", detail_html)
@@ -1931,8 +1931,8 @@ class BatchTests(unittest.TestCase):
         self.assertNotIn("The output is intended to support", methods_html)
         self.assertNotIn("Exact duplicate PDB boundaries", methods_html)
         self.assertIn("Download static release data", downloads_html)
-        self.assertIn("OpenAntigens release snapshots include static flat files", downloads_html)
-        self.assertIn("Open Targets links appear only when those files are included", downloads_html)
+        self.assertIn("Download the target index, release metadata", downloads_html)
+        self.assertIn("where included, Open Targets disease associations", downloads_html)
         self.assertIn("mouse_ortholog_*", downloads_html)
         self.assertIn("human_source_*", downloads_html)
         self.assertIn("Open Targets TSV/JSON files contain downloaded indirect and direct target-disease association scores", downloads_html)

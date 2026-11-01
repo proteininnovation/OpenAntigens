@@ -259,7 +259,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
         (snapshot / "public_site/reports/example.html").write_text(
-            "Complex Portal lookup was not recorded", encoding="utf-8"
+            "Complex Portal was not checked for this target", encoding="utf-8"
         )
 
         result = self._run(snapshot, env)
