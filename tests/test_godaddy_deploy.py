@@ -24,7 +24,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         snapshot = root / "snapshot"
         public_site = snapshot / "public_site"
         public_site.mkdir(parents=True)
-        doi = "10.64898/2026.07.30.741735"
+        doi = "10.1093/nar/gkag1051"
         (public_site / "index.html").write_text(
             '<link rel="stylesheet" href="portal.css?v=test">\n'
             '<script src="portal-index-data.js?v=test"></script>\n'
@@ -36,6 +36,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             "status": "ok",
             "detail_page": "reports/example.html",
             "cross_reactivity_count": 1,
+            "pubtator_count": 1,
             "top_disease_name": "Example disease",
             "disease_count": 1,
             "has_alphafold_structure": 1,
@@ -44,6 +45,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
             "status": "ok",
             "detail_page": "reports/example.html",
             "cross_reactivity_count": 1,
+            "pubtator_count": 1,
             "has_alphafold_structure": 1,
         }
         (public_site / "downloads").mkdir()
@@ -259,7 +261,7 @@ class GoDaddyDeployScriptTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         env.update({"COMPRESS": "0", "PURGE_SUCURI": "0"})
         (snapshot / "public_site/reports/example.html").write_text(
-            "Complex Portal lookup was not recorded", encoding="utf-8"
+            "Complex Portal was not checked for this target", encoding="utf-8"
         )
 
         result = self._run(snapshot, env)

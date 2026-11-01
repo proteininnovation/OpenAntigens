@@ -45,9 +45,9 @@ class ConstructGuidanceTests(unittest.TestCase):
             self.assertNotIn("Tegel", after_export)
             self.assertNotIn("https://info.addgene.org/plasmids-101-topic-page", after_export)
             self.assertIn("For an exposed unpaired cysteine", page)
-            self.assertIn("Furin-like motifs warrant particular attention", page)
+            self.assertIn("furin can cleave at these motifs", page)
         self.assertIn("without partner chains", render_methods_page())
-        self.assertIn("Other free-text interaction rows are not shown", render_methods_page())
+        self.assertIn("Obligatory-partner warnings come from curated Complex Portal records", render_methods_page())
 
     def test_help_link_and_guide_across_serving_modes_and_mouse_theme(self):
         with tempfile.TemporaryDirectory() as tmp:

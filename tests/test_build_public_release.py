@@ -36,7 +36,7 @@ def _write_minimal_portal(portal_dir: Path) -> None:
 
 class PublicReleaseTests(unittest.TestCase):
     def test_release_rejects_missing_or_stale_site_guidance(self) -> None:
-        doi = "10.64898/2026.07.30.741735"
+        doi = "10.1093/nar/gkag1051"
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             for name in (*REQUIRED_SITE_PAGES, *REQUIRED_SITE_DOCS):

@@ -83,7 +83,7 @@ class BlastEmptyStateTests(unittest.TestCase):
                 ]
                 html = _render(report, title)
                 self.assertNotIn("The completed BLAST search returned no sequence similarity hits.", html)
-                self.assertIn("no region-restricted BLAST search was run", html)
+                self.assertIn("Not run: this target has no extracellular design region. The full-length search", html)
                 # The sidebar card must count — and name — the search that ran.
                 self.assertIn("<dt>Full-length BLAST sequence similarity hits</dt><dd>3</dd>", html)
 
@@ -161,7 +161,7 @@ class InterProEmptyStateTests(unittest.TestCase):
                 report["canonical_family"] = {"accession": "IPR005461", "name": "A family"}
                 html = _render(report, title)
                 self.assertNotIn("No InterPro annotations.", html)
-                self.assertIn("no region-restricted domain entries could be listed", html)
+                self.assertIn("Not listed: this target has no extracellular design region.", html)
 
     def test_failed_lookup_says_so(self) -> None:
         for title in PORTAL_TITLES:
@@ -240,7 +240,7 @@ class AssemblyEmptyStateTests(unittest.TestCase):
                      "confidence": "medium", "summary": "Heterodimer with Y", "partners": ["Y"]},
                 ]
                 html = _render(report, title)
-                self.assertIn("2 non-obligatory interaction annotation(s) are recorded", html)
+                self.assertIn("2 other interaction annotations are not shown", html)
                 self.assertNotIn("only evaluated for canonical integrin chains", html)
 
     def test_mouse_says_complex_portal_was_not_queried(self) -> None:
@@ -264,7 +264,7 @@ class CysteineEmptyStateTests(unittest.TestCase):
                 report["cysteine_analysis"] = []
                 html = _render(report, title)
                 self.assertNotIn("No cysteine analysis available.", html)
-                self.assertIn("no structure was loaded and no cysteine analysis was run", html)
+                self.assertIn('<td colspan="5">Not run: this target has no extracellular design region.</td>', html)
 
     def test_region_present_says_the_region_has_no_cysteines(self) -> None:
         for title in PORTAL_TITLES:
@@ -329,7 +329,7 @@ class FurinEmptyStateTests(unittest.TestCase):
                 report["furin_sites"] = []
                 html = _render(report, title)
                 self.assertNotIn("No candidate furin-like motifs found", html)
-                self.assertIn("no furin-like motif search was run", html)
+                self.assertIn("The motif search never covers the full sequence", html)
 
     def test_design_region_names_the_region_not_the_sequence(self) -> None:
         for title in PORTAL_TITLES:

@@ -1,4 +1,4 @@
-"""Shared preprint citation and agent documentation for every portal backend."""
+"""Shared paper citation and agent documentation for every portal backend."""
 from __future__ import annotations
 
 from html import escape
@@ -15,7 +15,7 @@ def citation_text() -> str:
         a["family"] + " " + "".join(part[0] for part in a["given"].split())
         for a in PAPER["authors"]
     )
-    return f'{authors}. {PAPER["title"]}. {PAPER["journal"]} [preprint]. {PAPER["date"][:4]}. {DOI_URL}'
+    return f'{authors}. {PAPER["title"]}. {PAPER["journal"]}. {PAPER["date"][:4]}. {DOI_URL}'
 
 
 def citation_html() -> str:
@@ -40,8 +40,7 @@ def citation_downloads() -> dict[str, str]:
         f'  journal = {{{PAPER["journal"]}}},\n'
         f'  year = {{{PAPER["date"][:4]}}},\n'
         f'  doi = {{{PAPER["doi"]}}},\n'
-        f'  url = {{{DOI_URL}}},\n'
-        f'  note = {{Preprint, version {PAPER["version"]}; posted {PAPER["date"]}}}\n'
+        f'  url = {{{DOI_URL}}}\n'
         "}\n"
     )
     ris = "\n".join([
@@ -50,7 +49,7 @@ def citation_downloads() -> dict[str, str]:
         f'TI  - {PAPER["title"]}', f'JO  - {PAPER["journal"]}',
         f'PY  - {PAPER["date"][:4]}', f'DA  - {PAPER["date"].replace("-", "/")}',
         f'DO  - {PAPER["doi"]}', f'UR  - {DOI_URL}',
-        f'N1  - Preprint, version {PAPER["version"]}; not peer reviewed.', "ER  -", "",
+        "ER  -", "",
     ])
     return {"openantigens.bib": bib, "openantigens.ris": ris}
 
@@ -68,7 +67,7 @@ def citation_cff() -> str:
     return f"""cff-version: 1.2.0
 type: software
 title: OpenAntigens
-message: "If you use OpenAntigens in research, please cite the preprint below and record the release used."
+message: "If you use OpenAntigens in research, please cite the paper below and record the release used."
 authors:
 {authors_yaml(PAPER['authors'][:1], 2)}
 url: https://openantigens.org/
@@ -84,7 +83,6 @@ preferred-citation:
   date-released: {PAPER['date']}
   doi: {PAPER['doi']}
   url: {DOI_URL}
-  notes: "Preprint, version {PAPER['version']}; not peer reviewed."
 """
 
 

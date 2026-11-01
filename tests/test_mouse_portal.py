@@ -354,7 +354,7 @@ class MousePortalTests(unittest.TestCase):
             self.assertNotIn("Top disease", index_html)
             self.assertNotIn("Open Targets Disease Associations", detail_html)
             self.assertIn("EGFR_MOUSE_1-8", detail_html)
-            self.assertIn("structure-aware construct pipeline", detail_html)
+            self.assertNotIn("<strong>INFO</strong>", detail_html)
             self.assertIn("The completed BLAST search returned no sequence similarity hits.", detail_html)
             self.assertNotIn("Showing 0 hit(s)", detail_html)
             self.assertNotIn("View in 3D", detail_html)

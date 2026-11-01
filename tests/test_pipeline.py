@@ -29,7 +29,7 @@ from agdesign2.models import (
     Region,
     TargetRecord,
 )
-from agdesign2.pipeline import AntigenAnalyzer
+from agdesign2.pipeline import AntigenAnalyzer, _excluded_ptm_warning
 from agdesign2.refseq import RefSeqProtein
 from agdesign2.structure_utils import parse_alphafold_pdb
 from agdesign2.topology import derive_ectodomain
@@ -251,6 +251,18 @@ class ConstructPtmOverlapTests(unittest.TestCase):
 
         self.assertEqual([feature.type for feature in details[0].ptms], ["CARBOHYD"])
         self.assertEqual([feature.type for feature in details[1].ptms], ["DISULFID", "CARBOHYD"])
+
+    def test_excluded_ptm_warning_names_sites_and_caps_the_list(self) -> None:
+        features = [
+            Feature(type="DISULFID", start=264, end=329, description=""),
+            Feature(type="CARBOHYD", start=306, end=306, description="N-linked glycosylation"),
+        ]
+        self.assertEqual(
+            _excluded_ptm_warning(features),
+            "Trimming removes annotated PTM sites: DISULFID 264-329; N-linked glycosylation 306.",
+        )
+        many = [Feature(type="MOD_RES", start=i, end=i, description="Phosphoserine") for i in range(1, 8)]
+        self.assertTrue(_excluded_ptm_warning(many).endswith("Phosphoserine 5; +2 more."))
 
 
 class FakeRefSeqClient:
