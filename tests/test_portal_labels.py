@@ -135,7 +135,7 @@ class DesignRegionLabelTests(unittest.TestCase):
                 self.assertNotIn("<h2>Extracellular Region</h2>", html)
                 self.assertNotIn("Soluble Extracellular-region Constructs", html)
                 # The Track row must say the bucket is the catalogue's.
-                self.assertIn("target-universe inclusion rationale", html)
+                self.assertIn("(listed track", html)
                 self.assertIn("Single-pass", html)
 
 
@@ -267,7 +267,7 @@ class HomologyCellTests(unittest.TestCase):
             with self.subTest(portal_title=title):
                 html = _render(_report("itb5_human"), title)
                 self.assertIn("Identity to this human protein", html)
-                self.assertIn("their numbers are not directly comparable", html)
+                self.assertIn("so their identities will differ", html)
 
     def test_no_region_means_no_accessible_identity(self) -> None:
         # F24: the value is meaningless where the page says there is no region.

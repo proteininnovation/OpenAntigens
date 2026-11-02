@@ -1,4 +1,4 @@
-"""Shared preprint citation and agent documentation for every portal backend."""
+"""Shared paper citation and agent documentation for every portal backend."""
 from __future__ import annotations
 
 from html import escape
@@ -15,7 +15,7 @@ def citation_text() -> str:
         a["family"] + " " + "".join(part[0] for part in a["given"].split())
         for a in PAPER["authors"]
     )
-    return f'{authors}. {PAPER["title"]}. {PAPER["journal"]} [preprint]. {PAPER["date"][:4]}. {DOI_URL}'
+    return f'{authors}. {PAPER["title"]}. {PAPER["journal"]}. {PAPER["date"][:4]}. {DOI_URL}'
 
 
 def citation_html() -> str:
@@ -42,8 +42,7 @@ def citation_downloads(paper: dict | None = None) -> dict[str, str]:
         f'  journal = {{{paper["journal"]}}},\n'
         f'  year = {{{paper["date"][:4]}}},\n'
         f'  doi = {{{paper["doi"]}}},\n'
-        f'  url = {{{doi_url}}},\n'
-        f'  note = {{Preprint, version {paper["version"]}; posted {paper["date"]}}}\n'
+        f'  url = {{{doi_url}}}\n'
         "}\n"
     )
     ris = "\n".join([
@@ -52,7 +51,7 @@ def citation_downloads(paper: dict | None = None) -> dict[str, str]:
         f'TI  - {paper["title"]}', f'JO  - {paper["journal"]}',
         f'PY  - {paper["date"][:4]}', f'DA  - {paper["date"].replace("-", "/")}',
         f'DO  - {paper["doi"]}', f'UR  - {doi_url}',
-        f'N1  - Preprint, version {paper["version"]}; not peer reviewed.', "ER  -", "",
+        "ER  -", "",
     ])
     return {"openantigens.bib": bib, "openantigens.ris": ris}
 
@@ -70,7 +69,7 @@ def citation_cff() -> str:
     return f"""cff-version: 1.2.0
 type: software
 title: OpenAntigens
-message: "If you use OpenAntigens in research, please cite the preprint below and record the release used."
+message: "If you use OpenAntigens in research, please cite the paper below and record the release used."
 authors:
 {authors_yaml(PAPER['authors'][:1], 2)}
 url: https://openantigens.org/
@@ -86,7 +85,6 @@ preferred-citation:
   date-released: {PAPER['date']}
   doi: {PAPER['doi']}
   url: {DOI_URL}
-  notes: "Preprint, version {PAPER['version']}; not peer reviewed."
 """
 
 

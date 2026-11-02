@@ -287,7 +287,7 @@ python3 scripts/build_public_release.py \
   --checksums
 ```
 
-Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target. Full releases also require current construct guidance, citation files, and cited report pages in both human and mouse portals.
+Release validation rejects index data with no populated PubTator links, so an offline render must use cached literature metadata rather than silently publishing `n/a` for every target. A full release also fails if any single target lacks a PubTator count: lookups retry with backoff, report each failure on stderr, and never record a failure as `0`. For human genes whose current symbol returns no hits, the build tries the HGNC previous symbols (PubTator indexes ACKR5 under GPR182). Full releases also require current construct guidance, citation files, and cited report pages in both human and mouse portals.
 
 Deploy an existing snapshot from the machine that holds it:
 
@@ -393,9 +393,9 @@ or:
 
 If you use OpenAntigens in research, please cite:
 
-> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. bioRxiv [preprint]. 2026. https://doi.org/10.64898/2026.07.30.741735
+> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. Nucleic Acids Research. 2026. https://doi.org/10.1093/nar/gkag1051
 
-This is a preprint, version 1, posted August 4, 2026. Record the portal build date, software version, report or artifact URL, and access date. See [How to cite](https://openantigens.org/help.html#cite-openantigens) for BibTeX and RIS downloads and [CITATION.cff](CITATION.cff) for repository citation metadata. Source-database citation and attribution requirements still apply.
+Record the portal build date, software version, report or artifact URL, and access date. See [How to cite](https://openantigens.org/help.html#cite-openantigens) for BibTeX and RIS downloads and [CITATION.cff](CITATION.cff) for repository citation metadata. Source-database citation and attribution requirements still apply.
 
 The portal includes an [agent guide](https://openantigens.org/agent-guide.html) and [/llms.txt](https://openantigens.org/llms.txt) for search, interpretation, and provenance. Their source is `src/agdesign2/data/agent_guide.md`; citation metadata lives in `src/agdesign2/data/openantigens_citation.json`. After changing either, run `PYTHONPATH=src .venv/bin/python -m agdesign2.site_docs` to refresh the tracked `llms.txt` and `CITATION.cff`. Portal builds render the same sources automatically.
 

@@ -15,7 +15,7 @@ from scripts.build_public_release import copy_public_portal, render_release_read
 from tests.test_portal_db import _write_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
-DOI = "10.64898/2026.07.30.741735"
+DOI = "10.1093/nar/gkag1051"
 
 
 class SiteDocumentationTests(unittest.TestCase):
@@ -33,7 +33,7 @@ class SiteDocumentationTests(unittest.TestCase):
 
     def test_verified_reference_and_repository_copies(self):
         self.assertEqual(PAPER["doi"], DOI)
-        self.assertEqual(PAPER["date"], "2026-08-04")
+        self.assertEqual(PAPER["date"], "2026-10-29")
         self.assertEqual([a["family"] for a in PAPER["authors"]], ["Teixeira", "Zhu", "Kothiwal", "Cao", "Mills"])
         self.assertEqual((ROOT / "llms.txt").read_text(), agent_guide_markdown())
         self.assertNotIn("{{citation}}", agent_guide_markdown())
@@ -45,7 +45,8 @@ class SiteDocumentationTests(unittest.TestCase):
         for content in citation_downloads().values():
             self.assertIn(DOI, content)
             self.assertIn(PAPER["title"], content)
-            self.assertIn("Preprint", content)
+            self.assertIn("Nucleic Acids Research", content)
+            self.assertNotIn("Preprint", content)
 
     def test_static_and_live_routes_include_the_same_documents(self):
         with tempfile.TemporaryDirectory() as tmp:

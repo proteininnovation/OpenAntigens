@@ -18,7 +18,7 @@ Recommended attribution:
 
 If you use OpenAntigens in research, please cite:
 
-> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. bioRxiv [preprint]. 2026. https://doi.org/10.64898/2026.07.30.741735
+> Teixeira AAR, Zhu H, Kothiwal D, Cao R, Mills A. OpenAntigens: a structure-aware database for antigen construct design across the human cell-surface and secreted proteome. Nucleic Acids Research. 2026. https://doi.org/10.1093/nar/gkag1051
 
 Record the portal build date, software version, artifact URL, and access date. This scholarly citation is recommended; the licenses and attribution requirements described above remain unchanged.
 

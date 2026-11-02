@@ -184,6 +184,16 @@ def _construct_name_from_feature(feature: Feature) -> str:
     return f"{base}_{feature.start}_{feature.end}"
 
 
+def _excluded_ptm_warning(features: list[Feature]) -> str:
+    sites = [
+        f"{feature.description or feature.type} {feature.start}"
+        + (f"-{feature.end}" if feature.end != feature.start else "")
+        for feature in features
+    ]
+    shown = "; ".join(sites[:5]) + (f"; +{len(sites) - 5} more" if len(sites) > 5 else "")
+    return f"Trimming removes annotated PTM sites: {shown}."
+
+
 def _curated_disulfides(features: list[Feature]) -> list[Feature]:
     return [feature for feature in features if str(feature.type or "").upper() == "DISULFID"]
 
@@ -364,7 +374,7 @@ class AntigenAnalyzer:
             notes.append(
                 AnalysisNote(
                     severity="warning",
-                    message=f"InterPro/Pfam annotation lookup failed: {exc}",
+                    message=f"InterPro/Pfam annotation lookup failed during the build; domain annotations are missing ({type(exc).__name__}).",
                     source="InterPro",
                 )
             )
@@ -585,7 +595,7 @@ class AntigenAnalyzer:
             notes.append(
                 AnalysisNote(
                     severity="warning",
-                    message="Skipping structure-driven analyses because the ectodomain could not be determined.",
+                    message="No extracellular region was found, so structure-based analyses were skipped.",
                     source="pipeline",
                 )
                 )
@@ -2808,9 +2818,7 @@ class AntigenAnalyzer:
                 if feature.start <= sequence_length and feature.end >= removed_start
             ]
             if excluded_ptms:
-                warnings.append(
-                    f"Trimmed region excludes {len(excluded_ptms)} PTM annotation(s); review trafficking/regulatory biology."
-                )
+                warnings.append(_excluded_ptm_warning(excluded_ptms))
             variants.append(
                 ConstructSuggestion(
                     name=f"membrane_expression_gpcr_c_tail_keep_{int(buffer_size)}",
@@ -2966,7 +2974,8 @@ class AntigenAnalyzer:
             interpro_annotations=interpro_annotations,
             ligand_interactions=ligand_interactions,
         )
-        ptm_count = sum(1 for feature in ptms if self._feature_overlaps_construct(feature, removed_start, removed_end))
+        excluded_ptms = [feature for feature in ptms if self._feature_overlaps_construct(feature, removed_start, removed_end)]
+        ptm_count = len(excluded_ptms)
         if side == "N-terminal" and ptm_count >= 3:
             protected.append(f"PTM-rich N-terminal region ({ptm_count} PTM annotation(s)).")
         if protected:
@@ -3010,7 +3019,7 @@ class AntigenAnalyzer:
             evidence.append("Trimmed by topology/length heuristic because residue-level pLDDT was unavailable.")
         warnings = []
         if ptm_count:
-            warnings.append(f"Trimmed region excludes {ptm_count} PTM annotation(s); review regulatory biology.")
+            warnings.append(_excluded_ptm_warning(excluded_ptms))
         return _TerminalTrimDecision(
             enabled=True,
             start=start,
@@ -3132,14 +3141,12 @@ class AntigenAnalyzer:
                     ),
                     rationale=[
                         f"Topology contains {tm_count} transmembrane helices.",
-                        "7TM receptors often benefit from separate native-like and expression-engineered construct screens.",
                     ],
                     suggested_actions=[
                         "Test the native full-length membrane construct alongside the trimmed membrane construct as the baseline pair.",
                         "Preserve the full 7TM core and a short juxtamembrane segment after the terminal helix before attempting more aggressive edits.",
                     ],
                     evidence=gpcr_evidence + [f"Topology-derived membrane core: {topology.membrane_core_region.start}-{topology.membrane_core_region.end}"],
-                    warnings=["Advisory only; not part of the main native construct set."],
                     start=topology.membrane_core_region.start,
                     end=topology.membrane_core_region.end,
                 )
@@ -3171,7 +3178,7 @@ class AntigenAnalyzer:
                     MembraneEngineeringSuggestion(
                         category="gpcr_loop_engineering",
                         title="ICL-focused loop engineering screen",
-                        summary="Consider an engineering series centered on the longest internal cytoplasmic loop.",
+                        summary="Try engineering the longest intracellular loop.",
                         rationale=[
                             f"Longest internal cytoplasmic loop spans {longest_loop.start}-{longest_loop.end} ({loop_length} aa).",
                             "This topology-derived loop is a candidate insertion or truncation site for experimental testing.",
@@ -3181,10 +3188,6 @@ class AntigenAnalyzer:
                             f"Create a fusion-insertion variant placing BRIL or T4 lysozyme into loop {longest_loop.start}-{longest_loop.end} rather than altering the main membrane core.",
                         ],
                         evidence=["Topology-derived internal cytoplasmic loop."],
-                        warnings=[
-                            "Advisory only; foreign-fusion constructs are not represented in the main construct tables.",
-                            "Loop engineering may alter signaling or G-protein coupling and should be interpreted as an expression/stability optimization path.",
-                        ],
                         start=longest_loop.start,
                         end=longest_loop.end,
                     )
@@ -3390,16 +3393,13 @@ class AntigenAnalyzer:
                         suggested_actions=[
                             "Treat as an expression/stability rescue construct, not as the primary antigen construct.",
                             "Compare against native full-length and terminal-trimmed membrane-expression constructs.",
-                            "Validate ligand binding and cell-surface expression before antibody-campaign use.",
                         ],
                         evidence=[
                             f"{loop_source}: {loop.start}-{loop.end} ({loop_length} aa).",
                             f"Cassette registry: {cassette.name}; {cassette.version}; {cassette.source_note}",
                         ],
                         warnings=[
-                            "Experimental GPCR engineering variant; may alter receptor conformational ensemble.",
                             f"Receptor residues {replaced_start}-{replaced_end} are replaced by a foreign cassette.",
-                            "Intracellular loop fusions can alter G-protein/effector coupling and receptor-state preference.",
                         ],
                     )
                 )
