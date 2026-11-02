@@ -61,6 +61,14 @@ def build(root):
     summary.write_text(json.dumps([{'query': 'TEST_HUMAN', 'status': 'ok', 'json_report': str(batch / 'test_human_report.json')}]))
     build_portal(summary, output_dir=root / 'no-structure-site', refresh_stale_reports=False, fetch_literature=False)
 
+    # Use the real mouse render path and its own frozen reports for guide parity.
+    build_portal(
+        Path(__file__).parent / 'golden/fixtures/mouse/batch_summary.json',
+        output_dir=root / 'mouse-site', portal_title='OpenAntigens Mouse', theme='mouse',
+        refresh_reports=False, refresh_stale_reports=False, fetch_literature=False,
+        include_disease_context=False, bundle_vendor_assets=False,
+    )
+
 
 if __name__ == '__main__':
     build(Path(sys.argv[1]).resolve())

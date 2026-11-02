@@ -15,6 +15,7 @@ dist/
 .venv*/
 .env
 .env.*
+node_modules/
 
 # macOS / editor files
 .DS_Store

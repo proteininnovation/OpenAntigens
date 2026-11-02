@@ -15,6 +15,7 @@ Options:
   --existing-snapshot DIR   Publish an existing snapshot directory and skip build
   --skip-build              Publish snapshots/<snapshot-name>/public_site without building
   --dry-run                 Print and dry-run rsync; do not build or publish
+  --api-artifact-record FILE Authorize immutable query assets/exports from the reviewed app ZIP record
   -h, --help                Show this help
 
 Environment:
@@ -31,6 +32,8 @@ Environment:
                             quota-safe; .ftpquota + .well-known/ are always
                             excluded so the mirror can't wipe host-managed files),
                             0 keeps remote extras. Default: 1
+                            api-runtime/ and data/releases/ are always protected;
+                            only reviewed catalog files transfer additively.
   COMPRESS                  1 gzips public_site assets on disk + drops dead weight
                             (structures/, redundant OT JSON) before publishing to
                             fit the host disk quota, 0 skips. Idempotent. Default: 1
@@ -63,6 +66,7 @@ SNAPSHOT_NAME="${SNAPSHOT_NAME:-openantigen-$(date +%Y-%m-%d)}"
 EXISTING_SNAPSHOT=""
 SKIP_BUILD=0
 DRY_RUN=0
+API_ARTIFACT_RECORD=""
 BUILD_ARGS=()
 
 while [[ "$#" -gt 0 ]]; do
@@ -99,6 +103,14 @@ while [[ "$#" -gt 0 ]]; do
     --dry-run)
       DRY_RUN=1
       shift
+      ;;
+    --api-artifact-record)
+      if [[ "$#" -lt 2 ]]; then
+        echo "ERROR: --api-artifact-record requires a file." >&2
+        exit 2
+      fi
+      API_ARTIFACT_RECORD="$2"
+      shift 2
       ;;
     -h|--help)
       usage
@@ -353,6 +365,11 @@ verify_live_site() {
 
 require_command rsync
 require_command ssh
+ORIGIN="$(git remote get-url origin)"
+case "${ORIGIN}" in
+  https://github.com/proteininnovation/OpenAntigens|https://github.com/proteininnovation/OpenAntigens.git|git@github.com:proteininnovation/OpenAntigens.git|ssh://git@github.com/proteininnovation/OpenAntigens.git) ;;
+  *) echo "ERROR: origin must resolve to proteininnovation/OpenAntigens." >&2; exit 1 ;;
+esac
 SSH_ARGS=(-o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=yes)
 if [[ -n "${GODADDY_IDENTITY_FILE}" ]]; then
   if [[ ! -f "${GODADDY_IDENTITY_FILE}" ]]; then
@@ -398,6 +415,14 @@ if [[ "${DRY_RUN}" != "1" && "${COMPRESS}" == "1" ]]; then
 fi
 validate_compressed_assets "${PUBLIC_SITE}"
 
+if [[ -n "${API_ARTIFACT_RECORD}" ]]; then
+  validation_python="${REPO_ROOT}/.venv/bin/python"
+  if [[ ! -x "${validation_python}" ]]; then validation_python="$(command -v python3)"; fi
+  PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}" "${validation_python}" -c \
+    'from pathlib import Path; from agdesign2.portal import _QUERY_ASSET_HTACCESS; import sys; root=Path(sys.argv[1]); files=[root/".htaccess",root/"mouse/.htaccess"]; missing=[str(p.relative_to(root)) for p in files if not p.is_file() or p.is_symlink() or _QUERY_ASSET_HTACCESS not in p.read_text()]; sys.exit("ERROR: prepare current opaque query asset headers for both portals before publishing: "+", ".join(missing)) if missing else None' \
+    "${PUBLIC_SITE}"
+fi
+
 RSYNC_ARGS=(-az)
 RSYNC_RSH_COMMAND="ssh"
 for ssh_arg in "${SSH_ARGS[@]}"; do
@@ -410,6 +435,7 @@ RSYNC_ARGS+=(-e "${RSYNC_RSH_COMMAND}")
 # and any ACME/cert challenge dir. We never ship these, so exclude them from
 # both transfer and deletion.
 RSYNC_ARGS+=(--exclude='.ftpquota' --exclude='.well-known/')
+RSYNC_ARGS+=(--filter='P /api-runtime/***' --filter='P /data/releases/***' --exclude='/api-runtime/***' --exclude='/data/releases/***')
 if [[ "${RSYNC_DELETE}" == "1" ]]; then
   # --delete-before (not the default delete-after): the host is at its disk
   # quota, so replaced files must be removed *before* the new ones land, or the
@@ -421,6 +447,33 @@ elif [[ "${RSYNC_DELETE}" != "0" ]]; then
 fi
 if [[ "${DRY_RUN}" == "1" ]]; then
   RSYNC_ARGS+=(--dry-run --itemize-changes --stats)
+fi
+
+if [[ -n "${API_ARTIFACT_RECORD}" ]]; then
+  ASSET_TEMP="$(mktemp -d "${TMPDIR:-/tmp}/openantigens-query-publish.XXXXXX")"
+  trap 'rm -rf "${ASSET_TEMP}"' EXIT
+  ASSET_LIST="${ASSET_TEMP}/assets.list"
+  validation_python="${REPO_ROOT}/.venv/bin/python"
+  if [[ ! -x "${validation_python}" ]]; then validation_python="$(command -v python3)"; fi
+  PYTHONPATH="${REPO_ROOT}/src:${REPO_ROOT}" "${validation_python}" -c \
+    'from agdesign2.public_api_release import write_query_asset_list; import sys; print(write_query_asset_list(sys.argv[1],sys.argv[2],sys.argv[3]))' \
+    "${PUBLIC_SITE}" "${API_ARTIFACT_RECORD}" "${ASSET_LIST}"
+  ASSET_RSYNC=(-rc -e "${RSYNC_RSH_COMMAND}" --from0 "--files-from=${ASSET_LIST}" --itemize-changes)
+  rsync "${ASSET_RSYNC[@]}" --dry-run --existing "${PUBLIC_SITE}/" "${GODADDY_TARGET}" > "${ASSET_TEMP}/existing-differences"
+  if [[ -s "${ASSET_TEMP}/existing-differences" ]]; then
+    echo "ERROR: immutable query asset collision; existing remote bytes differ." >&2
+    exit 1
+  fi
+  if [[ "${DRY_RUN}" == "1" ]]; then
+    rsync "${ASSET_RSYNC[@]}" --dry-run --ignore-existing "${PUBLIC_SITE}/" "${GODADDY_TARGET}"
+  else
+    rsync "${ASSET_RSYNC[@]}" --ignore-existing "${PUBLIC_SITE}/" "${GODADDY_TARGET}"
+    rsync "${ASSET_RSYNC[@]}" --dry-run "${PUBLIC_SITE}/" "${GODADDY_TARGET}" > "${ASSET_TEMP}/remaining-differences"
+    if [[ -s "${ASSET_TEMP}/remaining-differences" ]]; then
+      echo "ERROR: immutable query asset transfer did not converge." >&2
+      exit 1
+    fi
+  fi
 fi
 
 echo "[openantigen-godaddy] publishing ${PUBLIC_SITE}/"
