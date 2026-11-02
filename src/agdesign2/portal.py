@@ -617,7 +617,7 @@ def _get_pubtator_literature_info(
         # Left as None so the release gate refuses the build; never shown as 0.
         print(f"WARNING: PubTator count unavailable for {symbol}: {exc}", file=sys.stderr)
         count, used_symbol = None, symbol
-    query_text = f"@GENE_{used_symbol}"
+    query_text = _pubtator_gene_query(used_symbol)
     info: dict[str, Any] = {
         "gene_symbol": symbol,
         "query_text": query_text,
@@ -628,9 +628,15 @@ def _get_pubtator_literature_info(
     return info
 
 
+def _pubtator_gene_query(symbol: str) -> str:
+    # PubTator gene IDs spell hyphens as underscores (@GENE_HLA_A); "@GENE_HLA-A"
+    # falls back to a free-text search that counts unrelated papers or none.
+    return "@GENE_" + symbol.replace("-", "_")
+
+
 def _pubtator_search_count(symbol: str, *, cache: FileCache, http: HttpClient) -> int:
-    """PubTator hit count for ``@GENE_<symbol>``; raises once retries are spent."""
-    api_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/?text={quote('@GENE_' + symbol)}"
+    """PubTator hit count for the gene's ``@GENE_`` ID; raises once retries are spent."""
+    api_url = f"https://www.ncbi.nlm.nih.gov/research/pubtator3-api/search/?text={quote(_pubtator_gene_query(symbol))}"
     cache_path = cache.path_for("pubtator_search", api_url, ".json")
     for delay in (*_PUBTATOR_RETRY_DELAYS, None):
         try:

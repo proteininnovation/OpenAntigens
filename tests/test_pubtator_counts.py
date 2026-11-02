@@ -14,9 +14,11 @@ class FlakyHttp:
     def __init__(self, responses):
         self.responses = list(responses)
         self.calls = 0
+        self.urls = []
 
     def fetch_json(self, url, **_):
         self.calls += 1
+        self.urls.append(url)
         response = self.responses.pop(0)
         if isinstance(response, Exception):
             raise response
@@ -34,6 +36,11 @@ class PubTatorSearchCountTests(unittest.TestCase):
         with patch.object(portal, "sleep") as sleep:
             self.assertEqual(portal._pubtator_search_count("APLN", cache=self.cache, http=http), 5676)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 5])
+
+    def test_hyphenated_symbol_queries_the_underscore_gene_id(self):
+        http = FlakyHttp([{"count": 542}])
+        self.assertEqual(portal._pubtator_search_count("ERVFRD-1", cache=self.cache, http=http), 542)
+        self.assertTrue(http.urls[0].endswith("text=%40GENE_ERVFRD_1"), http.urls[0])
 
     def test_raises_once_retries_are_spent(self):
         http = FlakyHttp([ExternalServiceError("HTTP error: 429")] * 4)
@@ -65,6 +72,13 @@ class PubTatorLiteratureInfoTests(unittest.TestCase):
         info = self._info({"ACKR5": 0, "ADMR": 0, "GPR182": 760}, ["ADMR", "GPR182"])
         self.assertEqual(info["count"], 760)
         self.assertIn("GENE_GPR182", info["query_url"])
+
+    def test_report_link_uses_the_underscore_gene_id(self):
+        portal._PUBTATOR_COUNT_CACHE.clear()
+        with patch.object(portal, "_pubtator_search_count", return_value=542) as count:
+            info = portal._get_pubtator_literature_info("ERVFRD-1", cache_dir=Path(self.tmp.name), human=True)
+        count.assert_called_once()
+        self.assertIn("GENE_ERVFRD_1", info["query_url"])
 
     def test_no_fallback_outside_human(self):
         info = self._info({"ACKR5": 0, "GPR182": 760}, ["GPR182"], human=False)
