@@ -40,7 +40,15 @@ def validate_structure_coverage(portal_dir: str | Path) -> None:
             )
 
 
-def validate_release_data(portal_dir: str | Path, *, require_full_catalog: bool = False) -> None:
+def validate_release_data(
+    portal_dir: str | Path,
+    *,
+    require_full_catalog: bool = False,
+    minimum_human_targets: int = MIN_HUMAN_TARGETS,
+    minimum_mouse_targets: int = MIN_MOUSE_TARGETS,
+) -> None:
+    """The publish gate. A regression-panel build runs the same gate with catalog minimums scaled to
+    the panel; every other check is unchanged."""
     portal_dir = Path(portal_dir)
     human = _load_rows(portal_dir / "downloads/agdesign2_portal_index.json")
     full_release = require_full_catalog or len(human) >= 1_000
@@ -49,7 +57,7 @@ def validate_release_data(portal_dir: str | Path, *, require_full_catalog: bool 
         label="human",
         catalog_root=portal_dir,
         metadata_path=portal_dir / "portal_metadata.json",
-        minimum_targets=MIN_HUMAN_TARGETS if require_full_catalog else 0,
+        minimum_targets=minimum_human_targets if require_full_catalog else 0,
         strict=full_release,
     )
 
@@ -81,7 +89,7 @@ def validate_release_data(portal_dir: str | Path, *, require_full_catalog: bool 
             label="mouse",
             catalog_root=portal_dir / "mouse",
             metadata_path=portal_dir / "mouse/portal_metadata.json",
-            minimum_targets=MIN_MOUSE_TARGETS if require_full_catalog else 0,
+            minimum_targets=minimum_mouse_targets if require_full_catalog else 0,
             strict=require_full_catalog or len(mouse) >= 1_000,
         )
         if require_full_catalog or len(mouse) >= 1_000:

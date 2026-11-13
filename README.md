@@ -382,6 +382,13 @@ or:
 .venv/bin/pytest
 ```
 
+Before a full rebuild or a deploy, check a change on real data with the regression panel. It builds 123 targets covering every topology and construct path through the production build, then runs the panel expectations, the release checks and a Playwright walk-through of both portals. It takes about 30 minutes with warm caches. See [docs/REGRESSION_BUILD.md](docs/REGRESSION_BUILD.md).
+
+```bash
+scripts/regression.sh build snapshots/openantigen-2026-11-01
+scripts/regression.sh check snapshots/regression-<date>-<sha> [snapshots/<previous regression build>]
+```
+
 ## Notes
 
 - Fresh human snapshots query cached Complex Portal human ComplexTab data for every target. Integrin assembly warnings remain limited to canonical ITGA and ITGB1-ITGB8 chains.

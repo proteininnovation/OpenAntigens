@@ -320,6 +320,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Copy/download browser libraries into the portal directory for a self-contained static site",
     )
 
+    check_panel = subparsers.add_parser(
+        "check-regression-panel",
+        help="Check a regression-panel build (build-fresh-snapshot --target-panel) against the panel's expectations",
+    )
+    check_panel.add_argument("snapshot", help="Snapshot directory built with --target-panel")
+    check_panel.add_argument("--panel", default="data/regression/panel.tsv", help="Regression panel TSV")
+    check_panel.add_argument("--baseline", default=None, help="An earlier panel build to list changes against")
+    check_panel.add_argument("--out", default=None, help="Markdown report path (default: <snapshot>/regression_check.md)")
+
     build_test_portal = subparsers.add_parser(
         "build-test-portal",
         help="Build a compact portal snapshot with representative target classes for upload testing",
@@ -595,6 +604,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Topology buckets to include",
     )
     fresh_snapshot.add_argument("--limit", type=int, default=None, help="Optional target count for benchmarking/subsets")
+    fresh_snapshot.add_argument(
+        "--target-panel",
+        default=None,
+        help=(
+            "Regression panel TSV (data/regression/panel.tsv): run the production build on just these targets. "
+            "The publish gate still runs, with its catalog minimums scaled to the panel."
+        ),
+    )
     fresh_snapshot.add_argument("--sample-size", type=int, default=None, help="Pinned smoke target count; activates stratified random sampling")
     fresh_snapshot.add_argument("--sample-seed", type=int, default=20260530, help="Random seed for pinned smoke sampling")
     fresh_snapshot.add_argument(
@@ -763,6 +780,7 @@ def main() -> None:
             snapshot_name=args.snapshot_name,
             allowed_buckets=tuple(args.buckets),
             limit=args.limit,
+            target_panel=args.target_panel,
             sample_size=args.sample_size,
             sample_seed=args.sample_seed,
             sample_mode=args.sample_mode,
@@ -1044,6 +1062,19 @@ def main() -> None:
             bundle_vendor_assets=args.bundle_vendor_assets,
         )
         print(index_path)
+        return
+    if args.command == "check-regression-panel":
+        from .regression import check_regression_snapshot
+
+        results, _changes, report = check_regression_snapshot(
+            args.snapshot, panel_path=args.panel, baseline_dir=args.baseline
+        )
+        out = Path(args.out) if args.out else Path(args.snapshot) / "regression_check.md"
+        out.write_text(report, encoding="utf-8")
+        print(report)
+        print(out)
+        if any(result.failures for result in results):
+            raise SystemExit(1)
         return
     if args.command == "build-test-portal":
         result = build_test_portal_subset(
