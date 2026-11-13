@@ -49,6 +49,11 @@ def derive_ectodomain(
     features: list[Feature],
     sequence_length: int,
     config: AnalysisConfig,
+    *,
+    sequence: str | None = None,
+    membrane_types: tuple[str, ...] = (),
+    at_plasma_membrane: bool | None = None,
+    allow_predicted_orientation: bool = False,
 ) -> TopologyResult:
     """Derive the design region, then cap it at a GPI omega site.
 
@@ -59,7 +64,15 @@ def derive_ectodomain(
     regions ran past the omega site, 6 / 6 survived the chain-branch cap alone,
     0 survive this.
     """
-    result = _derive_ectodomain(features, sequence_length, config)
+    result = _derive_ectodomain(
+        features,
+        sequence_length,
+        config,
+        sequence=sequence,
+        membrane_types=membrane_types,
+        at_plasma_membrane=at_plasma_membrane,
+        allow_predicted_orientation=allow_predicted_orientation,
+    )
     return _cap_region_at_gpi_omega_site(result, features)
 
 
@@ -125,6 +138,11 @@ def _derive_ectodomain(
     features: list[Feature],
     sequence_length: int,
     config: AnalysisConfig,
+    *,
+    sequence: str | None = None,
+    membrane_types: tuple[str, ...] = (),
+    at_plasma_membrane: bool | None = None,
+    allow_predicted_orientation: bool = False,
 ) -> TopologyResult:
     notes: list[AnalysisNote] = []
     tm_regions = [
@@ -288,7 +306,19 @@ def _derive_ectodomain(
         )
         return TopologyResult(ectodomain=None, notes=notes, topology=topology)
 
+    inferred_orientation: tuple[str, str, float] | None = None
     if not extracellular_n and not extracellular_c:
+        if not signal_regions:
+            inferred_orientation = _infer_single_pass_orientation(
+                transmembrane,
+                topo_regions,
+                config,
+                sequence=sequence,
+                membrane_types=membrane_types,
+                at_plasma_membrane=at_plasma_membrane,
+                allow_predicted=allow_predicted_orientation,
+                has_transit_peptide=any("TRANSIT" in feature_type(feature) for feature in features),
+            )
         if signal_regions:
             extracellular_n = True
             notes.append(
@@ -296,6 +326,20 @@ def _derive_ectodomain(
                     severity="warning",
                     message="Topology annotations are incomplete; inferred an N-terminal ectodomain from the signal peptide.",
                         source="topology",
+                )
+            )
+        elif inferred_orientation is not None:
+            side, reason, _confidence = inferred_orientation
+            extracellular_n = side == "n"
+            extracellular_c = side == "c"
+            notes.append(
+                AnalysisNote(
+                    severity="warning",
+                    message=(
+                        f"UniProt gives no extracellular topology for this single-pass protein; inferred the "
+                        f"{'N' if side == 'n' else 'C'}-terminal side as extracellular from {reason}."
+                    ),
+                    source="topology",
                 )
             )
         else:
@@ -350,7 +394,8 @@ def _derive_ectodomain(
         end=end,
         label=label,
         source="topology",
-        confidence=0.8 if topo_regions else 0.5,
+        confidence=inferred_orientation[2] if inferred_orientation else (0.8 if topo_regions else 0.5),
+        metadata={"orientation_source": inferred_orientation[1]} if inferred_orientation else {},
     )
     topology = _build_topology_annotation(
         tm_regions=tm_regions,
@@ -367,6 +412,77 @@ def _derive_ectodomain(
         notes=notes,
         topology=topology,
     )
+
+
+_POSITIVE_RESIDUES = frozenset("KR")
+_MEMBRANE_TYPE = re.compile(r"single-pass type (iv|iii|ii|i) membrane protein")
+_MAX_UNSIGNALED_N_DOMAIN = 60
+_MAX_SIGNAL_ANCHOR_START = 100
+
+
+def _infer_single_pass_orientation(
+    transmembrane: Feature,
+    topo_regions: list[Feature],
+    config: AnalysisConfig,
+    *,
+    sequence: str | None,
+    membrane_types: tuple[str, ...],
+    at_plasma_membrane: bool | None,
+    allow_predicted: bool,
+    has_transit_peptide: bool = False,
+) -> tuple[str, str, float] | None:
+    """Which side of a lone helix faces out, when UniProt annotates no extracellular domain.
+
+    Returns ("n" | "c", reason, confidence) or None. Clues, strongest first:
+    an annotated cytoplasmic stretch on one side (the other side is outside); the
+    UniProt membrane type (type I/III: N-terminus outside, type II/IV: inside);
+    and, only when the caller allows it, the positive-inside rule (more K/R within
+    15 residues on the cytoplasmic flank). An annotated lumenal, vesicular,
+    mitochondrial or nuclear side, or a UniProt record with no plasma-membrane location
+    (at_plasma_membrane False; None means the caller has no UniProt entry), means an organelle
+    protein whose non-cytoplasmic side is lumenal: no inference.
+    """
+    if at_plasma_membrane is False:
+        return None
+    before = [f for f in topo_regions if f.end < transmembrane.start]
+    after = [f for f in topo_regions if f.start > transmembrane.end]
+    if any(
+        not _looks_cytoplasmic(f.description, config) and not _looks_extracellular(f.description, config)
+        for f in before + after
+    ):
+        return None
+    cyto_before = any(_looks_cytoplasmic(f.description, config) for f in before)
+    cyto_after = any(_looks_cytoplasmic(f.description, config) for f in after)
+    if cyto_after and not cyto_before:
+        return "n", "the annotated cytoplasmic C-terminal side", 0.6
+    if cyto_before and not cyto_after:
+        return "c", "the annotated cytoplasmic N-terminal side", 0.6
+    types = {
+        match.group(1)
+        for text in membrane_types
+        for match in _MEMBRANE_TYPE.finditer(str(text).lower())
+    }
+    if types and types <= {"i", "iii"}:
+        return "n", "the UniProt membrane type (single-pass type I/III)", 0.6
+    if types and types <= {"ii", "iv"}:
+        return "c", "the UniProt membrane type (single-pass type II/IV)", 0.6
+    if not allow_predicted or not sequence or has_transit_peptide:
+        return None
+    n_flank = sequence[max(0, transmembrane.start - 16):transmembrane.start - 1]
+    c_flank = sequence[transmembrane.end:transmembrane.end + 15]
+    n_positive = sum(residue in _POSITIVE_RESIDUES for residue in n_flank)
+    c_positive = sum(residue in _POSITIVE_RESIDUES for residue in c_flank)
+    if n_positive == c_positive:
+        return None
+    side = "n" if c_positive > n_positive else "c"
+    # Without a signal peptide a long N-terminal domain is not translocated (type III anchors carry
+    # short N-termini), and a type II signal anchor sits near the N-terminus. Predictions outside these
+    # limits came from cytoplasmic proteins with a spurious TM annotation (LRBA, NCKAP1, GRAMD1A, CLIC6).
+    if side == "n" and transmembrane.start - 1 > _MAX_UNSIGNALED_N_DOMAIN:
+        return None
+    if side == "c" and transmembrane.start > _MAX_SIGNAL_ANCHOR_START:
+        return None
+    return side, "the positive-inside rule (predicted; K/R flanking the helix)", 0.4
 
 
 def _derive_from_dominant_extracellular_topology(
