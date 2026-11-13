@@ -24,7 +24,8 @@ from .ortholog_table import build_ortholog_table_from_tsv, load_ortholog_rows
 from .paralogs import build_paralog_reference_from_tsv
 from .pipeline import AntigenAnalyzer
 from .portal import _write_portal_htaccess, build_portal
-from .release_validation import validate_release_data
+from .regression import load_panel, scaled_mouse_minimum, select_panel_rows
+from .release_validation import MIN_HUMAN_TARGETS, MIN_MOUSE_TARGETS, validate_release_data
 from .target_sets import DEFAULT_ACCESSIBLE_BUCKETS, build_accessible_target_tsv
 from .uniprot_prefetch import prefetch_reviewed_taxa, prefetch_targets_from_tsv
 
@@ -77,6 +78,7 @@ def build_fresh_snapshot(
     snapshot_name: str | None = None,
     allowed_buckets: tuple[str, ...] = DEFAULT_ACCESSIBLE_BUCKETS,
     limit: int | None = None,
+    target_panel: str | Path | None = None,
     sample_size: int | None = None,
     sample_seed: int = 20260530,
     sample_mode: str | None = None,
@@ -120,6 +122,9 @@ def build_fresh_snapshot(
         raise ValueError("--sample-size must be greater than zero.")
     if sample_size is not None and limit is not None:
         raise ValueError("--limit cannot be combined with --sample-size; choose one target selection mode.")
+    if target_panel is not None and (sample_size is not None or limit is not None):
+        raise ValueError("--target-panel cannot be combined with --limit or --sample-size.")
+    panel = load_panel(target_panel) if target_panel is not None else None
     if sample_mode_text not in {None, "stratified-random"}:
         raise ValueError("--sample-mode must be stratified-random when provided.")
     if sample_mode_text is not None and sample_size is None:
@@ -258,6 +263,10 @@ def build_fresh_snapshot(
         elif limit is not None:
             rows = rows[:limit]
             _write_target_tsv(target_tsv, rows)
+        elif panel is not None:
+            # Same source CSV and bucket filter as production, then narrowed to the regression panel.
+            rows = select_panel_rows(rows, panel)
+            _write_target_tsv(target_tsv, rows)
         return rows
 
     run_step("build-target-tsv", make_target_tsv, skip_if=lambda: target_tsv.exists())
@@ -387,9 +396,20 @@ def build_fresh_snapshot(
             skip_if=lambda: resume and not reanalyze_reports and (mouse_public_site_dir / "index.html").exists(),
         )
     if sample_size is None and limit is None:
+        # A panel build runs the production gate; only its catalog minimums scale to the panel size.
+        gate_minimums = (
+            {
+                "minimum_human_targets": _count_tsv_rows(target_tsv),
+                "minimum_mouse_targets": scaled_mouse_minimum(
+                    _count_tsv_rows(target_tsv), human_minimum=MIN_HUMAN_TARGETS, mouse_minimum=MIN_MOUSE_TARGETS
+                ),
+            }
+            if panel is not None
+            else {}
+        )
         run_step(
             "validate-release-data",
-            lambda: validate_release_data(public_site_dir, require_full_catalog=True),
+            lambda: validate_release_data(public_site_dir, require_full_catalog=True, **gate_minimums),
         )
 
     _write_snapshot_manifest(
@@ -403,6 +423,7 @@ def build_fresh_snapshot(
         benchmark_path=benchmark_path,
         created_at=created_at,
         limit=limit,
+        target_panel=Path(target_panel) if target_panel is not None else None,
         sample_size=sample_size,
         sample_seed=sample_seed,
         sample_mode=sample_mode_text,
@@ -1061,6 +1082,7 @@ def _write_snapshot_manifest(
     benchmark_path: Path,
     created_at: datetime,
     limit: int | None,
+    target_panel: Path | None,
     sample_size: int | None,
     sample_seed: int,
     sample_mode: str | None,
@@ -1088,6 +1110,7 @@ def _write_snapshot_manifest(
         "snapshot_created_utc": created_at.isoformat(),
         "snapshot_dir": str(snapshot_dir),
         "source_csv": str(source_csv),
+        "target_panel": str(target_panel) if target_panel is not None else None,
         "target_tsv": str(target_tsv),
         "output_dir": str(output_dir),
         "portal_dir": str(portal_dir),

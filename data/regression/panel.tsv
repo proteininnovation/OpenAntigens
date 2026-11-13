@@ -1,0 +1,124 @@
+gene_symbol	category	expect	why
+ADORA2A	gpcr		class A GPCR; 7TM advice, no loop-fusion cassette section
+ADRB2	gpcr		class A GPCR with abundant PDB precedent
+OPRM1	gpcr		class A GPCR
+HTR2A	gpcr		class A GPCR
+DRD2	gpcr		class A GPCR
+CXCR4	gpcr		chemokine receptor, class A
+CCR5	gpcr		chemokine receptor, class A
+NMBR	gpcr		class A GPCR offered only membrane-expression constructs
+GLP1R	gpcr		class B1 GPCR with an N-terminal ectodomain
+CALCR	gpcr		class B1 GPCR
+CRHR1	gpcr		class B1 GPCR
+PTH1R	gpcr		class B1 GPCR
+GRM1	gpcr		class C GPCR, large Venus flytrap domain
+CASR	gpcr		class C GPCR
+GABBR1	gpcr		class C GPCR, obligate heterodimer with GABBR2
+FZD4	gpcr		class F GPCR, cysteine-rich domain
+SMO	gpcr		class F GPCR
+ADGRG1	gpcr		adhesion GPCR, GAIN/GPS card
+ADGRE5	gpcr		adhesion GPCR
+ADGRL1	gpcr		adhesion GPCR
+LGR4	gpcr		LRR-containing GPCR; paralog identity metric with GPR63
+GPR63	gpcr		orphan class A GPCR; paralog identity metric with LGR4
+TAS2R14	gpcr		taste receptor; mouse co-ortholog labelling
+TAS2R20	gpcr		taste receptor; mouse co-ortholog labelling
+TAS2R31	gpcr		taste receptor; mouse co-ortholog labelling
+OR4M2	gpcr		olfactory receptor
+EGFR	single_pass	mouse	type I receptor kinase, rich PDB and domain constructs
+ERBB2	single_pass		type I receptor kinase
+MET	single_pass		type I receptor with SEMA domain and furin processing
+CD19	single_pass		type I, B-cell antigen
+CD274	single_pass		type I, PD-L1
+PDCD1	single_pass		type I, PD-1
+TNFRSF17	single_pass		type III (BCMA), short ectodomain
+CEACAM5	gpi		GPI-anchored CEA family member, processed-chain boundary
+SIGLEC7	single_pass		mouse co-ortholog rows must be labelled
+SIGLEC9	single_pass		mouse co-ortholog rows must be labelled
+SIGLEC12	single_pass		mouse co-ortholog rows must be labelled
+IL6R	single_pass	mouse	the mouse ortholog Il6ra must be admitted
+CD93	single_pass		multi-domain ectodomain; complete/partial domain constructs
+FLT3	single_pass		family-module constructs
+TFRC	single_pass		type II, C-terminal ectodomain
+CD38	single_pass		type II
+TNF	single_pass		type II with a shed soluble form
+FURIN	single_pass		processing-site annotations must not read as a detected motif
+SDK1	single_pass_inferred	region_start=1 region_end=2009 constructs>=1	no extracellular topology in UniProt; cytoplasmic tail fixes orientation
+KCNE1	single_pass_inferred	region_start=1 region_end=43	cytoplasmic tail fixes orientation; ectodomain below construct minimum
+ITM2C	single_pass_inferred	region_start=76 region_end=267 constructs>=1	UniProt membrane type II fixes orientation
+MUC16	very_large		very large single-pass mucin; construct size warning
+NOTCH1	very_large		very large; processed-chain annotations must not count against it
+LRP1	very_large		very large receptor
+HSPG2	very_large		very large secreted proteoglycan
+FN1	very_large		very large secreted protein
+VWF	very_large		very large secreted protein with propeptide
+MS4A1	multipass_compact		CD20, compact four-pass
+CLDN18	multipass_compact		claudin, small loops
+SLC2A1	multipass_compact		transporter
+ABCB1	multipass_compact		ABC transporter
+KCNN4	multipass_compact		ion channel
+PIEZO1	multipass_mixed		very large multipass channel; major extracellular cap as the soluble region
+ATP1A1	multipass_compact	class=multipass_compact|multipass_mixed	P-type ATPase
+TSPAN8	multipass_mixed		tetraspanin with a large extracellular loop
+GRID2	multipass_mixed		ionotropic glutamate receptor, large N-terminal domain
+CHRNB3	multipass_mixed		Cys-loop receptor, N-terminal ectodomain
+GABRA4	multipass_mixed		Cys-loop receptor
+PKD2	multipass_mixed		TRP channel with a large extracellular loop
+P2RX6	multipass_mixed		P2X receptor, large extracellular loop
+GRIN2D	multipass_mixed		NMDA receptor subunit
+CACNA1H	multipass_mixed		voltage-gated calcium channel
+UPK1B	multipass_mixed		uroplakin; family-module constructs
+CD55	gpi		GPI anchor; region ends at the omega site
+CD59	gpi		GPI anchor; region ends at the omega site
+THY1	gpi		GPI anchor
+FOLR1	gpi		GPI anchor
+CNTN1	gpi		GPI anchor, multi-domain
+RGMB	gpi		GPI anchor
+GPC3	gpi		GPI-anchored glypican
+CA4	gpi		GPI anchor; the 2026-09-15 fix
+MSLN	gpi		GPI anchor, processed chains
+ALPL	gpi_with_tm		GPI plus TM; design boundary from the omega site, not TOPO_DOM
+BST2	gpi_with_tm		tetherin, GPI plus TM
+ULBP3	gpi_with_tm		GPI plus TM
+CD24	gpi_untrimmed		GPI anchor without a processed chain: untrimmed region with warning
+CD52	gpi_untrimmed		GPI anchor without a processed chain
+INS	secreted		small secreted hormone with propeptides
+IL6	secreted		classical secreted cytokine
+ALB	secreted		abundant plasma protein with propeptide
+SERPINA1	secreted		serpin
+LIF	secreted		cytokine
+CSF1	single_pass		membrane form with a shed ectodomain
+MDK	secreted		small secreted growth factor
+DKK2	secreted		secreted Wnt antagonist
+CCL2	secreted	mouse	chemokine; mouse winner rule picks the right page
+PCSK9	secreted		processing-site annotations must not read as a detected motif
+DEFB124	secreted_short	mouse	small cysteine-rich defensin below the construct minimum; mouse ortholog Defb25 admitted
+STC2	secreted		structured-region constructs
+TGFB1	secreted_propeptide		latency-associated propeptide kept in the post-signal region
+BMP8B	secreted_propeptide		propeptide 20-263 kept, not called the mature chain
+IL1B	secreted_fallback		leaderless cytokine: curated-universe fallback on the chain
+IL1A	secreted_fallback		leaderless cytokine fallback
+WNT2B	secreted_fallback		full-length fallback
+SFTPC	secreted_fallback		propeptide-trimmed fallback
+S100A8	secreted_fallback		chain fallback
+IL16	secreted_processed_chain	region_start=1212 region_end=1332	mature IL-16 is a secreted processed chain of pro-IL-16
+PDZD2	secreted_processed_chain	region_start=2493	secreted processed PDZD2 chain
+VEGFA	curated_override	region_start=207 region_end=395	CUG-initiated canonical isoform; curated secreted region
+IGHE	ig_constant		IgE constant region kept; germline V/D/J segments are excluded
+ITGB3	assembly		integrin: obligate alpha partner
+ITGA2B	assembly		integrin: obligate beta partner
+ITGAL	assembly		integrin
+ITGB2	assembly		integrin
+CD3D	complex_partner		TCR-CD3 complex subunit
+CD3E	complex_partner		TCR-CD3 complex subunit
+CD79A	complex_partner		BCR complex subunit
+CD79B	complex_partner		BCR complex subunit
+C9	beta_stranded		MACPF beta-hairpins must not be read as alpha-helical TMs
+PRF1	beta_stranded		perforin, MACPF beta-hairpins
+GSDMD	beta_stranded		gasdermin beta-hairpins
+VDAC1	beta_stranded		beta-barrel annotated as TRANSMEM
+VIM	no_design_region		intracellular protein on the target list: page must say no region was found
+PTEN	no_design_region		intracellular protein on the target list
+SDC2	no_alphafold		no AlphaFold model: page must work without structure
+EMCN	no_alphafold		no AlphaFold model
+GYPB	no_alphafold		no AlphaFold model

@@ -359,6 +359,8 @@ Detailed documentation lives in [docs/DETAILED_GUIDE.md](docs/DETAILED_GUIDE.md)
 
 Repository organization is summarized in [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md).
 
+Every change is verified with the regression panel before it is reported done, merged, rebuilt or deployed: [docs/REGRESSION_BUILD.md](docs/REGRESSION_BUILD.md). The rule for people and coding agents is in [AGENTS.md](AGENTS.md); `CLAUDE.md` imports it for Claude Code.
+
 ## Project layout
 
 - `src/agdesign2/`: package source for data retrieval, analysis, module refreshes, and portal rendering/serving
@@ -380,6 +382,13 @@ or:
 
 ```bash
 .venv/bin/pytest
+```
+
+Before a full rebuild or a deploy, check a change on real data with the regression panel. It builds 123 targets covering every topology and construct path through the production build, then runs the panel expectations, the release checks and a Playwright walk-through of both portals. It takes about 30 minutes with warm caches. See [docs/REGRESSION_BUILD.md](docs/REGRESSION_BUILD.md).
+
+```bash
+scripts/regression.sh build snapshots/openantigen-2026-11-01
+scripts/regression.sh check snapshots/regression-<date>-<sha> [snapshots/<previous regression build>]
 ```
 
 ## Notes
