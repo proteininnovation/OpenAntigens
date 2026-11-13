@@ -359,6 +359,8 @@ Detailed documentation lives in [docs/DETAILED_GUIDE.md](docs/DETAILED_GUIDE.md)
 
 Repository organization is summarized in [docs/REPOSITORY_STRUCTURE.md](docs/REPOSITORY_STRUCTURE.md).
 
+Every change is verified with the regression panel before it is reported done, merged, rebuilt or deployed: [docs/REGRESSION_BUILD.md](docs/REGRESSION_BUILD.md). The rule for people and coding agents is in [AGENTS.md](AGENTS.md); `CLAUDE.md` imports it for Claude Code.
+
 ## Project layout
 
 - `src/agdesign2/`: package source for data retrieval, analysis, module refreshes, and portal rendering/serving

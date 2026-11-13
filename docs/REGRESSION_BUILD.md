@@ -7,13 +7,37 @@ scripts/regression.sh build snapshots/openantigen-2026-11-01          # -> snaps
 scripts/regression.sh check snapshots/regression-<date>-<sha> snapshots/<previous regression build>
 ```
 
-Set `PYTHON` to the project interpreter (default `.venv/bin/python`) and `PLAYWRIGHT_NODE_PATH` to a `node_modules` directory holding Playwright 1.62.1, the version CI uses:
+## One-time setup
+
+The project's declared dependencies must be installed. A venv that lacks `mistune` or `jsonschema`, or that has an older Biopython, fails about 170 unit tests and can break the build. Create one from `pyproject.toml`:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[test]" pytest
+```
+
+The browser walk-through needs Playwright 1.62.1, the version CI uses:
 
 ```bash
 npm install --prefix ~/.cache/oa-playwright playwright@1.62.1
 ~/.cache/oa-playwright/node_modules/.bin/playwright install chromium
 export PLAYWRIGHT_NODE_PATH=~/.cache/oa-playwright/node_modules
 ```
+
+`regression.sh` reads `PYTHON` (default `.venv/bin/python`), `SNAPSHOT_ROOT` (default `snapshots`), `PANEL` (default `data/regression/panel.tsv`) and `PLAYWRIGHT_NODE_PATH`.
+
+## Checklist for every change
+
+This applies to people and coding agents alike; `AGENTS.md` makes it a rule.
+
+1. Run the unit tests: `.venv/bin/python -m pytest -q`.
+2. If the change adds a feature or fixes a case, add a row to `data/regression/panel.tsv` that would fail without it. Give it a category and any extra expectation; the tokens are listed at the top of `src/agdesign2/regression.py`.
+3. Build: `scripts/regression.sh build snapshots/<latest production snapshot>`. The build must finish with `validate-release-data: ok`.
+4. Check: `scripts/regression.sh check snapshots/regression-<date>-<sha> <baseline>`. Use the previous regression build as the baseline, or the production snapshot when there is none. The exit status must be 0.
+5. Read `<snapshot>/regression_check.md`. Every change listed against the baseline must be one the work intended. Explain anything else, or fix it.
+6. Open a few screenshots in `<snapshot>/browser_check/` for the pages the change touches, human and mouse. To browse the whole build, serve it with `python3 -m http.server --directory <snapshot>/public_site`.
+7. Report the commands, the snapshot name, the three results and the change list. A failed expectation is either a regression or a wrong expectation: read the report JSON or the page before editing the panel, and say which it was.
+
+The panel build lives under `snapshots/`, which git ignores. Keep the latest one as the next baseline and delete older ones; cloned caches share disk blocks with the reference snapshot on APFS.
 
 ## The build is the production build
 
