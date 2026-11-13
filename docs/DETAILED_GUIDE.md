@@ -392,6 +392,11 @@ Rules:
 - if the extracellular side is clearly on the N-terminus, the ectodomain is `signal-end+1` to `tm-start-1`
 - if the extracellular side is clearly on the C-terminus, the ectodomain is `tm-end+1` to sequence end
 - if topology is incomplete but a signal peptide exists, the code can still infer an N-terminal ectodomain with a warning
+- if there is no signal peptide and no extracellular `TOPO_DOM`, the side that faces out is inferred, with a warning note naming the clue, only for proteins UniProt places at the plasma membrane. The clues, strongest first:
+  - an annotated cytoplasmic `TOPO_DOM` on one side makes the other side extracellular (KCNE1, SDK1)
+  - the UniProt membrane type: single-pass type I/III puts the N-terminus outside, type II/IV the C-terminus (ITM2C, TTMP)
+  - the positive-inside rule (more K/R within 15 residues of the helix on the cytoplasmic side), used only when the plasma membrane is the protein's only membrane in UniProt, there is no transit peptide, a predicted N-terminal ectodomain is at most 60 residues, and a predicted type II anchor starts within the first 100 residues; the region gets confidence 0.4
+- a lumenal, vesicular, mitochondrial or nuclear `TOPO_DOM` on either side marks an organelle protein, and no ectodomain is inferred
 - if topology is contradictory or missing in a way that prevents confident assignment, the ectodomain is left unresolved and downstream structure-led design is skipped
 
 ### Secreted proteins
@@ -402,6 +407,8 @@ Rules:
 
 - if a signal peptide is present, the design region starts just after it
 - if topology annotations indicate extracellular context at the mature-chain start, those are used as supporting evidence
+- if there is no signal peptide but UniProt places a processed chain (not an isoform) in the secreted compartment, that chain is the design region; IL16's mature Interleukin-16 (1212-1332) is cut from pro-IL-16 this way
+- a short curated table, `data/inputs/design_region_overrides.tsv`, sets the region where UniProt cannot yield one, with the evidence written into the row and shown as a page note. VEGFA is the reason it exists: UniProt displays the CUG-initiated L-VEGF189, whose AUG-initiated isoforms lack residues 1-180 and carry an unannotated 26-residue signal peptide, so secreted VEGF-A starts at A207 (A205 in mouse)
 - if the curated target universe classifies a no-transmembrane target as secreted but UniProt lacks signal/topology boundaries, the workflow uses UniProt chain or peptide boundaries when available, then propeptide-trimmed sequence when available, and otherwise the full canonical sequence with a warning note
 
 ### GPI-anchored proteins

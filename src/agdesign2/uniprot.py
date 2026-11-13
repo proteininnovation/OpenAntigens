@@ -11,6 +11,60 @@ from .models import AnalysisNote, Feature, ExperimentalConstruct, Region, Target
 
 
 UNIPROT_BASE = "https://rest.uniprot.org/uniprotkb"
+_PLASMA_MEMBRANE = re.compile(r"cell membrane|cell surface|sarcolemma|^cell projection, .*membrane")
+_ORGANELLE = re.compile(
+    r"mitochondri|endoplasmic reticulum|golgi|nucleus|lysosom|endosom|vesicle|peroxisom|microsom|melanosom|sarcoplasmic"
+)
+
+
+def _location_blocks(entry: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(molecule, subcellular location) pairs; molecule is "" for the canonical protein,
+    "Isoform ..." for an isoform, or the name of a processed chain such as "VEGFA"."""
+    blocks: list[tuple[str, dict[str, Any]]] = []
+    for comment in entry.get("comments", []) or []:
+        if str(comment.get("commentType", "")).upper() != "SUBCELLULAR LOCATION":
+            continue
+        molecule = comment.get("molecule") or ""
+        if isinstance(molecule, dict):
+            molecule = molecule.get("value") or ""
+        for location in comment.get("subcellularLocations", []) or []:
+            blocks.append((str(molecule).strip(), location))
+    return blocks
+
+
+def membrane_hints_from_entry(entry: dict[str, Any]) -> tuple[tuple[str, ...], bool, bool]:
+    """For the canonical protein: UniProt membrane-type strings of its plasma-membrane locations; whether
+    UniProt places it at the plasma membrane at all; and whether that is its only membrane (no ER, Golgi,
+    mitochondrial, nuclear or endo-lysosomal location), the condition for predicting orientation from sequence."""
+    types: list[str] = []
+    at_plasma_membrane = False
+    organellar = False
+    for molecule, location in _location_blocks(entry):
+        if molecule.lower().startswith("isoform"):
+            continue
+        value = str((location.get("location") or {}).get("value") or "").lower()
+        if _ORGANELLE.search(value):
+            organellar = True
+        if not _PLASMA_MEMBRANE.search(value):
+            continue
+        at_plasma_membrane = True
+        topology = str((location.get("topology") or {}).get("value") or "")
+        if topology:
+            types.append(topology)
+    return tuple(types), at_plasma_membrane, at_plasma_membrane and not organellar
+
+
+def secreted_chain_names(entry: dict[str, Any]) -> list[str]:
+    """Processed chains (not isoforms) that UniProt annotates as secreted, e.g. IL16's "Interleukin-16"
+    released from pro-IL-16 or VEGFA's "VEGFA" chain cut from the CUG-initiated long form."""
+    names: list[str] = []
+    for molecule, location in _location_blocks(entry):
+        if not molecule or molecule.lower().startswith("isoform"):
+            continue
+        value = str((location.get("location") or {}).get("value") or "").lower()
+        if value.startswith("secreted") and "exosome" not in value and molecule not in names:
+            names.append(molecule)
+    return names
 
 
 @dataclass(slots=True)

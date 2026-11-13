@@ -66,7 +66,7 @@ from .topology import (
     feature_type as topology_feature_type,
     replace_region,
 )
-from .uniprot import UniProtClient
+from .uniprot import UniProtClient, membrane_hints_from_entry, secreted_chain_names
 from .visualization import ConstructAssetGenerator
 
 
@@ -316,6 +316,7 @@ class AntigenAnalyzer:
         self.precomputed_store = precomputed_store or PrecomputedReferenceStore(self.config)
         self._surfy_topology_index: dict[str, str] | None = None
         self._secreted_universe_index: set[str] | None = None
+        self._design_region_overrides: dict[str, dict[str, Any]] | None = None
 
     def analyze_target(self, query: str, output_dir: str | Path | None = None) -> AnalysisReport:
         self._progress(f"Starting analysis for {query}")
@@ -330,7 +331,15 @@ class AntigenAnalyzer:
         features = self.uniprot_client.get_features(resolution.entry)
         experimental_constructs = self.uniprot_client.get_experimental_constructs(resolution.entry)
         self._progress("Deriving ectodomain / extracellular design region")
-        topology = derive_ectodomain(features, len(target.sequence), self.config)
+        topology = self._derive_topology(resolution.entry, target, features)
+        for design_note in (
+            self._apply_design_region_override(target=target, topology=topology),
+            self._apply_secreted_chain_fallback(
+                target=target, topology=topology, features=features, entry=resolution.entry
+            ),
+        ):
+            if design_note is not None:
+                topology.notes.append(design_note)
         secreted_fallback_note = self._apply_secreted_universe_fallback(
             target=target,
             topology=topology,
@@ -1099,6 +1108,131 @@ class AntigenAnalyzer:
             )
         return AnalysisNote(severity="warning", message=message, source="target-universe")
 
+    def _derive_topology(
+        self, entry: dict[str, Any], target: TargetRecord, features: list[Feature]
+    ) -> TopologyResult:
+        # Orientation is inferred only for proteins UniProt places at the plasma membrane, and predicted
+        # from sequence only when that is their sole membrane, so ER, Golgi, endosomal and mitochondrial
+        # proteins are not given an ectodomain.
+        membrane_types, at_plasma_membrane, plasma_membrane_only = membrane_hints_from_entry(entry or {})
+        return derive_ectodomain(
+            features,
+            len(target.sequence),
+            self.config,
+            sequence=target.sequence,
+            membrane_types=membrane_types,
+            at_plasma_membrane=at_plasma_membrane,
+            allow_predicted_orientation=plasma_membrane_only,
+        )
+
+    def _apply_design_region_override(
+        self, *, target: TargetRecord, topology: TopologyResult
+    ) -> AnalysisNote | None:
+        """Curated design regions for proteins whose UniProt record cannot yield one, e.g. VEGFA, whose
+        displayed isoform starts at a CUG codon so the signal peptide of the AUG isoforms is unannotated."""
+        override = self._load_design_region_overrides().get(str(target.accession or "").upper())
+        if override is None:
+            return None
+        start, end = override["start"], override["end"]
+        if not 1 <= start < end <= len(target.sequence):
+            return AnalysisNote(
+                severity="warning",
+                message=f"Curated design region {start}-{end} does not fit this {len(target.sequence)}-residue sequence; not applied.",
+                source="curated-override",
+            )
+        region = Region(
+            start=start,
+            end=end,
+            label=override["label"],
+            source="curated-override",
+            confidence=0.85,
+            metadata={"fallback_reason": "curated_override", "evidence": override["evidence"]},
+        )
+        topology.ectodomain = region
+        if topology.topology is None or not topology.topology.transmembrane_regions:
+            topology.topology = TopologyAnnotation(
+                topology_class="secreted",
+                extracellular_regions=[region],
+                major_extracellular_region=region,
+            )
+        else:
+            topology.topology.major_extracellular_region = region
+        return AnalysisNote(
+            severity="info",
+            message=f"Curated design region {start}-{end} ({override['label']}): {override['evidence']}",
+            source="curated-override",
+        )
+
+    def _load_design_region_overrides(self) -> dict[str, dict[str, Any]]:
+        if self._design_region_overrides is not None:
+            return self._design_region_overrides
+        overrides: dict[str, dict[str, Any]] = {}
+        for path in (
+            Path("data/inputs/design_region_overrides.tsv"),
+            Path(__file__).resolve().parents[2] / "data" / "inputs" / "design_region_overrides.tsv",
+        ):
+            if not path.exists():
+                continue
+            with path.open(newline="", encoding="utf-8") as handle:
+                for row in csv.DictReader(handle, delimiter="\t"):
+                    overrides[row["accession"].strip().upper()] = {
+                        "start": int(row["start"]),
+                        "end": int(row["end"]),
+                        "label": row["label"].strip(),
+                        "evidence": row["evidence"].strip(),
+                    }
+            break
+        self._design_region_overrides = overrides
+        return overrides
+
+    def _apply_secreted_chain_fallback(
+        self,
+        *,
+        target: TargetRecord,
+        topology: TopologyResult,
+        features: list[Feature],
+        entry: dict[str, Any],
+    ) -> AnalysisNote | None:
+        """No TM, no signal peptide, but UniProt says a processed chain is secreted (IL16's mature
+        Interleukin-16 cut from pro-IL-16): design that chain."""
+        if topology.ectodomain is not None:
+            return None
+        if topology.topology is not None and topology.topology.transmembrane_regions:
+            return None
+        names = {name.lower() for name in secreted_chain_names(entry or {})}
+        chains = [
+            feature
+            for feature in features
+            if feature.type.upper() == "CHAIN"
+            and (feature.description or "").strip().lower() in names
+            and 1 <= feature.start < feature.end <= len(target.sequence)
+        ]
+        if not chains:
+            return None
+        chain = max(chains, key=lambda feature: feature.end - feature.start)
+        region = Region(
+            start=chain.start,
+            end=chain.end,
+            label=chain.description or "Secreted chain",
+            source="UniProt",
+            confidence=0.75,
+            metadata={"fallback_reason": "secreted_processed_chain"},
+        )
+        topology.ectodomain = region
+        topology.topology = TopologyAnnotation(
+            topology_class="secreted",
+            extracellular_regions=[region],
+            major_extracellular_region=region,
+        )
+        return AnalysisNote(
+            severity="info",
+            message=(
+                f"No signal peptide or transmembrane region is annotated, but UniProt places the processed chain "
+                f"'{chain.description}' ({chain.start}-{chain.end}) in the secreted compartment; using it as the design region."
+            ),
+            source="topology",
+        )
+
     def _target_is_curated_secreted(self, target: TargetRecord) -> bool:
         index = self._load_secreted_universe_index()
         keys = [
@@ -1829,7 +1963,9 @@ class AntigenAnalyzer:
                 base_notes = []
             target = self.uniprot_client._target_from_entry(entry)
             species_features = self.uniprot_client.get_features(entry)
-            topology = derive_ectodomain(species_features, len(target.sequence), self.config)
+            topology = self._derive_topology(entry, target, species_features)
+            self._apply_design_region_override(target=target, topology=topology)
+            self._apply_secreted_chain_fallback(target=target, topology=topology, features=species_features, entry=entry)
             match = HomologyRecord(
                 species=species,
                 accession=target.accession,
